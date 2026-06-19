@@ -2,6 +2,19 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [0.8.0] — 2026-06-19
+
+### Added (Agent Builder P0)
+- **Skill pack vendored in repo** — `agent-builder/skillpack/` (20 skills, PRD, architecture)
+- **Agent builder kit** — Settings UI with platform tabs, zip export, MCP config
+- **MCP server** — `agent-builder/mcp-server/` (9 ClearTrace API tools for Cursor)
+- **create-cleartrace CLI** — `node scripts/create-cleartrace.mjs my-app`
+- **Setup checklist** — interactive 12-step builder progress in Settings
+- **GitHub template docs** — `.github/ENABLE_TEMPLATE.md` + generate link
+
+### Notes
+- Template repository checkbox must be enabled by `Alfredapp-hash` org owner (see ENABLE_TEMPLATE.md)
+
 ## [0.7.0] — 2026-06-19
 
 ### Added

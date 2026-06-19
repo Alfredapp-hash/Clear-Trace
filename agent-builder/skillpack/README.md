@@ -35,8 +35,10 @@ This repository contains an **original, portable workflow layer**. The Markdown 
 
 ## Package layout
 
+Vendored in the ClearTrace repo at `agent-builder/skillpack/` (also synced to `skills/` on `npm run dev`).
+
 ```text
-cleartrace_portable_skillpack/
+agent-builder/skillpack/
 ├── README.md
 ├── PRD.md
 ├── ARCHITECTURE.md
@@ -74,7 +76,11 @@ cleartrace_portable_skillpack/
 
 ## Reference app
 
-The companion Next.js app at `../cleartrace/` vendors this pack into `cleartrace/skills/` on `npm run dev` / `npm run build`. See `cleartrace/src/lib/skills/catalog.ts` for which skills are fully implemented in-app vs template-only.
+This pack lives inside the [Clear-Trace](https://github.com/Alfredapp-hash/Clear-Trace) monorepo. `scripts/sync-skills.js` copies `agent-builder/skillpack/skills/` → `skills/` on `npm run dev` / `npm run build`.
+
+See `src/lib/skills/catalog.ts` for which skills are fully implemented in-app vs template-only.
+
+**One-click fork:** https://github.com/Alfredapp-hash/Clear-Trace/generate (requires repo owner to enable Template repository — see `.github/ENABLE_TEMPLATE.md`).
 
 ## Adoption modes
 
