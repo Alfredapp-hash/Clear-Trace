@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "cleartrace": {
+      "command": "node",
+      "args": ["REPLACE_WITH_ABSOLUTE_PATH/cleartrace/agent-builder/mcp-server/index.mjs"],
+      "env": {
+        "CLEARTRACE_URL": "http://localhost:3000",
+        "CLEARTRACE_API_KEY": "ct_live_your_key_here"
+      }
+    }
+  }
+}

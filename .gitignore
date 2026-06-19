@@ -35,3 +35,7 @@ next-env.d.ts
 # e2e
 /test-results/
 /playwright-report/
+
+# agent builder
+/agent-builder/dist/
+/agent-builder/mcp-server/node_modules/

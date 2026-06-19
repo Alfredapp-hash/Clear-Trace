@@ -1,7 +1,14 @@
 import type { ConnectorHealthSummary } from "@/lib/connectors/service";
 import type { CoordinatorStep } from "@/lib/coordinator/hermes";
 
-export type AgentPackVariant = "chatgpt" | "openai_agent" | "generic" | "hermes";
+export type AgentPackVariant =
+  | "chatgpt"
+  | "openai_agent"
+  | "cursor"
+  | "claude_code"
+  | "windsurf"
+  | "generic"
+  | "hermes";
 
 export interface GuideChecklistItem {
   id: string;

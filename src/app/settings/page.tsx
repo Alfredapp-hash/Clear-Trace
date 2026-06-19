@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
+import { AgentBuilderKit } from "@/components/AgentBuilderKit";
 import { AgentSetupGuide } from "@/components/AgentSetupGuide";
 import { ConnectorSettings } from "@/components/ConnectorSettings";
 import { EnterpriseSettings } from "@/components/EnterpriseSettings";
@@ -51,6 +52,8 @@ export default function SettingsPage() {
       <ConnectorSettings />
 
       <EnterpriseSettings />
+
+      <AgentBuilderKit />
 
       <AgentSetupGuide />
 

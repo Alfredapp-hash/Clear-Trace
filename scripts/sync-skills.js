@@ -2,11 +2,16 @@
 const fs = require("fs");
 const path = require("path");
 
-const source = path.resolve(__dirname, "../../cleartrace_portable_skillpack/skills");
+const candidates = [
+  path.resolve(__dirname, "../agent-builder/skillpack/skills"),
+  path.resolve(__dirname, "../../cleartrace_portable_skillpack/skills"),
+];
+
+const source = candidates.find((p) => fs.existsSync(p));
 const target = path.resolve(__dirname, "../skills");
 
-if (!fs.existsSync(source)) {
-  console.warn("[sync-skills] Skill pack not found at", source);
+if (!source) {
+  console.warn("[sync-skills] Skill pack not found in agent-builder or portable pack");
   process.exit(0);
 }
 
@@ -27,4 +32,4 @@ if (fs.existsSync(target)) {
   fs.rmSync(target, { recursive: true, force: true });
 }
 copyDir(source, target);
-console.log("[sync-skills] Copied skill pack to", target);
+console.log("[sync-skills] Copied skill pack from", source, "to", target);

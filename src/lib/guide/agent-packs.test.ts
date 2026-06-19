@@ -46,7 +46,7 @@ function assertNoSecrets(text: string) {
 describe("agent packs", () => {
   it("builds packs for all variants without secrets", () => {
     const packs = buildAllAgentPacks(fixture, "verify-identity-match");
-    expect(packs).toHaveLength(4);
+    expect(packs).toHaveLength(7);
     for (const pack of packs) {
       expect(pack.systemPrompt).toContain("Safety boundaries");
       expect(pack.userPrompt).toContain(fixture.caseTitle);
@@ -63,6 +63,12 @@ describe("agent packs", () => {
     expect(pack.systemPrompt).toContain("confidence_score");
     expect(pack.fullMarkdown).toContain("ChatGPT");
     expect(pack.pasteBackInstructions).toContain("Hermes");
+  });
+
+  it("includes cursor variant instructions", () => {
+    const pack = buildAgentPack(fixture, "verify-identity-match", "cursor");
+    expect(pack.fullMarkdown).toContain("Cursor");
+    expect(pack.fullMarkdown).toContain(".cursor/rules");
   });
 
   it("exports global setup and custom GPT instructions", () => {

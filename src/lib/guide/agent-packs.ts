@@ -73,6 +73,35 @@ Current skill: \`${skillId}\``;
 5. Export the agent's JSON output and paste into ClearTrace for the next workflow step.
 
 Current skill: \`${skillId}\``;
+    case "cursor":
+      return `## How to use with Cursor (Agent / Composer)
+
+1. Ensure \`.cursor/rules/cleartrace.mdc\` and \`AGENTS.md\` exist — copy from **Settings → Agent builder kit → Cursor**.
+2. Open this case in ClearTrace; keep the Workflow panel visible for paste-back.
+3. In Cursor, paste **User task** as the agent prompt (add **System instructions** to rules if not already there).
+4. Let Cursor edit files in \`src/\` — run \`npm test\` after changes.
+5. Paste agent JSON output into case notes; click **Run next Hermes step** when ready.
+
+Current skill: \`${skillId}\``;
+    case "claude_code":
+      return `## How to use with Claude Code
+
+1. Set \`CLAUDE.md\` from **Settings → Agent builder kit → Claude Code**.
+2. Ensure \`skills/${skillId}/SKILL.md\` exists (sync from ClearTrace \`/skills\` page).
+3. Paste **User task** as your Claude Code prompt for this step.
+4. Review diffs before accepting; never auto-send outbound messages.
+5. Update the case in ClearTrace, then run the next Hermes step.
+
+Current skill: \`${skillId}\``;
+    case "windsurf":
+      return `## How to use with Windsurf Cascade
+
+1. Paste **Project rules** from **Settings → Agent builder kit → Windsurf** into \`.windsurfrules\`.
+2. Paste **User task** into Cascade for this workflow step.
+3. Review all file changes; run tests locally.
+4. Return structured JSON; update ClearTrace before the next step.
+
+Current skill: \`${skillId}\``;
     case "hermes":
       return `## In-app automation (ClearTrace Hermes)
 
@@ -190,6 +219,9 @@ export function buildAgentPack(
   const titles: Record<AgentPackVariant, string> = {
     chatgpt: "ChatGPT / Custom GPT",
     openai_agent: "OpenAI Agents & Operator",
+    cursor: "Cursor Agent",
+    claude_code: "Claude Code",
+    windsurf: "Windsurf Cascade",
     generic: "Any AI assistant",
     hermes: "ClearTrace Hermes (in-app)",
   };
@@ -197,6 +229,9 @@ export function buildAgentPack(
   const descriptions: Record<AgentPackVariant, string> = {
     chatgpt: "Copy system + user prompts into ChatGPT. Best for research and draft polish.",
     openai_agent: "Structured prompts for OpenAI Agent Builder or Operator-style automation with human gates.",
+    cursor: "Rules + task prompts for Cursor Composer/Agent with paste-back to ClearTrace.",
+    claude_code: "CLAUDE.md context + per-skill tasks for Anthropic Claude Code.",
+    windsurf: "Cascade rules and step tasks for Windsurf.",
     generic: "Works with Claude, Gemini, or any chat model.",
     hermes: "Use in-app skill runner — no external agent required.",
   };
@@ -218,6 +253,9 @@ export function buildAllAgentPacks(
   skillId: string,
 ): AgentPack[] {
   const variants: AgentPackVariant[] = [
+    "cursor",
+    "claude_code",
+    "windsurf",
     "chatgpt",
     "openai_agent",
     "generic",

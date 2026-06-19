@@ -165,7 +165,7 @@ export function GuidePanel({
           )}
 
           <div>
-            <SectionTitle subtitle="Use ChatGPT, OpenAI Agents, or any LLM">
+            <SectionTitle subtitle="Cursor, Claude Code, Windsurf, ChatGPT, or in-app Hermes">
               Agent handoff
             </SectionTitle>
 
