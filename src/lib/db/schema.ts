@@ -69,6 +69,19 @@ export const memberships = sqliteTable("memberships", {
     .default(sql`(datetime('now'))`),
 });
 
+export const familyMembers = sqliteTable("family_members", {
+  id: text("id").primaryKey(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  displayName: text("display_name").notNull(),
+  relationship: text("relationship").notNull(),
+  notes: text("notes"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
 export const privacyCases = sqliteTable("privacy_cases", {
   id: text("id").primaryKey(),
   organizationId: text("organization_id")
@@ -83,6 +96,7 @@ export const privacyCases = sqliteTable("privacy_cases", {
   status: text("status").notNull().default("draft"),
   scanScopes: text("scan_scopes").notNull().default("[]"),
   ruthlessMode: integer("ruthless_mode", { mode: "boolean" }).notNull().default(false),
+  familyMemberId: text("family_member_id").references(() => familyMembers.id),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

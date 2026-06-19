@@ -101,6 +101,23 @@ export default async function DashboardPage() {
         </div>
       )}
 
+      <Card variant="accent" className="mb-8">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="text-sm font-medium text-slate-200">Progress report</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Org-wide privacy snapshot — cases, exposures, SLAs, recent activity
+            </p>
+          </div>
+          <a
+            href="/api/reports/progress?format=markdown"
+            className="rounded-xl border border-teal-500/30 bg-teal-500/10 px-4 py-2 text-sm font-medium text-teal-300 transition hover:bg-teal-500/20"
+          >
+            Download report →
+          </a>
+        </div>
+      </Card>
+
       <div className="ct-stagger mb-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
         <StatCard label="Total cases" value={stats.total} />
         <StatCard label="Active" value={stats.active} accent />

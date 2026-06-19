@@ -2,6 +2,17 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [0.9.0] — 2026-06-19
+
+### Added (Consumer polish — competitive gap closure)
+- **Exposure report** — personalized case report with impact scores, redacted evidence captures, broker/breach sections (`/api/cases/[id]/exposure-report`)
+- **Progress report** — org-wide digest on dashboard (`/api/reports/progress`)
+- **Family & household seats** — up to 5 members on Pro; link cases to household subjects
+- **Broker universe expansion** — 80+ sites (from ~63)
+
+### Notes
+- Exposure reports use text evidence captures (SSRF-safe), not raw screenshots — honest Optery-style reporting within safety boundaries
+
 ## [0.8.0] — 2026-06-19
 
 ### Added (Agent Builder P0)

@@ -7,6 +7,7 @@ import { AgentBuilderKit } from "@/components/AgentBuilderKit";
 import { AgentSetupGuide } from "@/components/AgentSetupGuide";
 import { ConnectorSettings } from "@/components/ConnectorSettings";
 import { EnterpriseSettings } from "@/components/EnterpriseSettings";
+import { FamilySettings } from "@/components/FamilySettings";
 import { Button, Card, Input, Label, PageHeader, SectionTitle } from "@/components/ui";
 
 export default function SettingsPage() {
@@ -52,6 +53,8 @@ export default function SettingsPage() {
       <ConnectorSettings />
 
       <EnterpriseSettings />
+
+      <FamilySettings />
 
       <AgentBuilderKit />
 

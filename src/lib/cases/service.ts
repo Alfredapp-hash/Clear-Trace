@@ -53,6 +53,7 @@ export async function createPrivacyCase(
     targetRelationship: string;
     scanScopes: string[];
     ruthlessMode?: boolean;
+    familyMemberId?: string | null;
   },
 ) {
   const id = uuid();
@@ -81,6 +82,7 @@ export async function createPrivacyCase(
     targetRelationship: input.targetRelationship,
     status: "draft",
     ruthlessMode,
+    familyMemberId: input.familyMemberId ?? null,
     scanScopes: JSON.stringify(scanScopes),
     createdAt: now,
     updatedAt: now,

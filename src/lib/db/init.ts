@@ -417,6 +417,14 @@ const TABLES = [
     status TEXT NOT NULL DEFAULT 'open',
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
+  `CREATE TABLE IF NOT EXISTS family_members (
+    id TEXT PRIMARY KEY,
+    organization_id TEXT NOT NULL REFERENCES organizations(id),
+    display_name TEXT NOT NULL,
+    relationship TEXT NOT NULL,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
 ];
 
 function migrateColumns() {
@@ -444,6 +452,7 @@ function migrateColumns() {
     "ALTER TABLE organizations ADD COLUMN sla_removal_days INTEGER NOT NULL DEFAULT 45",
     "ALTER TABLE organizations ADD COLUMN sla_follow_up_days INTEGER NOT NULL DEFAULT 14",
     "ALTER TABLE privacy_cases ADD COLUMN ruthless_mode INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE privacy_cases ADD COLUMN family_member_id TEXT REFERENCES family_members(id)",
   ];
   for (const sql of migrations) {
     try {

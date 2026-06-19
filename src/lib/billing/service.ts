@@ -55,6 +55,9 @@ export async function getBillingStatus(organizationId: string): Promise<BillingS
     "enterprise_webhooks",
     "ruthless_mode",
     "breach_intel",
+    "family_seats",
+    "exposure_reports",
+    "progress_reports",
   ] as const).filter(
     (f) => planHasFeature(plan, f),
   );

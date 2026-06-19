@@ -437,12 +437,20 @@ export function CaseWorkflow({
             <h2 className="text-xl font-semibold tracking-tight text-white">Workflow</h2>
             <StatusBadge status={status} />
           </div>
-          <a
-            href={`/api/cases/${caseId}/export`}
-            className="text-sm font-medium text-teal-400 hover:text-teal-300"
-          >
-            Export case packet →
-          </a>
+          <div className="flex flex-wrap gap-4 text-sm font-medium">
+            <a
+              href={`/api/cases/${caseId}/exposure-report?format=markdown`}
+              className="text-teal-400 hover:text-teal-300"
+            >
+              Exposure report →
+            </a>
+            <a
+              href={`/api/cases/${caseId}/export`}
+              className="text-teal-400 hover:text-teal-300"
+            >
+              Export case packet →
+            </a>
+          </div>
         </div>
         {error && (
           <p className="mb-4 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">

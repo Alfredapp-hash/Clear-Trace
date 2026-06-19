@@ -9,7 +9,10 @@ export type BillingFeature =
   | "sla_tracking"
   | "enterprise_webhooks"
   | "ruthless_mode"
-  | "breach_intel";
+  | "breach_intel"
+  | "family_seats"
+  | "exposure_reports"
+  | "progress_reports";
 
 export const PLAN_LIMITS: Record<
   PlanId,
@@ -17,7 +20,7 @@ export const PLAN_LIMITS: Record<
 > = {
   free: {
     maxCases: 3,
-    features: new Set(),
+    features: new Set<BillingFeature>(["exposure_reports", "progress_reports"]),
   },
   pro: {
     maxCases: 10_000,
@@ -32,8 +35,16 @@ export const PLAN_LIMITS: Record<
       "enterprise_webhooks",
       "ruthless_mode",
       "breach_intel",
+      "family_seats",
+      "exposure_reports",
+      "progress_reports",
     ]),
   },
+};
+
+export const FAMILY_SEAT_LIMITS: Record<PlanId, number> = {
+  free: 0,
+  pro: 5,
 };
 
 export function planHasFeature(plan: PlanId, feature: BillingFeature): boolean {

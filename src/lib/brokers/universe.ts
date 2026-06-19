@@ -74,6 +74,28 @@ export const BROKER_UNIVERSE: BrokerEntry[] = [
   { id: "checkr", name: "Checkr", domain: "checkr.com", type: "data_broker", optOutUrl: "https://checkr.com/privacy/consumer", privacyUrl: "https://checkr.com/privacy", estimatedReach: "medium" },
   { id: "backgroundcheck", name: "BackgroundCheck.run", domain: "backgroundcheck.run", type: "data_broker", optOutUrl: "https://backgroundcheck.run/optout", estimatedReach: "low" },
   { id: "been_verified_pro", name: "PeopleLooker (sister)", domain: "peoplelooker.com", type: "data_broker", optOutUrl: "https://www.peoplelooker.com/optout", estimatedReach: "medium" },
+
+  // v0.9 expansion — additional high-traffic people-search sites
+  { id: "gladiknow", name: "Glad I Know", domain: "gladiknow.com", type: "people_search", optOutUrl: "https://gladiknow.com/optout", estimatedReach: "medium" },
+  { id: "allpeople", name: "AllPeople", domain: "allpeople.com", type: "people_search", optOutUrl: "https://allpeople.com/remove", estimatedReach: "medium" },
+  { id: "spydialer", name: "SpyDialer", domain: "spydialer.com", type: "people_search", optOutUrl: "https://www.spydialer.com/optout", estimatedReach: "medium" },
+  { id: "numlookup", name: "NumLookup", domain: "numlookup.com", type: "people_search", optOutUrl: "https://www.numlookup.com/opt-out", estimatedReach: "medium" },
+
+  { id: "openpeoplesearch", name: "OpenPeopleSearch", domain: "openpeoplesearch.com", type: "people_search", optOutUrl: "https://www.openpeoplesearch.com/optout", estimatedReach: "medium" },
+  { id: "peoplewhiz", name: "PeopleWhiz", domain: "peoplewhiz.com", type: "people_search", privacyUrl: "https://www.peoplewhiz.com/privacy", estimatedReach: "medium" },
+  { id: "searchpeoplefree", name: "SearchPeopleFree", domain: "searchpeoplefree.com", type: "people_search", optOutUrl: "https://www.searchpeoplefree.com/opt-out", estimatedReach: "medium" },
+  { id: "freepeopledirectory", name: "Free People Directory", domain: "freepeopledirectory.com", type: "people_search", optOutUrl: "https://www.freepeopledirectory.com/optout", estimatedReach: "low" },
+  { id: "mugshotlook", name: "MugshotLook", domain: "mugshotlook.com", type: "public_records", optOutUrl: "https://www.mugshotlook.com/optout", estimatedReach: "low" },
+  { id: "publicrecordsnow", name: "PublicRecordsNow", domain: "publicrecordsnow.com", type: "public_records", optOutUrl: "https://www.publicrecordsnow.com/optout", estimatedReach: "medium" },
+  { id: "checkpeople_com", name: "CheckPeople.com", domain: "checkpeople.com", type: "data_broker", optOutUrl: "https://checkpeople.com/opt-out", estimatedReach: "medium" },
+  { id: "contactout", name: "ContactOut", domain: "contactout.com", type: "data_broker", optOutUrl: "https://contactout.com/optout", privacyUrl: "https://contactout.com/privacy", estimatedReach: "medium" },
+  { id: "seamless", name: "Seamless.AI", domain: "seamless.ai", type: "data_broker", optOutUrl: "https://seamless.ai/contact", privacyUrl: "https://seamless.ai/privacy", estimatedReach: "medium" },
+  { id: "apollo", name: "Apollo.io", domain: "apollo.io", type: "data_broker", optOutUrl: "https://www.apollo.io/privacy-policy", privacyUrl: "https://www.apollo.io/privacy-policy", estimatedReach: "high" },
+  { id: "lusha", name: "Lusha", domain: "lusha.com", type: "data_broker", optOutUrl: "https://www.lusha.com/privacy-center/", privacyUrl: "https://www.lusha.com/privacy-policy/", estimatedReach: "medium" },
+  { id: "melissa", name: "Melissa Data", domain: "melissa.com", type: "data_broker", optOutUrl: "https://www.melissa.com/privacy", privacyUrl: "https://www.melissa.com/privacy", estimatedReach: "medium" },
+  { id: "spokeo_alt", name: "UnitedStatesPhonebook", domain: "unitedstatesphonebook.com", type: "people_search", optOutUrl: "https://www.unitedstatesphonebook.com/opt-out", estimatedReach: "medium" },
+  { id: "revealphone", name: "RevealPhoneOwner", domain: "revealphoneowner.com", type: "people_search", privacyUrl: "https://www.revealphoneowner.com/privacy", estimatedReach: "low" },
+  { id: "zlookup", name: "ZLookup", domain: "zlookup.com", type: "people_search", optOutUrl: "https://www.zlookup.com/optout", estimatedReach: "medium" },
 ];
 
 export function matchBrokerByHost(hostname: string): BrokerEntry | undefined {

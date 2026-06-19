@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button, Card, Input, Label } from "@/components/ui";
 import {
   AUTHORITY_BASES,
@@ -30,6 +30,16 @@ export default function NewCasePage() {
   const [claims, setClaims] = useState([
     { claimType: "full_name", value: "", scanEnabled: true },
   ]);
+  const [familyMembers, setFamilyMembers] = useState<
+    { id: string; displayName: string; relationship: string }[]
+  >([]);
+  const [familyMemberId, setFamilyMemberId] = useState("");
+
+  useEffect(() => {
+    fetch("/api/settings/family-members")
+      .then((r) => r.json())
+      .then((d) => setFamilyMembers(d.members ?? []));
+  }, []);
 
   function toggleScope(id: string) {
     setScanScopes((prev) =>
@@ -49,6 +59,7 @@ export default function NewCasePage() {
         targetRelationship,
         scanScopes,
         ruthlessMode: ruthlessMode && ruthlessAttestation,
+        familyMemberId: familyMemberId || null,
       }),
     });
     if (!res.ok) {
@@ -168,6 +179,24 @@ export default function NewCasePage() {
                   placeholder="People-search profile exposure"
                 />
               </div>
+              {familyMembers.length > 0 && (
+                <div>
+                  <Label htmlFor="familyMember">Household member (optional)</Label>
+                  <select
+                    id="familyMember"
+                    value={familyMemberId}
+                    onChange={(e) => setFamilyMemberId(e.target.value)}
+                    className={selectClass}
+                  >
+                    <option value="">Self / not linked</option>
+                    {familyMembers.map((m) => (
+                      <option key={m.id} value={m.id}>
+                        {m.displayName} ({m.relationship})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <div>
                 <Label htmlFor="caseType">Case type</Label>
                 <select

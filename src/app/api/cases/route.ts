@@ -46,13 +46,15 @@ export async function POST(request: Request) {
   const session = toSessionLike(auth);
 
   const body = await request.json();
-  const { title, caseType, targetRelationship, scanScopes, ruthlessMode } = body as {
-    title?: string;
-    caseType?: string;
-    targetRelationship?: string;
-    scanScopes?: string[];
-    ruthlessMode?: boolean;
-  };
+  const { title, caseType, targetRelationship, scanScopes, ruthlessMode, familyMemberId } =
+    body as {
+      title?: string;
+      caseType?: string;
+      targetRelationship?: string;
+      scanScopes?: string[];
+      ruthlessMode?: boolean;
+      familyMemberId?: string | null;
+    };
 
   if (!title || !caseType || !targetRelationship) {
     return jsonError("Title, case type, and target relationship are required");
@@ -73,6 +75,7 @@ export async function POST(request: Request) {
     targetRelationship,
     scanScopes: scanScopes ?? [],
     ruthlessMode: !!ruthlessMode,
+    familyMemberId: familyMemberId ?? null,
   });
 
   return jsonOk({ caseId }, 201);
