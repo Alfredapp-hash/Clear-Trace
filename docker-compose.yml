@@ -1,0 +1,34 @@
+services:
+  cleartrace:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-in-production}
+      WORKER_SECRET: ${WORKER_SECRET:-change-me-in-production}
+      DATABASE_URL: /app/data/cleartrace.db
+    volumes:
+      - cleartrace-data:/app/data
+    restart: unless-stopped
+
+  # Optional: hit the worker endpoint on a schedule (replace URL and secret).
+  worker-cron:
+    image: curlimages/curl:8.12.1
+    depends_on:
+      - cleartrace
+    environment:
+      WORKER_SECRET: ${WORKER_SECRET:-change-me-in-production}
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        while true; do
+          curl -sf -X POST \
+            -H "Authorization: Bearer $$WORKER_SECRET" \
+            http://cleartrace:3000/api/worker/run || true
+          sleep 3600
+        done
+    restart: unless-stopped
+
+volumes:
+  cleartrace-data:

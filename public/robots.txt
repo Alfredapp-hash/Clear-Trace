@@ -1,0 +1,7 @@
+User-agent: *
+Disallow: /api/
+Disallow: /cases/
+Disallow: /settings/
+Disallow: /security/
+Disallow: /skills/
+Allow: /
