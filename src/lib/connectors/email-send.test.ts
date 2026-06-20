@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { isOptionalEmailSendEnabled } from "./email-send";
+import { isOptionalEmailSendEnabled, isDigestEmailSendEnabled } from "./email-send";
 
 vi.mock("./service", () => ({
   getAgentDefaults: vi.fn(),
@@ -40,5 +40,21 @@ describe("optional email send", () => {
     vi.mocked(getAgentDefaults).mockResolvedValue({ emailAutoSend: true });
     vi.mocked(resolveEmailConnector).mockResolvedValue("gmail");
     expect(await isOptionalEmailSendEnabled("org-1")).toBe(false);
+  });
+});
+
+describe("digest email send", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("is enabled for smtp without emailAutoSend", async () => {
+    vi.mocked(resolveEmailConnector).mockResolvedValue("smtp");
+    expect(await isDigestEmailSendEnabled("org-1")).toBe(true);
+  });
+
+  it("is disabled when no send-capable connector", async () => {
+    vi.mocked(resolveEmailConnector).mockResolvedValue(null);
+    expect(await isDigestEmailSendEnabled("org-1")).toBe(false);
   });
 });

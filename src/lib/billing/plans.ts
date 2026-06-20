@@ -12,7 +12,10 @@ export type BillingFeature =
   | "breach_intel"
   | "family_seats"
   | "exposure_reports"
-  | "progress_reports";
+  | "progress_reports"
+  | "opt_out_dispatch"
+  | "deindex_workflow"
+  | "email_digest";
 
 export const PLAN_LIMITS: Record<
   PlanId,
@@ -20,7 +23,7 @@ export const PLAN_LIMITS: Record<
 > = {
   free: {
     maxCases: 3,
-    features: new Set<BillingFeature>(["exposure_reports", "progress_reports"]),
+    features: new Set<BillingFeature>(["exposure_reports", "progress_reports", "email_digest"]),
   },
   pro: {
     maxCases: 10_000,
@@ -38,6 +41,9 @@ export const PLAN_LIMITS: Record<
       "family_seats",
       "exposure_reports",
       "progress_reports",
+      "opt_out_dispatch",
+      "deindex_workflow",
+      "email_digest",
     ]),
   },
 };

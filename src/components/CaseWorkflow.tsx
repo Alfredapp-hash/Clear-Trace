@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Card, Input, PhaseHeader, StatusBadge } from "./ui";
 import { DraftTemplatePicker } from "./DraftTemplatePicker";
 
@@ -113,6 +113,50 @@ export function CaseWorkflow({
       responseActions: Array<{ title: string; priority: string; detail: string }>;
     }>
   >([]);
+  const [optOutDispatches, setOptOutDispatches] = useState<
+    Array<{
+      id: string;
+      brokerName: string;
+      optOutUrl: string | null;
+      status: string;
+      package: {
+        steps: string[];
+        copyBlock: string;
+        optOutUrl: string | null;
+      };
+    }>
+  >([]);
+  const [deindexRequests, setDeindexRequests] = useState<
+    Array<{
+      id: string;
+      sourceUrl: string;
+      searchEngine: string;
+      toolUrl: string;
+      draftSubject: string;
+      draftBody: string;
+      status: string;
+    }>
+  >([]);
+
+  useEffect(() => {
+    void refreshOptOutAndDeindex();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [caseId]);
+
+  async function refreshOptOutAndDeindex() {
+    const [optRes, deindexRes] = await Promise.all([
+      fetch(`/api/cases/${caseId}/opt-out-dispatch`),
+      fetch(`/api/cases/${caseId}/deindex`),
+    ]);
+    if (optRes.ok) {
+      const data = await optRes.json();
+      setOptOutDispatches(data.dispatches ?? []);
+    }
+    if (deindexRes.ok) {
+      const data = await deindexRes.json();
+      setDeindexRequests(data.requests ?? []);
+    }
+  }
 
   async function refresh() {
     const [discRes, remRes, verRes, breachRes] = await Promise.all([
@@ -154,6 +198,75 @@ export function CaseWorkflow({
     setDrafts(rem.drafts ?? []);
     setChecks(ver.checks ?? []);
     setBreachFindings(breach.findings ?? []);
+    await refreshOptOutAndDeindex();
+  }
+
+  async function queueOptOutDispatches() {
+    setLoading("opt-out-queue");
+    setError("");
+    const res = await fetch(`/api/cases/${caseId}/opt-out-dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "queue" }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Opt-out queue failed");
+    } else {
+      setMessage(`Queued ${data.created} opt-out dispatch(es) from broker sweep`);
+      await refreshOptOutAndDeindex();
+    }
+    setLoading("");
+  }
+
+  async function approveOptOut(dispatchId: string) {
+    setLoading(`opt-approve-${dispatchId}`);
+    const res = await fetch(`/api/cases/${caseId}/opt-out-dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "approve", dispatchId }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Approve failed");
+    } else {
+      await refreshOptOutAndDeindex();
+    }
+    setLoading("");
+  }
+
+  async function recordOptOutSubmitted(dispatchId: string) {
+    setLoading(`opt-submit-${dispatchId}`);
+    const res = await fetch(`/api/cases/${caseId}/opt-out-dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "submit", dispatchId }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Record submission failed");
+    } else {
+      await refreshOptOutAndDeindex();
+    }
+    setLoading("");
+  }
+
+  async function createDeindexDrafts() {
+    setLoading("deindex");
+    setError("");
+    const res = await fetch(`/api/cases/${caseId}/deindex`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ engines: ["google", "bing"] }),
+    });
+    const data = await res.json();
+    if (!res.ok) {
+      setError(data.error ?? "Deindex draft creation failed");
+    } else {
+      setMessage(`Created ${data.created} search deindex draft(s)`);
+      await refreshOptOutAndDeindex();
+    }
+    setLoading("");
   }
 
   async function fetchLiveUrl() {
@@ -575,6 +688,80 @@ export function CaseWorkflow({
           )}
         </section>
 
+        {/* Broker opt-out dispatch queue */}
+        <section className="mb-8 border-b border-white/[0.06] pb-8">
+          <PhaseHeader phase="01b" title="Broker opt-out dispatch" />
+          <p className="mb-3 text-sm text-slate-500">
+            Queue opt-out packages from your latest broker sweep. Approve each dispatch, complete the
+            broker form yourself, then record submission here.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={queueOptOutDispatches}
+            disabled={loading === "opt-out-queue" || status === "draft"}
+          >
+            {loading === "opt-out-queue" ? "Queuing…" : "Queue from broker sweep"}
+          </Button>
+          {optOutDispatches.length > 0 && (
+            <ul className="mt-4 space-y-3">
+              {optOutDispatches.map((d) => (
+                <li
+                  key={d.id}
+                  className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 text-sm"
+                >
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-slate-200">{d.brokerName}</p>
+                    <Badge tone={d.status === "submitted" ? "success" : "info"}>
+                      {d.status.replaceAll("_", " ")}
+                    </Badge>
+                  </div>
+                  {d.optOutUrl && (
+                    <a
+                      href={d.optOutUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="mt-1 inline-block text-xs text-teal-400 hover:underline"
+                    >
+                      Open opt-out page →
+                    </a>
+                  )}
+                  <pre className="mt-2 whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-black/30 p-3 text-xs text-slate-400">
+                    {d.package.copyBlock}
+                  </pre>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    {d.status === "pending_approval" && (
+                      <Button
+                        variant="secondary"
+                        className="!px-2 !py-1 text-xs"
+                        onClick={() => approveOptOut(d.id)}
+                        disabled={loading === `opt-approve-${d.id}`}
+                      >
+                        Approve dispatch
+                      </Button>
+                    )}
+                    {d.status === "approved" && (
+                      <Button
+                        className="!px-2 !py-1 text-xs"
+                        onClick={() => recordOptOutSubmitted(d.id)}
+                        disabled={loading === `opt-submit-${d.id}`}
+                      >
+                        Record submitted
+                      </Button>
+                    )}
+                    <Button
+                      variant="ghost"
+                      className="!px-2 !py-1 text-xs"
+                      onClick={() => navigator.clipboard.writeText(d.package.copyBlock)}
+                    >
+                      Copy block
+                    </Button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+
         {/* Phase 2: Remediation */}
         <section className="mb-8 border-b border-white/[0.06] pb-8">
           <PhaseHeader
@@ -741,6 +928,59 @@ export function CaseWorkflow({
               </div>
             );
           })}
+        </section>
+
+        {/* Search deindex workflow */}
+        <section className="mb-8 border-b border-white/[0.06] pb-8">
+          <PhaseHeader phase="03b" title="Search deindexing" />
+          <p className="mb-3 text-sm text-slate-500">
+            Generate drafts and tool links for Google, Bing, and other search engines. You submit
+            through each engine&apos;s official process — ClearTrace does not auto-submit.
+          </p>
+          <Button
+            variant="secondary"
+            onClick={createDeindexDrafts}
+            disabled={loading === "deindex" || exposures.length === 0}
+          >
+            {loading === "deindex" ? "Creating…" : "Create deindex drafts (Google + Bing)"}
+          </Button>
+          {deindexRequests.length > 0 && (
+            <ul className="mt-4 space-y-3">
+              {deindexRequests.map((r) => (
+                <li
+                  key={r.id}
+                  className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 text-sm"
+                >
+                  <p className="font-medium text-slate-200">
+                    {r.searchEngine} — {r.sourceUrl}
+                  </p>
+                  <a
+                    href={r.toolUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-1 inline-block text-xs text-teal-400 hover:underline"
+                  >
+                    Open {r.searchEngine} tool →
+                  </a>
+                  <p className="mt-2 text-xs text-slate-500">{r.draftSubject}</p>
+                  <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-black/30 p-3 text-xs text-slate-400">
+                    {r.draftBody}
+                  </pre>
+                  <Button
+                    variant="ghost"
+                    className="mt-2 !px-2 !py-1 text-xs"
+                    onClick={() =>
+                      navigator.clipboard.writeText(
+                        `Subject: ${r.draftSubject}\n\n${r.draftBody}`,
+                      )
+                    }
+                  >
+                    Copy draft
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
         </section>
 
         {/* Phase 3: Verification */}

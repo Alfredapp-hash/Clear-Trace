@@ -454,6 +454,37 @@ export function ConnectorSettings() {
               daily monitoring, expedited SLAs. No dark-web crawl or unapproved sends.
             </span>
           </label>
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-400">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={!!agentDefaults.weeklyDigest}
+              onChange={(e) =>
+                setAgentDefaults({ ...agentDefaults, weeklyDigest: e.target.checked })
+              }
+            />
+            <span>
+              Send a weekly progress digest email (Mondays 9:00 UTC). Requires SMTP, Resend, SendGrid,
+              or Postmark — independent of removal draft auto-send.
+            </span>
+          </label>
+          {agentDefaults.weeklyDigest && (
+            <div>
+              <Label htmlFor="weekly-digest-email">Digest recipient (optional)</Label>
+              <Input
+                id="weekly-digest-email"
+                type="email"
+                placeholder="defaults to account owner"
+                value={agentDefaults.weeklyDigestEmail ?? ""}
+                onChange={(e) =>
+                  setAgentDefaults({
+                    ...agentDefaults,
+                    weeklyDigestEmail: e.target.value || undefined,
+                  })
+                }
+              />
+            </div>
+          )}
         </div>
         <Button className="mt-4" onClick={saveDefaults} disabled={loading === "defaults"}>
           Save agent defaults

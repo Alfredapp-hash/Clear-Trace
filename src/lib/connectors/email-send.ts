@@ -25,25 +25,19 @@ const SEND_CAPABLE: ConnectorType[] = ["smtp", "resend", "sendgrid", "postmark"]
 export async function isOptionalEmailSendEnabled(organizationId: string): Promise<boolean> {
   const defaults = await getAgentDefaults(organizationId);
   if (!defaults.emailAutoSend) return false;
+  return isDigestEmailSendEnabled(organizationId);
+}
+
+/** Digest and notifications — connector only; does not require emailAutoSend. */
+export async function isDigestEmailSendEnabled(organizationId: string): Promise<boolean> {
   const type = await resolveEmailConnector(organizationId);
   return !!type && SEND_CAPABLE.includes(type);
 }
 
-export async function sendRemovalEmail(
+async function sendViaEmailConnector(
   organizationId: string,
   input: SendEmailInput,
 ): Promise<SendEmailResult> {
-  const defaults = await getAgentDefaults(organizationId);
-  if (!defaults.emailAutoSend) {
-    throw new ConnectorConnectionError(
-      "resend",
-      "unsupported",
-      "Email auto-send is disabled. Enable it in Settings → Agent defaults.",
-    );
-  }
-
-  await requireBillingFeature(organizationId, "email_auto_send");
-
   const type = await resolveEmailConnector(organizationId);
   if (!type || !SEND_CAPABLE.includes(type)) {
     throw new ConnectorConnectionError(
@@ -121,4 +115,30 @@ export async function sendRemovalEmail(
     }),
   });
   return { provider: type, messageId: res.data.MessageID ?? "unknown" };
+}
+
+export async function sendRemovalEmail(
+  organizationId: string,
+  input: SendEmailInput,
+): Promise<SendEmailResult> {
+  const defaults = await getAgentDefaults(organizationId);
+  if (!defaults.emailAutoSend) {
+    throw new ConnectorConnectionError(
+      "resend",
+      "unsupported",
+      "Email auto-send is disabled. Enable it in Settings → Agent defaults.",
+    );
+  }
+
+  await requireBillingFeature(organizationId, "email_auto_send");
+  return sendViaEmailConnector(organizationId, input);
+}
+
+/** Weekly digest and system notifications — bypasses emailAutoSend. */
+export async function sendNotificationEmail(
+  organizationId: string,
+  input: SendEmailInput,
+): Promise<SendEmailResult> {
+  await requireBillingFeature(organizationId, "email_digest");
+  return sendViaEmailConnector(organizationId, input);
 }

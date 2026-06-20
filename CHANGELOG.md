@@ -2,6 +2,19 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.0.0] — 2026-06-19
+
+### Added (v1.0 — competitive tier closure)
+- **Opt-out dispatch queue** — queue broker sweep matches → approve → user submits → record (`/api/cases/[id]/opt-out-dispatch`)
+- **Search deindex workflow** — Google, Bing, DuckDuckGo, Yahoo drafts + official tool URLs (`/api/cases/[id]/deindex`)
+- **Weekly email digest** — progress report cron (`/api/cron/digest`, Mondays 9:00 UTC); Settings toggle independent of draft auto-send
+- **PWA basics** — `manifest.json`, theme color, installable icons
+
+### Notes
+- Opt-out dispatch never auto-submits broker forms — human completes verification/CAPTCHA
+- Deindex drafts are copy-and-submit; no automated Google API submission
+- Digest uses `sendNotificationEmail` (bypasses `emailAutoSend` but requires email connector)
+
 ## [0.9.0] — 2026-06-19
 
 ### Added (Consumer polish — competitive gap closure)

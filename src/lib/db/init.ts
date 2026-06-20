@@ -425,6 +425,36 @@ const TABLES = [
     notes TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
+  `CREATE TABLE IF NOT EXISTS opt_out_dispatches (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL REFERENCES privacy_cases(id),
+    organization_id TEXT NOT NULL REFERENCES organizations(id),
+    broker_id TEXT,
+    broker_name TEXT NOT NULL,
+    opt_out_url TEXT,
+    exposure_url TEXT,
+    status TEXT NOT NULL DEFAULT 'pending_approval',
+    instructions_json TEXT NOT NULL DEFAULT '{}',
+    approved_at TEXT,
+    submitted_at TEXT,
+    completed_at TEXT,
+    notes TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
+  `CREATE TABLE IF NOT EXISTS deindex_requests (
+    id TEXT PRIMARY KEY,
+    case_id TEXT NOT NULL REFERENCES privacy_cases(id),
+    organization_id TEXT NOT NULL REFERENCES organizations(id),
+    exposure_id TEXT REFERENCES verified_exposures(id),
+    source_url TEXT NOT NULL,
+    search_engine TEXT NOT NULL,
+    tool_url TEXT NOT NULL,
+    draft_subject TEXT NOT NULL,
+    draft_body TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'draft',
+    submitted_at TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  )`,
 ];
 
 function migrateColumns() {

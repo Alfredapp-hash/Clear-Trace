@@ -95,6 +95,9 @@ export interface AgentDefaults {
   ruthlessMode?: boolean;
   /** Preferred breach intelligence connector */
   breachIntel?: ConnectorType;
+  /** Weekly progress digest email (requires email connector) */
+  weeklyDigest?: boolean;
+  weeklyDigestEmail?: string;
 }
 
 export type ConnectorCredentials = Record<string, string>;

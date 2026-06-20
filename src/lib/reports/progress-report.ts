@@ -25,11 +25,12 @@ export interface ProgressReport {
   markdown: string;
 }
 
-export async function buildProgressReport(
-  session: SessionPayload,
+export async function buildProgressReportForOrg(
+  organizationId: string,
+  organizationName: string,
 ): Promise<ProgressReport> {
   const cases = await db.query.privacyCases.findMany({
-    where: eq(privacyCases.organizationId, session.organizationId),
+    where: eq(privacyCases.organizationId, organizationId),
     orderBy: [desc(privacyCases.updatedAt)],
   });
 
@@ -43,13 +44,13 @@ export async function buildProgressReport(
 
   const slas = await db.query.slaDeadlines.findMany({
     where: and(
-      eq(slaDeadlines.organizationId, session.organizationId),
+      eq(slaDeadlines.organizationId, organizationId),
       eq(slaDeadlines.status, "overdue"),
     ),
   });
 
   const events = await db.query.auditEvents.findMany({
-    where: eq(auditEvents.organizationId, session.organizationId),
+    where: eq(auditEvents.organizationId, organizationId),
     orderBy: [desc(auditEvents.createdAt)],
     limit: 12,
   });
@@ -69,8 +70,8 @@ export async function buildProgressReport(
 
   const generatedAt = new Date().toISOString();
   const report: ProgressReport = {
-    organizationId: session.organizationId,
-    organizationName: session.organizationName,
+    organizationId,
+    organizationName,
     generatedAt,
     periodLabel: "Current snapshot",
     summary: {
@@ -128,4 +129,10 @@ export async function buildProgressReport(
 
   report.markdown = lines.join("\n");
   return report;
+}
+
+export async function buildProgressReport(
+  session: SessionPayload,
+): Promise<ProgressReport> {
+  return buildProgressReportForOrg(session.organizationId, session.organizationName);
 }

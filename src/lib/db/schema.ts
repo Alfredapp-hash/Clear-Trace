@@ -675,6 +675,50 @@ export const breachFindings = sqliteTable("breach_findings", {
     .default(sql`(datetime('now'))`),
 });
 
+export const optOutDispatches = sqliteTable("opt_out_dispatches", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id")
+    .notNull()
+    .references(() => privacyCases.id),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  brokerId: text("broker_id"),
+  brokerName: text("broker_name").notNull(),
+  optOutUrl: text("opt_out_url"),
+  exposureUrl: text("exposure_url"),
+  status: text("status").notNull().default("pending_approval"),
+  instructionsJson: text("instructions_json").notNull().default("{}"),
+  approvedAt: text("approved_at"),
+  submittedAt: text("submitted_at"),
+  completedAt: text("completed_at"),
+  notes: text("notes"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+export const deindexRequests = sqliteTable("deindex_requests", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id")
+    .notNull()
+    .references(() => privacyCases.id),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  exposureId: text("exposure_id").references(() => verifiedExposures.id),
+  sourceUrl: text("source_url").notNull(),
+  searchEngine: text("search_engine").notNull(),
+  toolUrl: text("tool_url").notNull(),
+  draftSubject: text("draft_subject").notNull(),
+  draftBody: text("draft_body").notNull(),
+  status: text("status").notNull().default("draft"),
+  submittedAt: text("submitted_at"),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
 export type PrivacyCase = typeof privacyCases.$inferSelect;
 export type ExposureCandidate = typeof exposureCandidates.$inferSelect;
 export type VerifiedExposure = typeof verifiedExposures.$inferSelect;
