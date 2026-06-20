@@ -714,6 +714,8 @@ export const deindexRequests = sqliteTable("deindex_requests", {
   draftBody: text("draft_body").notNull(),
   status: text("status").notNull().default("draft"),
   submittedAt: text("submitted_at"),
+  resolvedAt: text("resolved_at"),
+  notes: text("notes"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

@@ -2,6 +2,18 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.1.0] — 2026-06-19
+
+### Added (Workflow completion tracking)
+- **Opt-out completion verification** — mark submitted dispatches as `completed` after removal verified
+- **Deindex status tracking** — `draft` → `submitted` → `resolved` / `rejected` with timestamps
+- **Dashboard action items** — surfaces pending opt-outs, verification-needed opt-outs, and deindex drafts
+- **Exposure report** — opt-out and deindex status sections in markdown export
+
+### API
+- `POST /api/cases/[id]/opt-out-dispatch` — new `complete` action
+- `POST /api/cases/[id]/deindex` — `submit`, `resolve`, `reject` actions
+
 ## [1.0.0] — 2026-06-19
 
 ### Added (v1.0 — competitive tier closure)

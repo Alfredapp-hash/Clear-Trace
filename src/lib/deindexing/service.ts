@@ -69,4 +69,83 @@ export async function listDeindexRequests(caseId: string, session: SessionPayloa
   });
 }
 
+export async function recordDeindexSubmitted(
+  session: SessionPayload,
+  caseId: string,
+  requestId: string,
+) {
+  const row = await db.query.deindexRequests.findFirst({
+    where: eq(deindexRequests.id, requestId),
+  });
+  if (!row || row.caseId !== caseId || row.organizationId !== session.organizationId) {
+    throw new Error("NOT_FOUND");
+  }
+  if (row.status !== "draft") throw new Error("ALREADY_TRACKED");
+
+  const now = new Date().toISOString();
+  await db
+    .update(deindexRequests)
+    .set({ status: "submitted", submittedAt: now })
+    .where(eq(deindexRequests.id, requestId));
+
+  await logAuditEvent({
+    caseId,
+    organizationId: session.organizationId,
+    userId: session.userId,
+    eventType: "deindex_submitted",
+    summary: `Recorded ${row.searchEngine} deindex submission for ${row.sourceUrl}`,
+  });
+}
+
+export async function recordDeindexOutcome(
+  session: SessionPayload,
+  caseId: string,
+  requestId: string,
+  outcome: "resolved" | "rejected",
+  notes?: string,
+) {
+  const row = await db.query.deindexRequests.findFirst({
+    where: eq(deindexRequests.id, requestId),
+  });
+  if (!row || row.caseId !== caseId || row.organizationId !== session.organizationId) {
+    throw new Error("NOT_FOUND");
+  }
+  if (row.status !== "submitted") throw new Error("SUBMIT_FIRST");
+
+  const now = new Date().toISOString();
+  await db
+    .update(deindexRequests)
+    .set({
+      status: outcome,
+      resolvedAt: now,
+      notes: notes ?? row.notes,
+    })
+    .where(eq(deindexRequests.id, requestId));
+
+  await logAuditEvent({
+    caseId,
+    organizationId: session.organizationId,
+    userId: session.userId,
+    eventType: outcome === "resolved" ? "deindex_resolved" : "deindex_rejected",
+    summary: `Marked ${row.searchEngine} deindex as ${outcome}`,
+  });
+}
+
+export async function getDeindexSummary(organizationId: string, caseIds: string[]) {
+  if (!caseIds.length) {
+    return { draft: 0, submitted: 0, resolved: 0, rejected: 0 };
+  }
+
+  const rows = await db.query.deindexRequests.findMany({
+    where: eq(deindexRequests.organizationId, organizationId),
+  });
+  const relevant = rows.filter((r) => caseIds.includes(r.caseId));
+  return {
+    draft: relevant.filter((r) => r.status === "draft").length,
+    submitted: relevant.filter((r) => r.status === "submitted").length,
+    resolved: relevant.filter((r) => r.status === "resolved").length,
+    rejected: relevant.filter((r) => r.status === "rejected").length,
+  };
+}
+
 export { DEINDEX_TOOLS };

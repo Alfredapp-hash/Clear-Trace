@@ -1,11 +1,18 @@
-import { and, eq, lte } from "drizzle-orm";
+import { and, eq, inArray, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { privacyCases, monitoringRules } from "@/lib/db/schema";
+import { deindexRequests, monitoringRules, optOutDispatches, privacyCases } from "@/lib/db/schema";
 
 export interface ActionItem {
   caseId: string;
   caseTitle: string;
-  type: "verification_due" | "follow_up" | "reopened" | "candidate_review";
+  type:
+    | "verification_due"
+    | "follow_up"
+    | "reopened"
+    | "candidate_review"
+    | "opt_out_pending"
+    | "opt_out_verify"
+    | "deindex_pending";
   message: string;
   priority: "high" | "medium" | "low";
 }
@@ -66,6 +73,60 @@ export async function getActionItems(userId: string): Promise<ActionItem[]> {
         message: "Scheduled verification check is due",
         priority: "medium",
       });
+    }
+  }
+
+  const caseIds = cases.map((c) => c.id);
+  if (caseIds.length > 0) {
+    const [optOuts, deindexes] = await Promise.all([
+      db.query.optOutDispatches.findMany({
+        where: inArray(optOutDispatches.caseId, caseIds),
+      }),
+      db.query.deindexRequests.findMany({
+        where: inArray(deindexRequests.caseId, caseIds),
+      }),
+    ]);
+
+    for (const c of cases) {
+      const pending = optOuts.filter(
+        (o) =>
+          o.caseId === c.id && ["pending_approval", "approved"].includes(o.status),
+      ).length;
+      if (pending > 0) {
+        items.push({
+          caseId: c.id,
+          caseTitle: c.title,
+          type: "opt_out_pending",
+          message: `${pending} broker opt-out(s) awaiting approval or submission`,
+          priority: "medium",
+        });
+      }
+
+      const verify = optOuts.filter(
+        (o) => o.caseId === c.id && o.status === "submitted",
+      ).length;
+      if (verify > 0) {
+        items.push({
+          caseId: c.id,
+          caseTitle: c.title,
+          type: "opt_out_verify",
+          message: `${verify} opt-out(s) submitted — verify removal and mark complete`,
+          priority: "high",
+        });
+      }
+
+      const deindexDrafts = deindexes.filter(
+        (d) => d.caseId === c.id && d.status === "draft",
+      ).length;
+      if (deindexDrafts > 0) {
+        items.push({
+          caseId: c.id,
+          caseTitle: c.title,
+          type: "deindex_pending",
+          message: `${deindexDrafts} search deindex draft(s) ready to submit`,
+          priority: "medium",
+        });
+      }
     }
   }
 

@@ -483,6 +483,8 @@ function migrateColumns() {
     "ALTER TABLE organizations ADD COLUMN sla_follow_up_days INTEGER NOT NULL DEFAULT 14",
     "ALTER TABLE privacy_cases ADD COLUMN ruthless_mode INTEGER NOT NULL DEFAULT 0",
     "ALTER TABLE privacy_cases ADD COLUMN family_member_id TEXT REFERENCES family_members(id)",
+    "ALTER TABLE deindex_requests ADD COLUMN resolved_at TEXT",
+    "ALTER TABLE deindex_requests ADD COLUMN notes TEXT",
   ];
   for (const sql of migrations) {
     try {

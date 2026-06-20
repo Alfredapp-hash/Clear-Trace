@@ -177,3 +177,57 @@ export async function recordOptOutSubmitted(
     summary: `Recorded opt-out submission for ${row.brokerName}`,
   });
 }
+
+export async function recordOptOutCompleted(
+  session: SessionPayload,
+  caseId: string,
+  dispatchId: string,
+  notes?: string,
+) {
+  const row = await db.query.optOutDispatches.findFirst({
+    where: and(
+      eq(optOutDispatches.id, dispatchId),
+      eq(optOutDispatches.caseId, caseId),
+      eq(optOutDispatches.organizationId, session.organizationId),
+    ),
+  });
+  if (!row) throw new Error("NOT_FOUND");
+  if (row.status !== "submitted") throw new Error("SUBMIT_FIRST");
+
+  const now = new Date().toISOString();
+  await db
+    .update(optOutDispatches)
+    .set({
+      status: "completed",
+      completedAt: now,
+      notes: notes ?? row.notes,
+    })
+    .where(eq(optOutDispatches.id, dispatchId));
+
+  await logAuditEvent({
+    caseId,
+    organizationId: session.organizationId,
+    userId: session.userId,
+    eventType: "opt_out_completed",
+    summary: `Verified opt-out completion for ${row.brokerName}`,
+  });
+}
+
+export async function getOptOutDispatchSummary(organizationId: string, caseIds: string[]) {
+  if (!caseIds.length) {
+    return { pending: 0, submitted: 0, completed: 0 };
+  }
+
+  const rows = await db.query.optOutDispatches.findMany({
+    where: eq(optOutDispatches.organizationId, organizationId),
+  });
+
+  const relevant = rows.filter((r) => caseIds.includes(r.caseId));
+  return {
+    pending: relevant.filter((r) =>
+      ["pending_approval", "approved"].includes(r.status),
+    ).length,
+    submitted: relevant.filter((r) => r.status === "submitted").length,
+    completed: relevant.filter((r) => r.status === "completed").length,
+  };
+}

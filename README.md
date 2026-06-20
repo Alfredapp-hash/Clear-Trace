@@ -98,8 +98,8 @@ data/            — Local SQLite database (gitignored)
 | Ruthless mode (max lawful coverage) | **Pro** |
 | Breach intel (HIBP BYOK) | **Pro** |
 | Agent builder kit (zip, MCP, CLI) | **Live** |
-| Opt-out dispatch queue (approve → submit → record) | **Pro** |
-| Search deindex workflow (Google/Bing/DDG/Yahoo drafts) | **Pro** |
+| Opt-out dispatch queue (approve → submit → verify complete) | **Pro** |
+| Search deindex workflow (draft → submit → resolved/rejected) | **Pro** |
 | Weekly progress email digest | **Free** (requires email connector) |
 | PWA (installable mobile shell) | **Live** |
 

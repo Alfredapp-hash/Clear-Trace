@@ -251,6 +251,41 @@ export function CaseWorkflow({
     setLoading("");
   }
 
+  async function recordOptOutCompleted(dispatchId: string) {
+    setLoading(`opt-complete-${dispatchId}`);
+    const res = await fetch(`/api/cases/${caseId}/opt-out-dispatch`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "complete", dispatchId }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Mark complete failed");
+    } else {
+      await refreshOptOutAndDeindex();
+    }
+    setLoading("");
+  }
+
+  async function updateDeindexStatus(
+    requestId: string,
+    action: "submit" | "resolve" | "reject",
+  ) {
+    setLoading(`deindex-${action}-${requestId}`);
+    const res = await fetch(`/api/cases/${caseId}/deindex`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action, requestId }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      setError(data.error ?? "Deindex status update failed");
+    } else {
+      await refreshOptOutAndDeindex();
+    }
+    setLoading("");
+  }
+
   async function createDeindexDrafts() {
     setLoading("deindex");
     setError("");
@@ -711,7 +746,15 @@ export function CaseWorkflow({
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <p className="font-medium text-slate-200">{d.brokerName}</p>
-                    <Badge tone={d.status === "submitted" ? "success" : "info"}>
+                    <Badge
+                      tone={
+                        d.status === "completed"
+                          ? "success"
+                          : d.status === "submitted"
+                            ? "warning"
+                            : "info"
+                      }
+                    >
                       {d.status.replaceAll("_", " ")}
                     </Badge>
                   </div>
@@ -746,6 +789,16 @@ export function CaseWorkflow({
                         disabled={loading === `opt-submit-${d.id}`}
                       >
                         Record submitted
+                      </Button>
+                    )}
+                    {d.status === "submitted" && (
+                      <Button
+                        variant="secondary"
+                        className="!px-2 !py-1 text-xs"
+                        onClick={() => recordOptOutCompleted(d.id)}
+                        disabled={loading === `opt-complete-${d.id}`}
+                      >
+                        Mark removal verified
                       </Button>
                     )}
                     <Button
@@ -951,9 +1004,24 @@ export function CaseWorkflow({
                   key={r.id}
                   className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-4 text-sm"
                 >
-                  <p className="font-medium text-slate-200">
-                    {r.searchEngine} — {r.sourceUrl}
-                  </p>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <p className="font-medium text-slate-200">
+                      {r.searchEngine} — {r.sourceUrl}
+                    </p>
+                    <Badge
+                      tone={
+                        r.status === "resolved"
+                          ? "success"
+                          : r.status === "rejected"
+                            ? "danger"
+                            : r.status === "submitted"
+                              ? "warning"
+                              : "info"
+                      }
+                    >
+                      {r.status}
+                    </Badge>
+                  </div>
                   <a
                     href={r.toolUrl}
                     target="_blank"
@@ -966,17 +1034,48 @@ export function CaseWorkflow({
                   <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-black/30 p-3 text-xs text-slate-400">
                     {r.draftBody}
                   </pre>
-                  <Button
-                    variant="ghost"
-                    className="mt-2 !px-2 !py-1 text-xs"
-                    onClick={() =>
-                      navigator.clipboard.writeText(
-                        `Subject: ${r.draftSubject}\n\n${r.draftBody}`,
-                      )
-                    }
-                  >
-                    Copy draft
-                  </Button>
+                  <div className="mt-2 flex flex-wrap gap-2">
+                    <Button
+                      variant="ghost"
+                      className="!px-2 !py-1 text-xs"
+                      onClick={() =>
+                        navigator.clipboard.writeText(
+                          `Subject: ${r.draftSubject}\n\n${r.draftBody}`,
+                        )
+                      }
+                    >
+                      Copy draft
+                    </Button>
+                    {r.status === "draft" && (
+                      <Button
+                        variant="secondary"
+                        className="!px-2 !py-1 text-xs"
+                        onClick={() => updateDeindexStatus(r.id, "submit")}
+                        disabled={loading === `deindex-submit-${r.id}`}
+                      >
+                        Record submitted
+                      </Button>
+                    )}
+                    {r.status === "submitted" && (
+                      <>
+                        <Button
+                          className="!px-2 !py-1 text-xs"
+                          onClick={() => updateDeindexStatus(r.id, "resolve")}
+                          disabled={loading === `deindex-resolve-${r.id}`}
+                        >
+                          Mark resolved
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          className="!px-2 !py-1 text-xs"
+                          onClick={() => updateDeindexStatus(r.id, "reject")}
+                          disabled={loading === `deindex-reject-${r.id}`}
+                        >
+                          Mark rejected
+                        </Button>
+                      </>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>

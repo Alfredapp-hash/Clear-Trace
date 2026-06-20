@@ -5,6 +5,7 @@ import {
   approveOptOutDispatch,
   listOptOutDispatches,
   queueOptOutDispatchesFromSweep,
+  recordOptOutCompleted,
   recordOptOutSubmitted,
 } from "@/lib/opt-out/dispatch";
 import { jsonError, jsonOk } from "@/lib/api";
@@ -75,13 +76,21 @@ export async function POST(
       return jsonOk({ submitted: true });
     }
 
-    return jsonError("Unknown action. Use queue, approve, or submit.", 400);
+    if (action === "complete") {
+      const dispatchId = body.dispatchId as string | undefined;
+      if (!dispatchId) return jsonError("dispatchId required", 400);
+      await recordOptOutCompleted(session, id, dispatchId, body.notes as string | undefined);
+      return jsonOk({ completed: true });
+    }
+
+    return jsonError("Unknown action. Use queue, approve, submit, or complete.", 400);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);
     if (msg === "NO_SWEEP") return jsonError("Run a broker sweep first", 400);
     if (msg === "NOT_FOUND") return jsonError("Dispatch not found", 404);
     if (msg === "APPROVAL_REQUIRED") return jsonError("Approve dispatch before recording submission", 400);
+    if (msg === "SUBMIT_FIRST") return jsonError("Record submission before marking completed", 400);
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("Opt-out dispatch requires Pro. Upgrade on Billing.", 402);
     }

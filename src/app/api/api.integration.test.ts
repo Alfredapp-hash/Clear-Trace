@@ -214,6 +214,16 @@ describe("API routes", () => {
         { params: Promise.resolve({ id: caseFixture.caseId }) },
       );
       expect(submitRes.status).toBe(200);
+
+      const completeRes = await optOutPost(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "complete", dispatchId }),
+        }),
+        { params: Promise.resolve({ id: caseFixture.caseId }) },
+      );
+      expect(completeRes.status).toBe(200);
     });
 
     it("POST /api/cases/:id/deindex creates google+bing drafts", async () => {
@@ -234,12 +244,35 @@ describe("API routes", () => {
         params: Promise.resolve({ id: caseFixture.caseId }),
       });
       const listed = await readJson<{
-        requests: Array<{ searchEngine: string; toolUrl: string }>;
+        requests: Array<{ id: string; searchEngine: string; toolUrl: string }>;
       }>(listRes);
       const engines = listed.requests.map((r) => r.searchEngine);
       expect(engines).toContain("google");
       expect(engines).toContain("bing");
       expect(listed.requests[0]?.toolUrl).toMatch(/^https:\/\//);
+
+      const requestId = listed.requests[0]?.id;
+      expect(requestId).toBeTruthy();
+
+      const submitRes = await deindexPost(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "submit", requestId }),
+        }),
+        { params: Promise.resolve({ id: caseFixture.caseId }) },
+      );
+      expect(submitRes.status).toBe(200);
+
+      const resolveRes = await deindexPost(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "resolve", requestId }),
+        }),
+        { params: Promise.resolve({ id: caseFixture.caseId }) },
+      );
+      expect(resolveRes.status).toBe(200);
     });
 
     it("POST /api/cron/digest runs with worker auth", async () => {

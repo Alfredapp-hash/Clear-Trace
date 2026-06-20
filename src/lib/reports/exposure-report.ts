@@ -5,8 +5,10 @@ import {
   brokerSweepMatches,
   brokerSweepRuns,
   contentEvidence,
+  deindexRequests,
   exposureCandidates,
   familyMembers,
+  optOutDispatches,
   verifiedExposures,
 } from "@/lib/db/schema";
 import { getCaseForUser } from "@/lib/cases/service";
@@ -39,6 +41,12 @@ export interface ExposureReport {
     confirmed: number;
     brokerMatches: number;
     breachFindings: number;
+    optOutPending: number;
+    optOutSubmitted: number;
+    optOutCompleted: number;
+    deindexDraft: number;
+    deindexSubmitted: number;
+    deindexResolved: number;
   };
   items: ExposureReportItem[];
   recommendedActions: string[];
@@ -87,9 +95,11 @@ export async function buildExposureReport(
       })
     : [];
 
-  const breaches = await db.query.breachFindings.findMany({
-    where: eq(breachFindings.caseId, caseId),
-  });
+  const [breaches, optOuts, deindexes] = await Promise.all([
+    db.query.breachFindings.findMany({ where: eq(breachFindings.caseId, caseId) }),
+    db.query.optOutDispatches.findMany({ where: eq(optOutDispatches.caseId, caseId) }),
+    db.query.deindexRequests.findMany({ where: eq(deindexRequests.caseId, caseId) }),
+  ]);
 
   const items: ExposureReportItem[] = [];
 
@@ -179,6 +189,20 @@ export async function buildExposureReport(
   if (exposures.some((e) => e.status === "confirmed_exposure")) {
     recommendedActions.push("Draft and send removal requests for confirmed exposures.");
   }
+  const optOutPending = optOuts.filter((o) =>
+    ["pending_approval", "approved"].includes(o.status),
+  ).length;
+  const optOutSubmitted = optOuts.filter((o) => o.status === "submitted").length;
+  if (optOutPending > 0) {
+    recommendedActions.push(`Complete ${optOutPending} pending broker opt-out dispatch(es).`);
+  }
+  if (optOutSubmitted > 0) {
+    recommendedActions.push(`Verify ${optOutSubmitted} submitted opt-out(s) and mark complete.`);
+  }
+  const deindexDraft = deindexes.filter((d) => d.status === "draft").length;
+  if (deindexDraft > 0) {
+    recommendedActions.push(`Submit ${deindexDraft} search deindex draft(s) via official tools.`);
+  }
 
   const generatedAt = new Date().toISOString();
   const report: ExposureReport = {
@@ -197,13 +221,19 @@ export async function buildExposureReport(
       confirmed: exposures.length,
       brokerMatches: sweepMatches.length,
       breachFindings: breaches.length,
+      optOutPending,
+      optOutSubmitted,
+      optOutCompleted: optOuts.filter((o) => o.status === "completed").length,
+      deindexDraft,
+      deindexSubmitted: deindexes.filter((d) => d.status === "submitted").length,
+      deindexResolved: deindexes.filter((d) => d.status === "resolved").length,
     },
     items: items.slice(0, 50),
     recommendedActions,
     markdown: "",
   };
 
-  report.markdown = renderExposureReportMarkdown(report, sweepMatches, breaches);
+  report.markdown = renderExposureReportMarkdown(report, sweepMatches, breaches, optOuts, deindexes);
   return report;
 }
 
@@ -211,6 +241,8 @@ function renderExposureReportMarkdown(
   report: ExposureReport,
   brokerMatches: { brokerName: string; domain: string; optOutUrl: string | null; matchConfidence: number }[],
   breaches: { breachName: string; dataClassesJson: string }[],
+  optOuts: { brokerName: string; status: string }[],
+  deindexes: { searchEngine: string; sourceUrl: string; status: string }[],
 ): string {
   const lines = [
     `# ClearTrace Exposure Report`,
@@ -228,8 +260,26 @@ function renderExposureReportMarkdown(
     `| Confirmed exposures | ${report.summary.confirmed} |`,
     `| Broker sweep matches | ${report.summary.brokerMatches} |`,
     `| Breach findings | ${report.summary.breachFindings} |`,
+    `| Opt-out pending / submitted / completed | ${report.summary.optOutPending} / ${report.summary.optOutSubmitted} / ${report.summary.optOutCompleted} |`,
+    `| Deindex draft / submitted / resolved | ${report.summary.deindexDraft} / ${report.summary.deindexSubmitted} / ${report.summary.deindexResolved} |`,
     ``,
   ].filter(Boolean) as string[];
+
+  if (optOuts.length > 0) {
+    lines.push(`## Opt-out dispatch status`, ``);
+    for (const o of optOuts.slice(0, 15)) {
+      lines.push(`- **${o.brokerName}** — ${o.status.replaceAll("_", " ")}`);
+    }
+    lines.push(``);
+  }
+
+  if (deindexes.length > 0) {
+    lines.push(`## Search deindex status`, ``);
+    for (const d of deindexes.slice(0, 15)) {
+      lines.push(`- **${d.searchEngine}** — ${d.sourceUrl} (${d.status})`);
+    }
+    lines.push(``);
+  }
 
   if (report.items.length > 0) {
     lines.push(`## Exposure items (ranked by impact)`, ``);
