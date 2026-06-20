@@ -1,12 +1,15 @@
 import { describe, expect, it, beforeAll, beforeEach, vi } from "vitest";
 import { cookies } from "next/headers";
-import { seedTestUser, readJson } from "@/lib/test/api-helpers";
+import { seedTestUser, seedTestCase, readJson } from "@/lib/test/api-helpers";
 import { GET as healthGet } from "./health/route";
 import { POST as loginPost } from "./auth/login/route";
 import { GET as casesGet, POST as casesPost } from "./cases/route";
 import { POST as runNextStepPost } from "./cases/[id]/run-next-step/route";
 import { GET as connectorsGet } from "./settings/connectors/route";
 import { POST as workerPost } from "./worker/run/route";
+import { GET as optOutGet, POST as optOutPost } from "./cases/[id]/opt-out-dispatch/route";
+import { GET as deindexGet, POST as deindexPost } from "./cases/[id]/deindex/route";
+import { POST as digestPost } from "./cron/digest/route";
 
 vi.mock("next/headers", () => ({
   cookies: vi.fn(),
@@ -145,5 +148,117 @@ describe("API routes", () => {
     } finally {
       process.env.WORKER_SECRET = prev;
     }
+  });
+
+  describe("v1.0 workflows", () => {
+    let caseFixture: Awaited<ReturnType<typeof seedTestCase>>;
+
+    beforeAll(async () => {
+      caseFixture = await seedTestCase(fixture);
+    });
+
+    it("GET /api/cases/:id/opt-out-dispatch lists empty then queues from sweep", async () => {
+      mockSessionCookie(fixture.token);
+      const listRes = await optOutGet(new Request("http://localhost"), {
+        params: Promise.resolve({ id: caseFixture.caseId }),
+      });
+      expect(listRes.status).toBe(200);
+
+      const queueRes = await optOutPost(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "queue" }),
+        }),
+        { params: Promise.resolve({ id: caseFixture.caseId }) },
+      );
+      expect(queueRes.status).toBe(201);
+      const queued = await readJson<{ created: number; dispatchIds: string[] }>(queueRes);
+      expect(queued.created).toBe(1);
+      expect(queued.dispatchIds).toHaveLength(1);
+
+      const listAfter = await optOutGet(new Request("http://localhost"), {
+        params: Promise.resolve({ id: caseFixture.caseId }),
+      });
+      const listed = await readJson<{ dispatches: Array<{ id: string; brokerName: string }> }>(
+        listAfter,
+      );
+      expect(listed.dispatches[0]?.brokerName).toBe("Spokeo");
+    });
+
+    it("POST opt-out approve → submit lifecycle", async () => {
+      mockSessionCookie(fixture.token);
+      const listRes = await optOutGet(new Request("http://localhost"), {
+        params: Promise.resolve({ id: caseFixture.caseId }),
+      });
+      const listed = await readJson<{ dispatches: Array<{ id: string; status: string }> }>(listRes);
+      const dispatchId = listed.dispatches[0]?.id;
+      expect(dispatchId).toBeTruthy();
+
+      const approveRes = await optOutPost(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "approve", dispatchId }),
+        }),
+        { params: Promise.resolve({ id: caseFixture.caseId }) },
+      );
+      expect(approveRes.status).toBe(200);
+
+      const submitRes = await optOutPost(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "submit", dispatchId }),
+        }),
+        { params: Promise.resolve({ id: caseFixture.caseId }) },
+      );
+      expect(submitRes.status).toBe(200);
+    });
+
+    it("POST /api/cases/:id/deindex creates google+bing drafts", async () => {
+      mockSessionCookie(fixture.token);
+      const res = await deindexPost(
+        new Request("http://localhost", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ engines: ["google", "bing"] }),
+        }),
+        { params: Promise.resolve({ id: caseFixture.caseId }) },
+      );
+      expect(res.status).toBe(201);
+      const body = await readJson<{ created: number }>(res);
+      expect(body.created).toBe(2);
+
+      const listRes = await deindexGet(new Request("http://localhost"), {
+        params: Promise.resolve({ id: caseFixture.caseId }),
+      });
+      const listed = await readJson<{
+        requests: Array<{ searchEngine: string; toolUrl: string }>;
+      }>(listRes);
+      const engines = listed.requests.map((r) => r.searchEngine);
+      expect(engines).toContain("google");
+      expect(engines).toContain("bing");
+      expect(listed.requests[0]?.toolUrl).toMatch(/^https:\/\//);
+    });
+
+    it("POST /api/cron/digest runs with worker auth", async () => {
+      const prev = process.env.WORKER_SECRET;
+      process.env.WORKER_SECRET = "test-worker-secret";
+      try {
+        const res = await digestPost(
+          new Request("http://localhost/api/cron/digest", {
+            method: "POST",
+            headers: { authorization: "Bearer test-worker-secret" },
+          }),
+        );
+        expect(res.status).toBe(200);
+        const body = await readJson<{ orgsChecked: number; skipped: number }>(res);
+        expect(typeof body.orgsChecked).toBe("number");
+        expect(typeof body.skipped).toBe("number");
+      } finally {
+        process.env.WORKER_SECRET = prev;
+      }
+    });
   });
 });

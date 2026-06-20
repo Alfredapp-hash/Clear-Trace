@@ -8,12 +8,12 @@ export default defineConfig({
   workers: 1,
   reporter: "list",
   use: {
-    baseURL: "http://localhost:3000",
+    baseURL: process.env.PLAYWRIGHT_BASE_URL ?? "http://localhost:3456",
     trace: "on-first-retry",
   },
   webServer: {
-    command: "npm run dev",
-    url: "http://localhost:3000/api/health",
+    command: "npm run dev -- -p 3456",
+    url: "http://localhost:3456/api/health",
     reuseExistingServer: !process.env.CI,
     timeout: 120_000,
   },
