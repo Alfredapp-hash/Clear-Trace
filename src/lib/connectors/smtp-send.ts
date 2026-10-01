@@ -1,7 +1,7 @@
 import nodemailer from "nodemailer";
-import { resolveSafeHost } from "@/lib/tools/safe-fetch";
 import { ConnectorConnectionError } from "./connection/errors";
 import { ALLOWED_SMTP_PORTS } from "./connection/providers";
+import { resolveSmtpHost } from "./smtp-host";
 import type { ConnectorCredentials } from "./types";
 import type { SendEmailInput, SendEmailResult } from "./email-send";
 
@@ -31,9 +31,13 @@ export async function sendViaSmtp(
 
   let address: string;
   try {
-    address = await resolveSafeHost(host);
+    address = await resolveSmtpHost(host);
   } catch {
-    throw new ConnectorConnectionError("smtp", "invalid_config", "SMTP host must be a public hostname.");
+    throw new ConnectorConnectionError(
+      "smtp",
+      "invalid_config",
+      "SMTP host must be a public hostname (or listed in SMTP_ALLOWED_HOSTS for a private-LAN relay).",
+    );
   }
 
   // Connect to the validated IP; keep the hostname for TLS SNI / certificate checks.

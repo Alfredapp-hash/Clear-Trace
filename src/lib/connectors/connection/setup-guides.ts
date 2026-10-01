@@ -120,6 +120,24 @@ export const CONNECTOR_SETUP_GUIDES: Record<ConnectorType, ConnectorSetupStep[]>
       link: "https://ollama.com/settings/keys",
     },
   ],
+  apple_intelligence: [
+    {
+      order: 1,
+      title: "Turn on Apple Intelligence",
+      body: "Needs an Apple Silicon Mac on macOS 26 or later. System Settings → Apple Intelligence & Siri → turn it on and let the model download.",
+    },
+    {
+      order: 2,
+      title: "Build and start the Apple bridge",
+      body: "The bridge serves Apple's on-device model on 127.0.0.1:11435 only. Drafts are polished on this Mac — personal details never leave it.",
+      copyable: "cd apple-bridge && swift build -c release && .build/release/cleartrace-apple-bridge",
+    },
+    {
+      order: 3,
+      title: "Save & test",
+      body: "Leave Bridge URL blank for http://127.0.0.1:11435. It counts as local for Local-only AI.",
+    },
+  ],
   gmail: [
     {
       order: 1,

@@ -15,6 +15,7 @@ import {
   type IntelligenceResolverDeps,
 } from "./connection/intelligence";
 import { classifyOllamaBaseUrl } from "./connection/ollama-origin";
+import { classifyAppleBridgeUrl } from "./connection/apple-bridge";
 import { getSetupGuide } from "./connection/setup-guides";
 import {
   breachIntelConnectorTypes,
@@ -367,6 +368,11 @@ async function assertConnectorPolicy(
       }
     }
   }
+  if (type === "apple_intelligence" && !classifyAppleBridgeUrl(credentials.baseUrl)) {
+    throw new Error(
+      "CONNECTOR_TEST_FAILED:Apple bridge URL must be a local origin listed in APPLE_BRIDGE_ALLOWED_ORIGINS",
+    );
+  }
   if (type === "generic_webhook" && credentials.url) {
     try {
       await assertSafeUrl(credentials.url);
@@ -398,6 +404,7 @@ export async function saveOrgConnector(
     const endpoint = classifyOllamaBaseUrl(mergedCredentials.baseUrl);
     metadata = { ...metadata, mode: endpoint?.mode ?? "local" };
   }
+  if (type === "apple_intelligence") metadata = { ...metadata, mode: "local" };
 
   let testResult = { ok: true, message: "Saved without test" };
   if (options.test !== false) {

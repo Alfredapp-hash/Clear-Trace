@@ -18,6 +18,7 @@ import {
   controllerTargets,
   messageDrafts,
   outboundMessages,
+  privacyCases,
   remediationCases,
   remedyRoutes,
 } from "@/lib/db/schema";
@@ -25,6 +26,7 @@ import type { SessionPayload } from "@/lib/auth/session";
 import {
   approveAndRecordSent,
   createAllDraftVariants,
+  caseStatusAfterDraftCreated,
   createRemovalDraft,
   resolveControllerForExposure,
   sendDraftViaConnector,
@@ -164,5 +166,58 @@ describe("remediation service guards", () => {
       .where(eq(remedyRoutes.id, a.remedyId));
     const draft = await createRemovalDraft(session, caseId, a.remediationId);
     expect(draft.recipient).toBe("fresh-privacy@spokeo.com");
+  });
+
+  describe("createRemovalDraft case status", () => {
+    it.each([
+      "confirmed_exposure",
+      "controller_resolution",
+      "remedy_selected",
+      "candidate_review",
+    ])("advances %s → draft_ready", (status) => {
+      expect(caseStatusAfterDraftCreated(status)).toBe("draft_ready");
+    });
+
+    it.each([
+      "draft_ready",
+      "user_review",
+      "approved_to_send",
+      "sent",
+      "awaiting_response",
+      "verification_due",
+      "partially_resolved",
+      "removed_confirmed",
+      "follow_up_eligible",
+      "escalated",
+      "reopened",
+      "paused",
+      "archived",
+      "closed",
+    ])("never changes %s", (status) => {
+      expect(caseStatusAfterDraftCreated(status)).toBe(status);
+    });
+
+    async function draftWithCaseStatus(status: string) {
+      const { caseId, exposureIds } = await seedWorkflowCase(session, {
+        status: "confirmed_exposure",
+        exposureUrls: ["https://www.spokeo.com/Status-Guard"],
+      });
+      const resolved = await resolveControllerForExposure(session, caseId, exposureIds[0]!);
+      await db.update(privacyCases).set({ status }).where(eq(privacyCases.id, caseId));
+      await createRemovalDraft(session, caseId, resolved.remediationId);
+      const row = await db.query.privacyCases.findFirst({ where: eq(privacyCases.id, caseId) });
+      return row?.status;
+    }
+
+    it("moves a remedy_selected case to draft_ready", async () => {
+      expect(await draftWithCaseStatus("remedy_selected")).toBe("draft_ready");
+    });
+
+    it.each(["sent", "verification_due", "partially_resolved", "removed_confirmed", "paused"])(
+      "does not regress a %s case",
+      async (status) => {
+        expect(await draftWithCaseStatus(status)).toBe(status);
+      },
+    );
   });
 });

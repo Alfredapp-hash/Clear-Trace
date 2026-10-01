@@ -112,6 +112,30 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     ],
   },
   {
+    type: "apple_intelligence",
+    name: "Apple Intelligence (on-device)",
+    category: "intelligence",
+    description:
+      "Apple's on-device model on this Mac via the ClearTrace Apple bridge — personal details never leave the Mac. Requires macOS 26+ with Apple Intelligence on.",
+    docsUrl: "https://developer.apple.com/documentation/foundationmodels",
+    fields: [
+      {
+        key: "baseUrl",
+        label: "Bridge URL",
+        type: "text",
+        placeholder: "http://127.0.0.1:11435",
+        helpText:
+          "Defaults to http://127.0.0.1:11435. Other local origins must be listed in APPLE_BRIDGE_ALLOWED_ORIGINS.",
+      },
+      {
+        key: "token",
+        label: "Bridge token (optional)",
+        type: "password",
+        helpText: "Only if you started the bridge with APPLE_BRIDGE_TOKEN.",
+      },
+    ],
+  },
+  {
     type: "gmail",
     name: "Gmail",
     category: "email",

@@ -437,6 +437,43 @@ export function CaseWorkflow({
     }
   }
 
+  /**
+   * Fetch the removal certificate and save it as JSON. The endpoint returns 409
+   * NO_VERIFIED_REMOVALS when nothing has been live-verified yet — show a hint instead
+   * of opening a raw error page.
+   */
+  async function downloadCertificate() {
+    setLoading("certificate");
+    setError("");
+    try {
+      const res = await callApi<Json>(`${base}/certificate`, {
+        errorMessage: "Could not generate the removal certificate",
+      });
+      if (!res.ok) {
+        setError(
+          res.status === 409 && res.code === "NO_VERIFIED_REMOVALS"
+            ? "No verified removals yet — run a live verification check on each exposure before downloading a certificate."
+            : res.error,
+        );
+        return;
+      }
+      const certId =
+        typeof res.data.certificateId === "string" ? res.data.certificateId : `case-${caseId}`;
+      const blob = new Blob([JSON.stringify(res.data, null, 2)], { type: "application/json" });
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = `removal-certificate-${certId}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+      setMessage("Removal certificate downloaded");
+    } finally {
+      setLoading("");
+    }
+  }
+
   function runLiveVerification(exposureId: string) {
     return mutate(`live-verify-${exposureId}`, `${base}/verification`, { action: "verify", exposureId, mode: "live" }, {
       errorMessage: "Live verification failed",
@@ -506,14 +543,14 @@ export function CaseWorkflow({
               Export case packet →
             </a>
             {status === "removed_confirmed" && (
-              <a
-                href={`${base}/certificate`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-emerald-300 hover:text-emerald-200"
+              <button
+                type="button"
+                onClick={downloadCertificate}
+                disabled={loading === "certificate"}
+                className="text-emerald-300 hover:text-emerald-200 disabled:opacity-60"
               >
-                Removal certificate →
-              </a>
+                {loading === "certificate" ? "Preparing certificate…" : "Removal certificate →"}
+              </button>
             )}
           </div>
         </div>

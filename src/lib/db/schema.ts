@@ -7,6 +7,8 @@ export const users = sqliteTable("users", {
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull().default("user"),
+  /** Bumped to revoke every outstanding session JWT for this user (logout / revokeUserSessions). */
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

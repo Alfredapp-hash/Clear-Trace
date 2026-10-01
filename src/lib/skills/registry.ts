@@ -54,25 +54,39 @@ export type SkillFrontMatter = z.infer<typeof skillFrontMatterSchema>;
 let cachedRegistry: SkillDefinition[] | null = null;
 let cacheMtime = 0;
 
+/*
+ * Skills live in <project>/skills (copied into .next/standalone via
+ * outputFileTracingIncludes in next.config.ts). Every fs/path call below that takes a
+ * runtime-computed path carries a turbopackIgnore comment so Turbopack's file tracer does
+ * not treat those dynamic paths as "could be anything" and trace the whole project.
+ */
 function resolveSkillsDir(): string {
   const candidates = [
     path.join(/*turbopackIgnore: true*/ process.cwd(), "skills"),
     path.join(/*turbopackIgnore: true*/ process.cwd(), "..", "cleartrace_portable_skillpack", "skills"),
   ];
   for (const dir of candidates) {
-    if (fs.existsSync(dir)) return dir;
+    if (fs.existsSync(/*turbopackIgnore: true*/ dir)) return dir;
   }
   throw new Error("Skills directory not found");
 }
 
-function skillsDirMtime(skillsDir: string): number {
-  let latest = 0;
-  const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+/** SKILL.md paths for every skill folder (skips `_shared` etc.). */
+function listSkillFiles(skillsDir: string): string[] {
+  const files: string[] = [];
+  const entries = fs.readdirSync(/*turbopackIgnore: true*/ skillsDir, { withFileTypes: true });
   for (const entry of entries) {
     if (!entry.isDirectory() || entry.name.startsWith("_")) continue;
-    const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
-    if (!fs.existsSync(skillPath)) continue;
-    const stat = fs.statSync(skillPath);
+    const skillPath = path.join(/*turbopackIgnore: true*/ skillsDir, entry.name, "SKILL.md");
+    if (fs.existsSync(/*turbopackIgnore: true*/ skillPath)) files.push(skillPath);
+  }
+  return files;
+}
+
+function skillFilesMtime(skillFiles: string[]): number {
+  let latest = 0;
+  for (const skillPath of skillFiles) {
+    const stat = fs.statSync(/*turbopackIgnore: true*/ skillPath);
     if (stat.mtimeMs > latest) latest = stat.mtimeMs;
   }
   return latest;
@@ -120,22 +134,16 @@ function mergeSkillDefinition(
 }
 
 export function loadSkillRegistry(force = false): SkillDefinition[] {
-  const skillsDir = resolveSkillsDir();
-  const mtime = skillsDirMtime(skillsDir);
+  const skillFiles = listSkillFiles(resolveSkillsDir());
+  const mtime = skillFilesMtime(skillFiles);
 
   if (!force && cachedRegistry && mtime === cacheMtime) {
     return cachedRegistry;
   }
 
-  const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
   const skills: SkillDefinition[] = [];
-
-  for (const entry of entries) {
-    if (!entry.isDirectory() || entry.name.startsWith("_")) continue;
-    const skillPath = path.join(skillsDir, entry.name, "SKILL.md");
-    if (!fs.existsSync(skillPath)) continue;
-
-    const raw = fs.readFileSync(skillPath, "utf8");
+  for (const skillPath of skillFiles) {
+    const raw = fs.readFileSync(/*turbopackIgnore: true*/ skillPath, "utf8");
     const parsed = matter(raw);
     const frontMatter = skillFrontMatterSchema.parse(parsed.data);
 

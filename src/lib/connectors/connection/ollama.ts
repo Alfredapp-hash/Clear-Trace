@@ -6,13 +6,13 @@ import {
   classifyOllamaBaseUrl,
   type OllamaEndpoint,
 } from "./ollama-origin";
-import type { ConnectorCredentials } from "../types";
+import type { ConnectorCredentials, ConnectorType } from "../types";
 
 export const OLLAMA_POLISH_TIMEOUT_MS = 120_000;
 const OLLAMA_TAGS_TIMEOUT_MS = 10_000;
 
 export const POLISH_SYSTEM_PROMPT =
-  "Polish privacy removal request drafts. Never add legal threats, deadlines with consequences, or facts not in the original. Keep all URLs and factual claims. Return JSON: {\"subject\":\"...\",\"body\":\"...\"}";
+  "Polish privacy removal request drafts for grammar and clarity. Never add legal threats, deadlines with consequences, or facts not in the original. Keep all URLs, factual claims and requested actions. Do not add a signature, sign-off, sender name, or any personal name that is not already written out in the draft. Return JSON: {\"subject\":\"...\",\"body\":\"...\"}";
 
 /** JSON schema passed as Ollama's structured-output `format`. */
 export const POLISH_FORMAT_SCHEMA = {
@@ -126,14 +126,35 @@ export async function polishWithOllama(
   tone: string,
 ): Promise<{ subject: string; body: string } | null> {
   try {
-    const { endpoint, headers } = resolveOllamaTarget(credentials);
+    const target = resolveOllamaTarget(credentials);
+    return await polishViaChatApi("ollama", target, model?.trim() || DEFAULT_OLLAMA_MODEL, subject, body, tone);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Shared Ollama-shaped `/api/chat` polish call (also used by the Apple bridge).
+ * Never throws — any failure (unreachable server, bad JSON, refused origin)
+ * returns null so the caller keeps the rules-based draft.
+ */
+export async function polishViaChatApi(
+  provider: ConnectorType,
+  target: OllamaRequestTarget,
+  model: string,
+  subject: string,
+  body: string,
+  tone: string,
+): Promise<{ subject: string; body: string } | null> {
+  try {
+    const { endpoint, headers } = target;
     const res = await connectorFetch<{ message?: { content?: string } }>({
-      provider: "ollama",
+      provider,
       url: `${endpoint.origin}/api/chat`,
       method: "POST",
       headers: { ...headers, "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: model?.trim() || DEFAULT_OLLAMA_MODEL,
+        model,
         messages: [
           { role: "system", content: POLISH_SYSTEM_PROMPT },
           { role: "user", content: `Tone: ${tone}\nSubject: ${subject}\n\n${body}` },

@@ -11,11 +11,14 @@
  *   connected it. If it is not connected we never hop to a *different cloud*
  *   provider; the only permitted fallback is a connected local Ollama.
  * - Ollama Cloud additionally requires the `ollama_cloud` billing feature.
- * - No preference set ⇒ a connected *local* Ollama is used automatically;
+ * - `apple_intelligence` (the on-device Apple bridge) is always local and is
+ *   allowed in either mode when its URL is on APPLE_BRIDGE_ALLOWED_ORIGINS.
+ * - No preference set ⇒ a connected local Ollama, else the Apple bridge;
  *   `rules_only` explicitly disables LLM polish.
  * - Anything unresolvable ⇒ null ⇒ the draft stays rules-based (unpolished).
  */
 import { classifyOllamaBaseUrl } from "./ollama-origin";
+import { classifyAppleBridgeUrl } from "./apple-bridge";
 import type { AgentDefaults, ConnectorCredentials, ConnectorType } from "../types";
 
 export interface ResolvedConnection {
@@ -37,6 +40,7 @@ export interface IntelligenceResolverDeps {
 
 export const INTELLIGENCE_TYPES: readonly ConnectorType[] = [
   "ollama",
+  "apple_intelligence",
   "openai",
   "anthropic",
   "openrouter",
@@ -65,6 +69,17 @@ async function localOllama(deps: IntelligenceResolverDeps): Promise<ResolvedConn
   return endpoint?.mode === "local" ? conn : null;
 }
 
+/** Apple's on-device model via the loopback bridge — local by construction. */
+async function appleBridge(deps: IntelligenceResolverDeps): Promise<ResolvedConnection | null> {
+  const conn = await safeGet(deps, "apple_intelligence");
+  return conn && classifyAppleBridgeUrl(conn.credentials.baseUrl) ? conn : null;
+}
+
+/** First connected local provider: Ollama, then the Apple bridge. */
+async function anyLocal(deps: IntelligenceResolverDeps): Promise<ResolvedConnection | null> {
+  return (await localOllama(deps)) ?? (await appleBridge(deps));
+}
+
 export async function resolveIntelligenceConnection(
   deps: IntelligenceResolverDeps,
 ): Promise<ResolvedConnection | null> {
@@ -78,8 +93,10 @@ export async function resolveIntelligenceConnection(
   const preferred = defaults.intelligence;
   if (preferred === "rules_only") return null;
   // No explicit choice: use a connected *local* Ollama, which is private by construction.
-  if (!preferred) return localOllama(deps);
+  if (!preferred) return anyLocal(deps);
   if (!INTELLIGENCE_TYPES.includes(preferred)) return null;
+
+  if (preferred === "apple_intelligence") return appleBridge(deps);
 
   if (isLlmLocalOnly(defaults)) {
     if (preferred !== "ollama") return null;
@@ -99,6 +116,6 @@ export async function resolveIntelligenceConnection(
   }
 
   // Preferred provider not connected: never hop to another cloud provider.
-  if (preferred !== "ollama") return localOllama(deps);
+  if (preferred !== "ollama") return anyLocal(deps);
   return null;
 }

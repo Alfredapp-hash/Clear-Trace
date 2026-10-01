@@ -35,6 +35,28 @@ const CONTROLLER_RESOLUTION_ENTRY_STATUSES = new Set([
   "candidate_review",
 ]);
 
+/**
+ * Case statuses that come *before* draft_ready in the workflow. Creating a draft only
+ * advances a case from one of these; later statuses (user_review, sent, verification_due,
+ * partially_resolved, removed_confirmed, follow_up_eligible, reopened, paused, archived …)
+ * are never regressed to draft_ready.
+ */
+const PRE_DRAFT_CASE_STATUSES: ReadonlySet<string> = new Set([
+  "draft",
+  "consent_verified",
+  "scan_queued",
+  "discovery_running",
+  "candidate_review",
+  "confirmed_exposure",
+  "controller_resolution",
+  "remedy_selected",
+]);
+
+/** Case status after creating a removal draft (pure; exported for tests). */
+export function caseStatusAfterDraftCreated(currentStatus: string): string {
+  return PRE_DRAFT_CASE_STATUSES.has(currentStatus) ? "draft_ready" : currentStatus;
+}
+
 /** Draft status that may be approved / sent (see messageDrafts.status default). */
 const DRAFT_AWAITING_APPROVAL = "awaiting_user_approval";
 const DRAFT_SENT = "approved_sent";
@@ -418,10 +440,13 @@ export async function createRemovalDraft(
     createdAt: now,
   });
 
-  await db
-    .update(privacyCases)
-    .set({ status: "draft_ready", updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
+  const nextCaseStatus = caseStatusAfterDraftCreated(privacyCase.status);
+  if (nextCaseStatus !== privacyCase.status) {
+    await db
+      .update(privacyCases)
+      .set({ status: nextCaseStatus, updatedAt: now })
+      .where(eq(privacyCases.id, caseId));
+  }
 
   await logAuditEvent({
     caseId,
@@ -769,6 +794,8 @@ export async function sendDraftViaConnector(
       to: draft.recipient,
       subject: draft.subject,
       body: draft.body,
+      // One key per draft: a provider-side retry can never deliver the same removal twice.
+      idempotencyKey: `removal-email/${draft.id}`,
     });
   } catch (error) {
     // Release the claim so the user can retry after fixing the connector.

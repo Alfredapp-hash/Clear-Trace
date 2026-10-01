@@ -2,7 +2,7 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { users, memberships, organizations } from "@/lib/db/schema";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { getSessionSecret } from "./secret";
 
 const SESSION_COOKIE = "cleartrace_session";
@@ -17,14 +17,42 @@ export interface SessionPayload {
   role: string;
   /** Set only on API-key pseudo-sessions built by toSessionLike(); never present in JWTs. */
   apiKeyId?: string;
+  /**
+   * users.session_version at sign time. getSession() rejects the token once the stored
+   * version moves past it (logout / revokeUserSessions). Tokens minted before this claim
+   * existed carry no `sv` and are treated as version 0.
+   */
+  sv?: number;
 }
 
 function getSecret(): Uint8Array {
   return getSessionSecret();
 }
 
+/** Current users.session_version, or null when the user no longer exists. */
+export function getUserSessionVersion(userId: string): number | null {
+  const row = db
+    .select({ sv: users.sessionVersion })
+    .from(users)
+    .where(eq(users.id, userId))
+    .get();
+  return row ? row.sv : null;
+}
+
+/**
+ * Invalidates every outstanding session JWT for the user by bumping session_version.
+ * API keys are unaffected (they authenticate by hash lookup, not by JWT).
+ */
+export function revokeUserSessions(userId: string): void {
+  db.update(users)
+    .set({ sessionVersion: sql`${users.sessionVersion} + 1` })
+    .where(eq(users.id, userId))
+    .run();
+}
+
 export async function createSession(payload: SessionPayload): Promise<string> {
-  return new SignJWT({ ...payload })
+  const sv = payload.sv ?? getUserSessionVersion(payload.userId) ?? 0;
+  return new SignJWT({ ...payload, sv })
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(SESSION_TTL)
@@ -45,11 +73,25 @@ export async function verifySession(
   }
 }
 
+/**
+ * Signature/expiry check (verifySession) plus the server-side revocation check: the token's
+ * `sv` must equal the user's current session_version and the user must still exist.
+ * Kept out of src/proxy.ts, which must stay DB-free; the proxy only gates on the signature.
+ */
+export async function validateSessionToken(token: string): Promise<SessionPayload | null> {
+  const session = await verifySession(token);
+  if (!session) return null;
+  const current = getUserSessionVersion(session.userId);
+  if (current === null) return null;
+  if ((session.sv ?? 0) !== current) return null;
+  return session;
+}
+
 export async function getSession(): Promise<SessionPayload | null> {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
-  return verifySession(token);
+  return validateSessionToken(token);
 }
 
 export async function setSessionCookie(token: string): Promise<void> {

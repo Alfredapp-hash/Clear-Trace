@@ -1,3 +1,4 @@
+import { polishWithAppleBridge } from "./apple-bridge";
 import { ConnectorConnectionError } from "./errors";
 import {
   resolveIntelligenceConnection,
@@ -146,6 +147,9 @@ export class ConnectionHelper {
       switch (type) {
         case "ollama":
           result = await polishWithOllama(credentials, metadata.model, subject, body, tone);
+          break;
+        case "apple_intelligence":
+          result = await polishWithAppleBridge(credentials, subject, body, tone);
           break;
         case "openai":
           result = await polishWithOpenAI(

@@ -126,6 +126,18 @@ Configure at **Settings → Connectors**. Credentials are encrypted per organiza
 - **Billing:** Stripe checkout at `/billing` (optional — omit env vars for self-hosted Pro)
 - **Enterprise:** API keys and outbound webhooks in Settings; broker sweep and SLA via case API
 
+## Configuration
+
+All settings are environment variables; `.env.example` lists every one with comments. Notable ones:
+
+| Variable | Purpose |
+| --- | --- |
+| `SESSION_SECRET`, `ENCRYPTION_KEY`, `WORKER_SECRET` | Required in production (see below). |
+| `OLLAMA_ALLOWED_ORIGINS` | Ollama origins treated as local for Local-only AI. |
+| `SMTP_ALLOWED_HOSTS` | Comma-separated SMTP hostnames or IP literals that may resolve to private-LAN addresses (RFC 1918, CGNAT `100.64/10`, IPv6 ULA) — e.g. `relay.home.lan,192.168.1.25`. Every other SMTP host must resolve to a public IP. Loopback, link-local and cloud-metadata addresses (`169.254.169.254`, `100.100.100.200`, `metadata.google.internal`) are always refused. Applies to both the connector test and actual sends. |
+
+Signing out revokes every session for that account ("log out everywhere"); API keys are unaffected. Legacy (pre-v2) encrypted values are re-encrypted and re-hashed automatically at startup; only counts are logged.
+
 ## Background jobs
 
 ```bash
@@ -163,6 +175,12 @@ See [docker-compose.yml](./docker-compose.yml) and [Dockerfile](./Dockerfile).
 ### Local LLM with Ollama
 
 Run [Ollama](https://ollama.com) on the Docker host (`ollama pull qwen3:8b`), then add the **Ollama** connector in Settings → Connectors with base URL `http://host.docker.internal:11434` (Docker) or `http://localhost:11434` (bare metal). Compose maps `host.docker.internal` to the host via `extra_hosts`. On Linux, make Ollama listen on an interface the container can reach (e.g. `OLLAMA_HOST=0.0.0.0`). Only origins listed in `OLLAMA_ALLOWED_ORIGINS` are treated as local.
+
+### Apple Intelligence on a Mac (optional)
+
+On an Apple Silicon Mac running macOS 26+ with Apple Intelligence turned on, ClearTrace can polish drafts with Apple's on-device model through the bundled Swift bridge. Run `cd apple-bridge && swift build -c release && .build/release/cleartrace-apple-bridge`, then add **Apple Intelligence (on-device)** in Settings → Connectors. It listens on `127.0.0.1:11435` only and counts as local for Local-only AI. See [apple-bridge/README.md](./apple-bridge/README.md).
+
+Every polish, from any provider, is checked before it's used. If the model drops a URL, email address or evidence note, collapses the paragraphs, or adds a sign-off or name, ClearTrace keeps the rules-based draft.
 
 ### Bare metal
 

@@ -7,6 +7,7 @@ const TABLES = [
     name TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL DEFAULT 'user',
+    session_version INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   )`,
   `CREATE TABLE IF NOT EXISTS organizations (
@@ -492,6 +493,7 @@ function migrateColumns() {
     "ALTER TABLE deindex_requests ADD COLUMN notes TEXT",
     "ALTER TABLE organizations ADD COLUMN last_digest_sent_at TEXT",
     "ALTER TABLE audit_events ADD COLUMN chain_key TEXT",
+    "ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0",
   ];
   for (const sql of migrations) {
     try {

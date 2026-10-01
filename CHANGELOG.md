@@ -17,6 +17,10 @@ All notable changes to the ClearTrace application are documented here.
 ### Added
 - **Ollama local/cloud LLM** — `ollama` intelligence connector (local via `http://localhost:11434` / `http://host.docker.internal:11434`, or Ollama Cloud with API key) for draft polish
 - **Local-only AI mode** — `llmLocalOnly` agent default (on by default): only local Ollama is used, no cloud fallback; drafts stay rules-based if Ollama is unavailable
+- **Apple Intelligence (on-device)** — `apple_intelligence` connector backed by the Swift bridge in `apple-bridge/` (Ollama-shaped API on loopback, refuses browser/rebinding requests); always local, allowed under Local-only AI; auto mode prefers local Ollama, then the Apple bridge
+- **Polish guard** — polished drafts are discarded when they drop a URL, email or evidence note, collapse paragraphs, or add a sign-off/name; polish instructions tightened
+- **Session revocation** — `users.session_version`; logout signs out every device
+- **Crypto backfill** — legacy ciphertext re-encrypted to v2 and claim hashes moved to HMAC at startup (idempotent)
 - **CI** — GitHub Actions: lint, `tsc --noEmit`, Vitest, production build; optional Playwright job
 
 ### Deployment

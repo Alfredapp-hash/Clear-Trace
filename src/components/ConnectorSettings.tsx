@@ -222,7 +222,8 @@ export function ConnectorSettings() {
   const cloudIntelligenceSelected =
     !!agentDefaults.intelligence &&
     agentDefaults.intelligence !== "rules_only" &&
-    agentDefaults.intelligence !== "ollama";
+    agentDefaults.intelligence !== "ollama" &&
+    agentDefaults.intelligence !== "apple_intelligence";
 
   const byCategory = connectors.reduce<Record<string, ConnectorPublicView[]>>(
     (acc, c) => {
@@ -295,6 +296,11 @@ export function ConnectorSettings() {
                             c.metadata?.mode,
                           )}
                         />
+                      </div>
+                    )}
+                    {c.type === "apple_intelligence" && (
+                      <div className="mt-2">
+                        <Badge tone="success">On-device — stays on this Mac</Badge>
                       </div>
                     )}
                     {c.configured && c.maskedPreview && (
@@ -542,13 +548,17 @@ export function ConnectorSettings() {
                 })
               }
             >
-              <option value="">Auto (local Ollama if connected)</option>
+              <option value="">Auto (local Ollama or Apple on-device, if connected)</option>
               <option value="rules_only">Rules only (no LLM)</option>
               {connectors
                 .filter((c) => c.category === "intelligence")
                 .map((c) => (
                   <option key={c.type} value={c.type}>
-                    {c.type === "ollama" ? "Ollama (local or cloud)" : `${c.name} (cloud)`}
+                    {c.type === "ollama"
+                      ? "Ollama (local or cloud)"
+                      : c.type === "apple_intelligence"
+                        ? "Apple Intelligence (on-device)"
+                        : `${c.name} (cloud)`}
                   </option>
                 ))}
             </select>
@@ -589,8 +599,8 @@ export function ConnectorSettings() {
             />
             <span>
               <strong className="text-white">Local-only AI (recommended)</strong> — drafts are only
-              polished by Ollama running on this machine; no cloud LLM is ever used, and if Ollama is
-              unavailable the draft is kept as written.
+              polished by a model on this machine (Ollama or Apple Intelligence); no cloud LLM is ever
+              used, and if no local model is available the draft is kept as written.
             </span>
           </label>
           {localOnly && cloudIntelligenceSelected && (

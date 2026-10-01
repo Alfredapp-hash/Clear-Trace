@@ -1,9 +1,11 @@
 import net from "net";
-import { assertSafeUrl, resolveSafeHost } from "@/lib/tools/safe-fetch";
+import { assertSafeUrl } from "@/lib/tools/safe-fetch";
+import { resolveSmtpHost } from "../smtp-host";
 import { getConnectorDefinition } from "../registry";
 import { ConnectorConnectionError, friendlyProviderMessage } from "./errors";
 import { connectorFetch } from "./http";
 import { polishWithOllama, testOllamaConnection } from "./ollama";
+import { testAppleBridgeConnection } from "./apple-bridge";
 import type {
   ConnectorCredentials,
   ConnectorTestResult,
@@ -539,11 +541,15 @@ export async function testSmtp(credentials: ConnectorCredentials): Promise<Conne
 
   let address: string;
   try {
-    address = await resolveSafeHost(creds.host);
+    address = await resolveSmtpHost(creds.host);
   } catch {
     return testFailure(
       "smtp",
-      new ConnectorConnectionError("smtp", "invalid_config", "SMTP host must be a public hostname"),
+      new ConnectorConnectionError(
+        "smtp",
+        "invalid_config",
+        "SMTP host must be a public hostname (or listed in SMTP_ALLOWED_HOSTS for a private-LAN relay)",
+      ),
     );
   }
 
@@ -746,6 +752,39 @@ async function testHibp(credentials: ConnectorCredentials): Promise<ConnectorTes
   }
 }
 
+async function testAppleIntelligence(credentials: ConnectorCredentials): Promise<ConnectorTestResult> {
+  try {
+    const result = await testAppleBridgeConnection(credentials);
+    const detail = { provider: "apple_intelligence", mode: "local", origin: result.origin };
+    if (!result.modelAvailable) {
+      return {
+        ok: false,
+        message:
+          "Bridge reachable, but Apple's on-device model is unavailable. Turn on Apple Intelligence (macOS 26+) and wait for the model to download.",
+        detail,
+        latencyMs: result.latencyMs,
+        errorCode: "invalid_config",
+      };
+    }
+    return testSuccess(
+      "apple_intelligence",
+      "Apple Intelligence reachable (on-device — stays on this Mac)",
+      detail,
+      result.latencyMs,
+    );
+  } catch (error) {
+    if (error instanceof ConnectorConnectionError && error.code === "invalid_config") {
+      return {
+        ok: false,
+        message: error.userMessage,
+        detail: { provider: "apple_intelligence", code: error.code },
+        errorCode: error.code,
+      };
+    }
+    return testFailure("apple_intelligence", error);
+  }
+}
+
 const TESTERS: Record<
   ConnectorType,
   (
@@ -760,6 +799,7 @@ const TESTERS: Record<
   anthropic: testAnthropic,
   openrouter: testOpenRouter,
   ollama: testOllama,
+  apple_intelligence: testAppleIntelligence,
   gmail: testGmail,
   smtp: testSmtp,
   resend: testResend,

@@ -4,6 +4,7 @@ import {
   mapHttpStatusToErrorCode,
 } from "./errors";
 import { isLocalOllamaOrigin } from "./ollama-origin";
+import { isAppleBridgeOrigin } from "./apple-bridge";
 import { safeRequest, toFetchResponse } from "@/lib/tools/safe-fetch";
 import type { ConnectorType } from "../types";
 
@@ -45,6 +46,7 @@ const DEFAULT_PINNED_MAX_BYTES = 2_000_000;
 const USER_SUPPLIED_DESTINATION: ReadonlySet<ConnectorType> = new Set([
   "generic_webhook",
   "ollama",
+  "apple_intelligence",
 ]);
 
 const SSRF_ERRORS = new Set([
@@ -85,7 +87,10 @@ async function doFetch(
   if (pinned) {
     let allowPrivateNetwork = false;
     if (options.allowPrivateNetwork) {
-      if (provider !== "ollama" || !isLocalOllamaOrigin(url)) {
+      const localAllowed =
+        (provider === "ollama" && isLocalOllamaOrigin(url)) ||
+        (provider === "apple_intelligence" && isAppleBridgeOrigin(url));
+      if (!localAllowed) {
         throw new ConnectorConnectionError(
           provider,
           "invalid_config",

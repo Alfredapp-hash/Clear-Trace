@@ -220,8 +220,12 @@ export default function NewCasePage() {
                 </select>
               </div>
               <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-                <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-300">
+                <label
+                  htmlFor="ruthless-mode"
+                  className="flex cursor-pointer items-start gap-3 text-sm text-slate-300"
+                >
                   <input
+                    id="ruthless-mode"
                     type="checkbox"
                     checked={ruthlessMode}
                     onChange={(e) => setRuthlessMode(e.target.checked)}
@@ -233,8 +237,12 @@ export default function NewCasePage() {
                   </span>
                 </label>
                 {ruthlessMode && (
-                  <label className="mt-3 flex cursor-pointer items-start gap-3 text-sm text-slate-400">
+                  <label
+                    htmlFor="ruthless-attestation"
+                    className="mt-3 flex cursor-pointer items-start gap-3 text-sm text-slate-400"
+                  >
                     <input
+                      id="ruthless-attestation"
                       type="checkbox"
                       checked={ruthlessAttestation}
                       onChange={(e) => setRuthlessAttestation(e.target.checked)}
@@ -252,9 +260,11 @@ export default function NewCasePage() {
                   {SCAN_SCOPES.map((scope) => (
                     <label
                       key={scope.id}
+                      htmlFor={`scope-${scope.id}`}
                       className="flex cursor-pointer items-center gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2.5 text-sm transition hover:border-white/15"
                     >
                       <input
+                        id={`scope-${scope.id}`}
                         type="checkbox"
                         checked={scanScopes.includes(scope.id)}
                         onChange={() => toggleScope(scope.id)}
@@ -284,8 +294,12 @@ export default function NewCasePage() {
                   ))}
                 </select>
               </div>
-              <label className="flex items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-slate-300">
+              <label
+                htmlFor="user-attestation"
+                className="flex cursor-pointer items-start gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 p-4 text-sm text-slate-300"
+              >
                 <input
+                  id="user-attestation"
                   type="checkbox"
                   checked={userAttestation}
                   onChange={(e) => setUserAttestation(e.target.checked)}

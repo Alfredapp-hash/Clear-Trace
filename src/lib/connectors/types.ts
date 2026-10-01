@@ -8,6 +8,7 @@ export type ConnectorType =
   | "anthropic"
   | "openrouter"
   | "ollama"
+  | "apple_intelligence"
   | "gmail"
   | "smtp"
   | "resend"

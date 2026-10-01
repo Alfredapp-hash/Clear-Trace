@@ -10,7 +10,7 @@ export const SKILL_CONNECTOR_REQUIREMENTS: Record<
   },
   "draft-removal-request": {
     required: [],
-    optional: ["ollama", "openai", "anthropic", "openrouter"],
+    optional: ["ollama", "apple_intelligence", "openai", "anthropic", "openrouter"],
   },
   "follow-up-policy": {
     required: [],
@@ -18,11 +18,11 @@ export const SKILL_CONNECTOR_REQUIREMENTS: Record<
   },
   "compliance-verify-draft": {
     required: [],
-    optional: ["ollama", "openai", "anthropic", "openrouter"],
+    optional: ["ollama", "apple_intelligence", "openai", "anthropic", "openrouter"],
   },
   "batch-remediation": {
     required: [],
-    optional: ["ollama", "openai", "anthropic", "openrouter"],
+    optional: ["ollama", "apple_intelligence", "openai", "anthropic", "openrouter"],
   },
   "connector-readiness-check": {
     required: [],
@@ -32,7 +32,7 @@ export const SKILL_CONNECTOR_REQUIREMENTS: Record<
 
 export const CATEGORY_DEFAULT_CONNECTORS: Record<string, ConnectorType[]> = {
   discovery: ["serpapi", "google_cse"],
-  intelligence: ["ollama", "openai", "anthropic", "openrouter"],
+  intelligence: ["ollama", "apple_intelligence", "openai", "anthropic", "openrouter"],
   email: ["gmail", "smtp", "resend", "sendgrid", "postmark"],
   breach_intel: ["hibp"],
 };

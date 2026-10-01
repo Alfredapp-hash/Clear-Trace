@@ -1,7 +1,6 @@
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
-  privacyCases,
   verifiedExposures,
   verificationChecks,
   auditEvents,
@@ -10,6 +9,24 @@ import {
 import { getCaseForUser } from "@/lib/cases/service";
 import type { SessionPayload } from "@/lib/auth/session";
 import { isLiveCheck, isLiveRemovalConfirmation } from "./check-mode";
+
+export interface CertificateSummary {
+  totalExposures: number;
+  verifiedRemoved: number;
+  pending: number;
+}
+
+/**
+ * Thrown when a certificate is requested for a case with zero verified removals — a
+ * certificate certifying nothing would be misleading, so none is issued.
+ */
+export class NoVerifiedRemovalsError extends Error {
+  readonly code = "NO_VERIFIED_REMOVALS";
+  constructor(readonly summary: CertificateSummary) {
+    super("NO_VERIFIED_REMOVALS");
+    this.name = "NoVerifiedRemovalsError";
+  }
+}
 
 export async function generateRemovalCertificate(
   session: SessionPayload,
@@ -50,6 +67,13 @@ export async function generateRemovalCertificate(
     return Boolean(latest && isLiveRemovalConfirmation(latest));
   });
 
+  const summary: CertificateSummary = {
+    totalExposures: exposures.length,
+    verifiedRemoved: removed.length,
+    pending: exposures.length - removed.length,
+  };
+  if (removed.length === 0) throw new NoVerifiedRemovalsError(summary);
+
   const certificateId = `RC-${caseId.slice(0, 8).toUpperCase()}-${Date.now().toString(36).toUpperCase()}`;
 
   return {
@@ -63,11 +87,7 @@ export async function generateRemovalCertificate(
     authorization: auth
       ? { status: auth.status, basis: auth.authorityBasis, attestedAt: auth.attestedAt }
       : null,
-    summary: {
-      totalExposures: exposures.length,
-      verifiedRemoved: removed.length,
-      pending: exposures.length - removed.length,
-    },
+    summary,
     removals: removed.map((e) => {
       const check = latestLiveCheck.get(e.id);
       return {

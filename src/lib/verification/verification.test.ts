@@ -22,7 +22,7 @@ import {
   runVerification,
   scheduleMonitoring,
 } from "./service";
-import { generateRemovalCertificate } from "./certificate";
+import { generateRemovalCertificate, NoVerifiedRemovalsError } from "./certificate";
 import { evaluateFetchedPage } from "./live-check";
 import { encryptValue } from "@/lib/crypto/encryption";
 import {
@@ -227,6 +227,24 @@ describe("verification — removal truth", () => {
       expect(urls).toEqual(["https://people.example.org/good"]);
       expect(cert.summary.verifiedRemoved).toBe(1);
       expect(cert.summary.pending).toBe(2);
+    });
+  });
+
+  describe("certificate with zero verified removals", () => {
+    it("refuses to issue when only simulated removals exist", async () => {
+      const { caseId, exposureIds } = await seedWorkflowCase(session, {
+        scanMode: "demo",
+        exposureUrls: ["https://people.example.org/only-sim"],
+      });
+      await runVerification(session, caseId, exposureIds[0]!, true, "simulate");
+      const err = await generateRemovalCertificate(session, caseId).catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(NoVerifiedRemovalsError);
+      expect((err as NoVerifiedRemovalsError).code).toBe("NO_VERIFIED_REMOVALS");
+      expect((err as NoVerifiedRemovalsError).summary).toEqual({
+        totalExposures: 1,
+        verifiedRemoved: 0,
+        pending: 1,
+      });
     });
   });
 

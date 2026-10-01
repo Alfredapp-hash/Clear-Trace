@@ -170,3 +170,39 @@ describe("ConnectionHelper.polishDraft", () => {
     expect(polishWithOpenAI).not.toHaveBeenCalled();
   });
 });
+
+describe("intelligence resolver — Apple Intelligence bridge", () => {
+  const APPLE = { baseUrl: "http://127.0.0.1:11435" };
+  const APPLE_BAD = { baseUrl: "http://10.0.0.5:11435" };
+
+  it("is allowed under local-only when preferred", async () => {
+    const r = await resolveIntelligenceConnection(
+      deps({ intelligence: "apple_intelligence" }, { ...ALL_CLOUD, apple_intelligence: APPLE }),
+    );
+    expect(r?.type).toBe("apple_intelligence");
+  });
+
+  it("is refused when its URL is not on the bridge allow-list", async () => {
+    expect(
+      await resolveIntelligenceConnection(
+        deps({ intelligence: "apple_intelligence" }, { apple_intelligence: APPLE_BAD }),
+      ),
+    ).toBeNull();
+  });
+
+  it("auto mode prefers local Ollama, then falls back to the Apple bridge", async () => {
+    const both = await resolveIntelligenceConnection(
+      deps({}, { ollama: LOCAL_OLLAMA, apple_intelligence: APPLE }),
+    );
+    expect(both?.type).toBe("ollama");
+    const appleOnly = await resolveIntelligenceConnection(deps({}, { apple_intelligence: APPLE }));
+    expect(appleOnly?.type).toBe("apple_intelligence");
+  });
+
+  it("a disconnected cloud preference falls back only to a local provider", async () => {
+    const r = await resolveIntelligenceConnection(
+      deps({ intelligence: "openai", llmLocalOnly: false }, { apple_intelligence: APPLE }),
+    );
+    expect(r?.type).toBe("apple_intelligence");
+  });
+});
