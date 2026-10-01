@@ -6,11 +6,11 @@ export const SKILL_CONNECTOR_REQUIREMENTS: Record<
 > = {
   "discover-public-exposure": {
     required: [],
-    optional: ["serpapi", "bing_search", "google_cse"],
+    optional: ["serpapi", "google_cse"],
   },
   "draft-removal-request": {
     required: [],
-    optional: ["openai", "anthropic", "openrouter"],
+    optional: ["ollama", "openai", "anthropic", "openrouter"],
   },
   "follow-up-policy": {
     required: [],
@@ -18,21 +18,21 @@ export const SKILL_CONNECTOR_REQUIREMENTS: Record<
   },
   "compliance-verify-draft": {
     required: [],
-    optional: ["openai", "anthropic", "openrouter"],
+    optional: ["ollama", "openai", "anthropic", "openrouter"],
   },
   "batch-remediation": {
     required: [],
-    optional: ["openai", "anthropic", "openrouter"],
+    optional: ["ollama", "openai", "anthropic", "openrouter"],
   },
   "connector-readiness-check": {
     required: [],
-    optional: ["serpapi", "bing_search", "google_cse", "openai", "gmail"],
+    optional: ["serpapi", "google_cse", "ollama", "openai", "gmail"],
   },
 };
 
 export const CATEGORY_DEFAULT_CONNECTORS: Record<string, ConnectorType[]> = {
-  discovery: ["serpapi", "bing_search", "google_cse"],
-  intelligence: ["openai", "anthropic", "openrouter"],
+  discovery: ["serpapi", "google_cse"],
+  intelligence: ["ollama", "openai", "anthropic", "openrouter"],
   email: ["gmail", "smtp", "resend", "sendgrid", "postmark"],
   breach_intel: ["hibp"],
 };

@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { db } from "@/lib/db";
 import { users, memberships, organizations } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { getSessionSecret } from "./secret";
 
 const SESSION_COOKIE = "cleartrace_session";
 const SESSION_TTL = "7d";
@@ -14,11 +15,12 @@ export interface SessionPayload {
   organizationId: string;
   organizationName: string;
   role: string;
+  /** Set only on API-key pseudo-sessions built by toSessionLike(); never present in JWTs. */
+  apiKeyId?: string;
 }
 
 function getSecret(): Uint8Array {
-  const secret = process.env.SESSION_SECRET ?? "cleartrace-dev-session-secret";
-  return new TextEncoder().encode(secret);
+  return getSessionSecret();
 }
 
 export async function createSession(payload: SessionPayload): Promise<string> {
@@ -33,8 +35,11 @@ export async function verifySession(
   token: string,
 ): Promise<SessionPayload | null> {
   try {
-    const { payload } = await jwtVerify(token, getSecret());
-    return payload as unknown as SessionPayload;
+    const { payload } = await jwtVerify(token, getSecret(), { algorithms: ["HS256"] });
+    const session = payload as unknown as SessionPayload;
+    // API-key pseudo-sessions are never issued as cookies; reject any token claiming to be one.
+    if (session.apiKeyId || session.role === "api_key") return null;
+    return session;
   } catch {
     return null;
   }

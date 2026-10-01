@@ -28,7 +28,8 @@ export function AgentBuilderKit() {
     a.href = url;
     a.download = `cleartrace-agent-kit-${platform}.md`;
     a.click();
-    URL.revokeObjectURL(url);
+    // Revoke after the download has started; revoking synchronously can cancel it.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
   }
 
   async function downloadZip() {
@@ -47,7 +48,7 @@ export function AgentBuilderKit() {
       a.href = url;
       a.download = `cleartrace-agent-kit-${platform}.zip`;
       a.click();
-      URL.revokeObjectURL(url);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
       alert(e instanceof Error ? e.message : "Zip download failed");
     } finally {

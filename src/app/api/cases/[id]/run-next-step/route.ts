@@ -1,28 +1,32 @@
-import { getSession } from "@/lib/auth/session";
+import { authRateKey } from "@/lib/auth/resolve-auth";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { ensureDatabase } from "@/lib/db/init";
 import { runNextSkill } from "@/lib/coordinator/skill-runner";
 import { jsonError, jsonOk } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/security/enforce-rate-limit";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
-
-  const limited = await enforceRateLimit(`run-next-step:${session.userId}`, 60);
-  if (limited) return limited;
-
   const { id } = await params;
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "cases:write",
+  });
+  if (access instanceof Response) return access;
+  const { auth, session } = access;
+
+  const limited = await enforceRateLimit(`run-next-step:${authRateKey(auth)}`, 60);
+  if (limited) return limited;
 
   try {
     const result = await runNextSkill(session, id);
     return jsonOk(result);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    if (msg === "CASE_NOT_FOUND") return jsonError(msg, 404);
+    if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);
     if (msg === "CASE_BLOCKED") return jsonError("Case is paused or archived", 409);
     if (msg === "NO_RECOMMENDED_SKILL") return jsonError("No automated step available", 400);
     if (msg.startsWith("NO_")) return jsonError(msg, 400);

@@ -32,8 +32,6 @@ From the ClearTrace repo:
 
 ```bash
 node scripts/create-cleartrace.mjs my-privacy-app
-# or after npm link:
-npx create-cleartrace my-privacy-app
 ```
 
 Creates `skills/`, `.cursor/rules/`, `AGENTS.md`, `BOOTSTRAP.md`, `mcp-server/`, and `docs/`.

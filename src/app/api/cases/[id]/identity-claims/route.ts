@@ -1,6 +1,6 @@
-import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import { addIdentityClaims } from "@/lib/cases/service";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { jsonError, jsonOk } from "@/lib/api";
 
 export async function POST(
@@ -8,11 +8,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
-
   const { id } = await params;
-  const body = await request.json();
+  const access = await requireCaseAccess(request, id);
+  if (access instanceof Response) return access;
+
+  const body = await request.json().catch(() => ({}));
   const { claims } = body as {
     claims?: Array<{
       claimType: string;
@@ -21,13 +21,16 @@ export async function POST(
     }>;
   };
 
-  if (!claims?.length) {
+  if (!Array.isArray(claims) || !claims.length) {
     return jsonError("At least one identity claim is required");
+  }
+  if (!claims.every((c) => c && typeof c.claimType === "string" && typeof c.value === "string")) {
+    return jsonError("Each claim needs a claimType and value");
   }
 
   try {
     const claimIds = await addIdentityClaims(
-      session,
+      access.session,
       id,
       claims.map((c) => ({
         claimType: c.claimType,

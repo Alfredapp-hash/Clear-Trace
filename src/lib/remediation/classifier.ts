@@ -20,7 +20,9 @@ const CATEGORY_SIGNALS: Record<ExposureCategory, RegExp[]> = {
   harassment_doxxing: [/harass/i, /doxx/i, /threat/i],
   search_snippet: [/search.?result/i, /snippet/i],
   cached_result: [/cached/i, /archive/i],
-  business_listing: [/business.?profile/i, /google.?business/i, /listing/i],
+  // NOTE: bare "listing" is NOT a business signal — people-search pages call every
+  // profile a "listing", which previously mis-routed broker opt-outs to business correction.
+  business_listing: [/business.?profile/i, /google.?business/i, /business.?listing/i],
   other: [],
 };
 

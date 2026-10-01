@@ -1,5 +1,7 @@
 import nodemailer from "nodemailer";
+import { resolveSafeHost } from "@/lib/tools/safe-fetch";
 import { ConnectorConnectionError } from "./connection/errors";
+import { ALLOWED_SMTP_PORTS } from "./connection/providers";
 import type { ConnectorCredentials } from "./types";
 import type { SendEmailInput, SendEmailResult } from "./email-send";
 
@@ -20,15 +22,27 @@ export async function sendViaSmtp(
   if (!Number.isFinite(port) || port <= 0) {
     throw new ConnectorConnectionError("smtp", "invalid_config", "SMTP port must be a valid number.");
   }
+  if (!ALLOWED_SMTP_PORTS.has(port)) {
+    throw new ConnectorConnectionError("smtp", "invalid_config", "SMTP port must be 25, 465, 587 or 2525.");
+  }
   if (!from) {
     throw new ConnectorConnectionError("smtp", "invalid_config", "From address is required in connector metadata.");
   }
 
+  let address: string;
+  try {
+    address = await resolveSafeHost(host);
+  } catch {
+    throw new ConnectorConnectionError("smtp", "invalid_config", "SMTP host must be a public hostname.");
+  }
+
+  // Connect to the validated IP; keep the hostname for TLS SNI / certificate checks.
   const transporter = nodemailer.createTransport({
-    host,
+    host: address,
     port,
     secure: port === 465,
     auth: { user, pass: password },
+    tls: { servername: host },
   });
 
   try {

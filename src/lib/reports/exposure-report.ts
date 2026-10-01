@@ -1,4 +1,4 @@
-import { desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   breachFindings,
@@ -53,16 +53,43 @@ export interface ExposureReport {
   markdown: string;
 }
 
-async function evidenceFor(
-  caseId: string,
-  evidenceId: string | null | undefined,
-): Promise<{ excerpt: string | null; capturedAt: string | null }> {
-  if (!evidenceId) return { excerpt: null, capturedAt: null };
-  const row = await db.query.contentEvidence.findFirst({
-    where: eq(contentEvidence.id, evidenceId),
+type EvidenceMap = Map<string, { excerpt: string; capturedAt: string }>;
+
+/** Loads all referenced evidence for the case in one query (was N+1). */
+async function loadEvidence(caseId: string, evidenceIds: (string | null | undefined)[]): Promise<EvidenceMap> {
+  const ids = [...new Set(evidenceIds.filter((x): x is string => !!x))];
+  const map: EvidenceMap = new Map();
+  if (ids.length === 0) return map;
+  const rows = await db.query.contentEvidence.findMany({
+    where: and(eq(contentEvidence.caseId, caseId), inArray(contentEvidence.id, ids)),
   });
-  if (!row || row.caseId !== caseId) return { excerpt: null, capturedAt: null };
-  return { excerpt: row.redactedExcerpt, capturedAt: row.capturedAt };
+  for (const row of rows) map.set(row.id, { excerpt: row.redactedExcerpt, capturedAt: row.capturedAt });
+  return map;
+}
+
+function evidenceFor(
+  map: EvidenceMap,
+  evidenceId: string | null | undefined,
+): { excerpt: string | null; capturedAt: string | null } {
+  const row = evidenceId ? map.get(evidenceId) : undefined;
+  return row ? { excerpt: row.excerpt, capturedAt: row.capturedAt } : { excerpt: null, capturedAt: null };
+}
+
+/**
+ * Candidates shown as report items: rejected ones are not exposures, and confirmed ones
+ * are already represented by their verified exposure row (avoid double counting).
+ */
+export function reportableCandidates<T extends { id: string; matchStatus: string }>(
+  candidates: T[],
+  exposures: { candidateId: string }[],
+): T[] {
+  const promoted = new Set(exposures.map((e) => e.candidateId));
+  return candidates.filter(
+    (c) =>
+      c.matchStatus !== "rejected" &&
+      c.matchStatus !== "confirmed_match" &&
+      !promoted.has(c.id),
+  );
 }
 
 export async function buildExposureReport(
@@ -75,7 +102,10 @@ export async function buildExposureReport(
   let subjectLabel: string | null = null;
   if (privacyCase.familyMemberId) {
     const member = await db.query.familyMembers.findFirst({
-      where: eq(familyMembers.id, privacyCase.familyMemberId),
+      where: and(
+        eq(familyMembers.id, privacyCase.familyMemberId),
+        eq(familyMembers.organizationId, privacyCase.organizationId),
+      ),
     });
     if (member) subjectLabel = `${member.displayName} (${member.relationship})`;
   }
@@ -102,13 +132,18 @@ export async function buildExposureReport(
   ]);
 
   const items: ExposureReportItem[] = [];
+  const openCandidates = reportableCandidates(candidates, exposures);
+  const evidence = await loadEvidence(caseId, [
+    ...openCandidates.map((c) => c.evidenceId),
+    ...exposures.map((e) => e.evidenceId),
+  ]);
 
-  for (const c of candidates) {
+  for (const c of openCandidates) {
     const impact = assessExposureImpact({
       url: c.canonicalUrl,
       sourceType: c.sourceType,
     });
-    const ev = await evidenceFor(caseId, c.evidenceId);
+    const ev = evidenceFor(evidence, c.evidenceId);
     let broker = null;
     try {
       broker = matchBrokerByHost(new URL(c.canonicalUrl).hostname);
@@ -136,7 +171,7 @@ export async function buildExposureReport(
       informationSummary: e.informationSummary,
       sourceType: e.sourceClass ?? undefined,
     });
-    const ev = await evidenceFor(caseId, e.evidenceId);
+    const ev = evidenceFor(evidence, e.evidenceId);
     let broker = null;
     try {
       broker = matchBrokerByHost(new URL(e.canonicalUrl).hostname);
@@ -217,7 +252,7 @@ export async function buildExposureReport(
         : `Overall exposure risk: ${overallLabel.toUpperCase()} (${Math.round(overallScore * 100)}%)`,
     overallRisk: { score: overallScore, label: overallLabel },
     summary: {
-      candidates: candidates.length,
+      candidates: openCandidates.length,
       confirmed: exposures.length,
       brokerMatches: sweepMatches.length,
       breachFindings: breaches.length,

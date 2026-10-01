@@ -3,6 +3,7 @@ import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import { enterpriseWebhooks } from "@/lib/db/schema";
 import { decryptValue, encryptValue } from "@/lib/crypto/encryption";
+import { assertSafeUrl } from "@/lib/tools/safe-fetch";
 
 export const DEFAULT_WEBHOOK_EVENTS = [
   "case_created",
@@ -14,10 +15,11 @@ export const DEFAULT_WEBHOOK_EVENTS = [
   "case_exported",
 ] as const;
 
-function isValidWebhookUrl(url: string): boolean {
+/** Syntactic check + SSRF check (public destination only). */
+async function isValidWebhookUrl(url: string): Promise<boolean> {
   try {
-    const parsed = new URL(url);
-    return parsed.protocol === "https:" || parsed.protocol === "http:";
+    await assertSafeUrl(url.trim());
+    return true;
   } catch {
     return false;
   }
@@ -48,7 +50,7 @@ export async function createEnterpriseWebhook(
   input: { name: string; url: string; secret: string; events?: string[] },
 ) {
   if (!input.name.trim()) throw new Error("NAME_REQUIRED");
-  if (!isValidWebhookUrl(input.url)) throw new Error("INVALID_URL");
+  if (!(await isValidWebhookUrl(input.url))) throw new Error("INVALID_URL");
   if (!input.secret.trim()) throw new Error("SECRET_REQUIRED");
 
   const id = uuid();
@@ -84,7 +86,7 @@ export async function updateEnterpriseWebhook(
   });
   if (!row) throw new Error("WEBHOOK_NOT_FOUND");
 
-  if (input.url && !isValidWebhookUrl(input.url)) throw new Error("INVALID_URL");
+  if (input.url && !(await isValidWebhookUrl(input.url))) throw new Error("INVALID_URL");
 
   const now = new Date().toISOString();
   await db

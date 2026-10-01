@@ -12,6 +12,12 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Generated / vendored output:
+    "skills/**",
+    "agent-builder/dist/**",
+    "agent-builder/mcp-server/node_modules/**",
+    "test-results/**",
+    "playwright-report/**",
   ]),
 ]);
 

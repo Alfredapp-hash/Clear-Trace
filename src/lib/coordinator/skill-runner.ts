@@ -6,6 +6,7 @@ import {
   remediationCases,
   messageDrafts,
   privacyCases,
+  controllerTargets,
 } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { getRecommendedSkill } from "./hermes";
@@ -66,11 +67,12 @@ async function recordSkillRun(
   return runId;
 }
 
-async function firstExposure(caseId: string) {
+/** All of a case's verified exposures (oldest first), excluding rejected ones. */
+async function caseExposures(caseId: string) {
   const exposures = await db.query.verifiedExposures.findMany({
     where: eq(verifiedExposures.caseId, caseId),
   });
-  return exposures[0] ?? null;
+  return exposures.filter((e) => !["rejected", "dismissed", "false_positive"].includes(e.status));
 }
 
 async function firstRemediation(caseId: string) {
@@ -160,26 +162,46 @@ export async function runNextSkill(
       break;
     }
     case "resolve-content-controller": {
-      const target = await firstExposure(caseId);
-      if (!target) throw new Error("NO_CONFIRMED_EXPOSURE");
-      const resolved = await resolveControllerForExposure(session, caseId, target.id);
+      const exposures = await caseExposures(caseId);
+      if (!exposures.length) throw new Error("NO_CONFIRMED_EXPOSURE");
+      const controllers = await db.query.controllerTargets.findMany({
+        where: eq(controllerTargets.caseId, caseId),
+      });
+      const pending = exposures.filter((e) => !controllers.some((c) => c.exposureId === e.id));
+      const targets = pending.length ? pending : exposures.slice(0, 1);
+      const resolved = [];
+      for (const target of targets) {
+        resolved.push(await resolveControllerForExposure(session, caseId, target.id));
+      }
       result = {
         skillId,
         status: "success",
-        summary: `Controller resolved for ${target.canonicalUrl}`,
-        output: resolved,
+        summary: `Controller resolved for ${resolved.length} exposure(s)`,
+        output: { resolved },
       };
       break;
     }
     case "draft-removal-request": {
-      const remediation = await firstRemediation(caseId);
-      if (!remediation) throw new Error("NO_REMEDIATION_CASE");
-      const draft = await createRemovalDraft(session, caseId, remediation.id);
+      const remediations = await db.query.remediationCases.findMany({
+        where: eq(remediationCases.caseId, caseId),
+      });
+      if (!remediations.length) throw new Error("NO_REMEDIATION_CASE");
+      const drafts = await db.query.messageDrafts.findMany({
+        where: eq(messageDrafts.caseId, caseId),
+      });
+      const pending = remediations.filter(
+        (r) => !drafts.some((d) => d.remediationCaseId === r.id),
+      );
+      const targets = pending.length ? pending : remediations.slice(0, 1);
+      const created = [];
+      for (const remediation of targets) {
+        created.push(await createRemovalDraft(session, caseId, remediation.id));
+      }
       result = {
         skillId,
         status: "success",
-        summary: `Draft created: ${draft.templateLabel}`,
-        output: draft,
+        summary: `Draft(s) created: ${created.map((d) => d.templateLabel).join(", ")}`,
+        output: { drafts: created },
       };
       break;
     }
@@ -225,15 +247,19 @@ export async function runNextSkill(
       break;
     }
     case "schedule-monitoring": {
-      const target = await firstExposure(caseId);
-      if (!target) throw new Error("NO_EXPOSURE");
+      const exposures = await caseExposures(caseId);
+      if (!exposures.length) throw new Error("NO_EXPOSURE");
       const schedule = await ruthlessMonitoringSchedule(caseId, session.organizationId);
-      const scheduled = await scheduleMonitoring(session, caseId, target.id, schedule);
+      const scheduled = [];
+      for (const exposure of exposures) {
+        scheduled.push(await scheduleMonitoring(session, caseId, exposure.id, schedule));
+      }
+      const nextCheckAt = scheduled[0]!.nextCheckAt;
       result = {
         skillId,
         status: "success",
-        summary: `${schedule === "daily" ? "Daily" : "Weekly"} monitoring scheduled — next check ${new Date(scheduled.nextCheckAt).toLocaleDateString()}`,
-        output: scheduled,
+        summary: `${schedule === "daily" ? "Daily" : "Weekly"} monitoring scheduled for ${scheduled.length} exposure(s) — next check ${new Date(nextCheckAt).toLocaleDateString()}`,
+        output: { rules: scheduled, nextCheckAt },
       };
       break;
     }
@@ -275,14 +301,29 @@ export async function runNextSkill(
       break;
     }
     case "verify-removal": {
-      const target = await firstExposure(caseId);
-      if (!target) throw new Error("NO_EXPOSURE");
-      const check = await runVerification(session, caseId, target.id, false, "live");
+      // Verify EVERY exposure (live); the case status is derived from all of them.
+      const exposures = await caseExposures(caseId);
+      if (!exposures.length) throw new Error("NO_EXPOSURE");
+      const checks = [];
+      for (const exposure of exposures) {
+        const check = await runVerification(session, caseId, exposure.id, false, "live");
+        checks.push({ exposureId: exposure.id, ...check });
+      }
+      const refreshed = await db.query.privacyCases.findFirst({
+        where: eq(privacyCases.id, caseId),
+      });
+      const counts = checks.reduce<Record<string, number>>((acc, c) => {
+        acc[c.verificationStatus] = (acc[c.verificationStatus] ?? 0) + 1;
+        return acc;
+      }, {});
+      const allRemoved = refreshed?.status === "removed_confirmed";
       result = {
         skillId,
-        status: "success",
-        summary: `Verification: ${check.verificationStatus}`,
-        output: check,
+        status: allRemoved ? "success" : "manual_review_required",
+        summary: `Verified ${checks.length} exposure(s): ${Object.entries(counts)
+          .map(([k, v]) => `${v} ${k}`)
+          .join(", ")}`,
+        output: { checks, caseStatus: refreshed?.status ?? null },
       };
       break;
     }

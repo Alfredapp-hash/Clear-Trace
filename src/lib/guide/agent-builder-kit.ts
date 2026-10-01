@@ -84,7 +84,7 @@ cleartrace/
 ├── src/lib/enterprise/       # SLA, API keys, webhooks, broker sweep
 ├── src/lib/skills/           # Skill catalog + registry loader
 ├── skills/                   # Synced Markdown skill pack (20 skills)
-└── scripts/sync-skills.js    # Copies portable skill pack at build
+└── scripts/sync-skills.mjs   # Copies portable skill pack at build
 \`\`\``;
 
 const API_MAP = `## API routes (copy into your agent's tool map)

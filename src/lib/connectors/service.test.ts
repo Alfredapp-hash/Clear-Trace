@@ -19,7 +19,6 @@ describe("connector service", () => {
 
   beforeAll(async () => {
     ensureDatabase();
-    const now = new Date().toISOString();
     await db.insert(users).values({
       id: userId,
       email,
@@ -70,13 +69,13 @@ describe("connector service", () => {
     await saveOrgConnector(
       orgId,
       userId,
-      "bing_search",
-      { apiKey: "test-bing-key-12345" },
+      "google_cse",
+      { apiKey: "test-google-key-12345", searchEngineId: "cx-123" },
       {},
       { test: false },
     );
     const resolved = await resolveDiscoveryConnector(orgId);
-    expect(resolved).toBe("bing_search");
+    expect(resolved).toBe("google_cse");
   });
 
   it("removes connector", async () => {

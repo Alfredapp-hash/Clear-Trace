@@ -1,7 +1,7 @@
 import { and, desc, eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
-import { brokerSweepMatches, brokerSweepRuns, optOutDispatches, privacyCases } from "@/lib/db/schema";
+import { brokerSweepMatches, brokerSweepRuns, optOutDispatches } from "@/lib/db/schema";
 import { getCaseForUser } from "@/lib/cases/service";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { requireBillingFeature } from "@/lib/billing/service";
@@ -114,11 +114,42 @@ export async function listOptOutDispatches(caseId: string, session: SessionPaylo
   }));
 }
 
-export async function approveOptOutDispatch(
+/**
+ * Explicit opt-out dispatch lifecycle. Anything not listed is rejected.
+ *   pending_approval → approved → submitted → completed
+ */
+export type OptOutDispatchStatus = "pending_approval" | "approved" | "submitted" | "completed";
+
+export const OPT_OUT_TRANSITIONS: Record<string, readonly OptOutDispatchStatus[]> = {
+  pending_approval: ["approved"],
+  approved: ["submitted"],
+  submitted: ["completed"],
+  completed: [],
+};
+
+export function canTransitionOptOut(from: string, to: OptOutDispatchStatus): boolean {
+  return OPT_OUT_TRANSITIONS[from]?.includes(to) ?? false;
+}
+
+/** Map an illegal transition to the error codes the route already understands. */
+function transitionError(from: string, to: OptOutDispatchStatus): Error {
+  if (to === "submitted" && from === "pending_approval") return new Error("APPROVAL_REQUIRED");
+  if (to === "completed" && (from === "pending_approval" || from === "approved")) {
+    return new Error("SUBMIT_FIRST");
+  }
+  return new Error("INVALID_TRANSITION");
+}
+
+async function transitionOptOutDispatch(
   session: SessionPayload,
   caseId: string,
   dispatchId: string,
+  to: OptOutDispatchStatus,
+  notes?: string,
 ) {
+  const privacyCase = await getCaseForUser(caseId, session);
+  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+
   const row = await db.query.optOutDispatches.findFirst({
     where: and(
       eq(optOutDispatches.id, dispatchId),
@@ -127,13 +158,32 @@ export async function approveOptOutDispatch(
     ),
   });
   if (!row) throw new Error("NOT_FOUND");
+  if (!canTransitionOptOut(row.status, to)) throw transitionError(row.status, to);
 
   const now = new Date().toISOString();
-  await db
-    .update(optOutDispatches)
-    .set({ status: "approved", approvedAt: now })
-    .where(eq(optOutDispatches.id, dispatchId));
+  const patch: Partial<typeof optOutDispatches.$inferInsert> = { status: to };
+  if (to === "approved") patch.approvedAt = now;
+  if (to === "submitted") patch.submittedAt = now;
+  if (to === "completed") patch.completedAt = now;
+  if (to === "submitted" || to === "completed") patch.notes = notes ?? row.notes;
 
+  // Conditional update: only succeeds if the status is still what we validated.
+  const res = db
+    .update(optOutDispatches)
+    .set(patch)
+    .where(and(eq(optOutDispatches.id, dispatchId), eq(optOutDispatches.status, row.status)))
+    .run();
+  if (res.changes !== 1) throw new Error("INVALID_TRANSITION");
+
+  return row;
+}
+
+export async function approveOptOutDispatch(
+  session: SessionPayload,
+  caseId: string,
+  dispatchId: string,
+) {
+  const row = await transitionOptOutDispatch(session, caseId, dispatchId, "approved");
   await logAuditEvent({
     caseId,
     organizationId: session.organizationId,
@@ -149,32 +199,13 @@ export async function recordOptOutSubmitted(
   dispatchId: string,
   notes?: string,
 ) {
-  const row = await db.query.optOutDispatches.findFirst({
-    where: and(
-      eq(optOutDispatches.id, dispatchId),
-      eq(optOutDispatches.caseId, caseId),
-      eq(optOutDispatches.organizationId, session.organizationId),
-    ),
-  });
-  if (!row) throw new Error("NOT_FOUND");
-  if (row.status === "pending_approval") throw new Error("APPROVAL_REQUIRED");
-
-  const now = new Date().toISOString();
-  await db
-    .update(optOutDispatches)
-    .set({
-      status: "submitted",
-      submittedAt: now,
-      notes: notes ?? row.notes,
-    })
-    .where(eq(optOutDispatches.id, dispatchId));
-
+  const row = await transitionOptOutDispatch(session, caseId, dispatchId, "submitted", notes);
   await logAuditEvent({
     caseId,
     organizationId: session.organizationId,
     userId: session.userId,
     eventType: "opt_out_submitted",
-    summary: `Recorded opt-out submission for ${row.brokerName}`,
+    summary: `User recorded opt-out submission for ${row.brokerName}`,
   });
 }
 
@@ -184,32 +215,15 @@ export async function recordOptOutCompleted(
   dispatchId: string,
   notes?: string,
 ) {
-  const row = await db.query.optOutDispatches.findFirst({
-    where: and(
-      eq(optOutDispatches.id, dispatchId),
-      eq(optOutDispatches.caseId, caseId),
-      eq(optOutDispatches.organizationId, session.organizationId),
-    ),
-  });
-  if (!row) throw new Error("NOT_FOUND");
-  if (row.status !== "submitted") throw new Error("SUBMIT_FIRST");
-
-  const now = new Date().toISOString();
-  await db
-    .update(optOutDispatches)
-    .set({
-      status: "completed",
-      completedAt: now,
-      notes: notes ?? row.notes,
-    })
-    .where(eq(optOutDispatches.id, dispatchId));
-
+  const row = await transitionOptOutDispatch(session, caseId, dispatchId, "completed", notes);
   await logAuditEvent({
     caseId,
     organizationId: session.organizationId,
     userId: session.userId,
     eventType: "opt_out_completed",
-    summary: `Verified opt-out completion for ${row.brokerName}`,
+    // Wording: this is the user's report that the broker confirmed the opt-out —
+    // ClearTrace has not independently verified removal here.
+    summary: `User marked opt-out completed for ${row.brokerName} (not independently verified)`,
   });
 }
 

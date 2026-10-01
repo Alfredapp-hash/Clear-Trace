@@ -1,7 +1,7 @@
 {
   "name": "ClearTrace",
   "short_name": "ClearTrace",
-  "description": "Owner-controlled privacy remediation — discover exposures, draft requests, verify removal.",
+  "description": "Owner-controlled privacy remediation \u2014 discover exposures, draft requests, verify removal.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#0a0f14",
@@ -18,7 +18,13 @@
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

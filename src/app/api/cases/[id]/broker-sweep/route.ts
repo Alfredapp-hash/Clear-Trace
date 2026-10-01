@@ -1,4 +1,5 @@
-import { resolveAuth, requireScope, toSessionLike } from "@/lib/auth/resolve-auth";
+import { authRateKey, authUserId } from "@/lib/auth/resolve-auth";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { requireBillingFeature } from "@/lib/billing/service";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { ensureDatabase } from "@/lib/db/init";
@@ -7,19 +8,19 @@ import { jsonError, jsonOk } from "@/lib/api";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const auth = await resolveAuth(_request);
-  if (!auth) return jsonError("Not authenticated", 401);
-
   const { id } = await params;
-  const organizationId =
-    auth.type === "session" ? auth.session.organizationId : auth.apiKey.organizationId;
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "broker_sweep",
+  });
+  if (access instanceof Response) return access;
+  const organizationId = access.session.organizationId;
 
   try {
-    requireScope(auth, "broker_sweep");
     await requireBillingFeature(organizationId, "broker_sweep");
     const result = await getLatestBrokerSweep(id, organizationId);
     if (!result) return jsonError("No broker sweep found", 404);
@@ -29,7 +30,6 @@ export async function GET(
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("Broker sweep requires Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "API_KEY_SCOPE_DENIED") return jsonError("API key missing broker_sweep scope", 403);
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);
   }
@@ -40,19 +40,18 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const auth = await resolveAuth(request);
-  if (!auth) return jsonError("Not authenticated", 401);
+  const { id } = await params;
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "broker_sweep",
+  });
+  if (access instanceof Response) return access;
+  const { auth, session } = access;
 
-  const session = toSessionLike(auth);
-  const rateKey =
-    auth.type === "session" ? `broker-sweep:${session.userId}` : `broker-sweep:${auth.apiKey.apiKeyId}`;
-  const rate = await checkRateLimit(rateKey, 10);
+  const rate = await checkRateLimit(`broker-sweep:${authRateKey(auth)}`, 10);
   if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
 
-  const { id } = await params;
-
   try {
-    requireScope(auth, "broker_sweep");
     await requireBillingFeature(session.organizationId, "broker_sweep");
     const result = await runBrokerSweep(session, id);
 
@@ -76,13 +75,7 @@ export async function POST(
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("Broker sweep requires Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "API_KEY_SCOPE_DENIED") return jsonError("API key missing broker_sweep scope", 403);
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);
   }
-}
-
-function authUserId(auth: Awaited<ReturnType<typeof resolveAuth>>): string | undefined {
-  if (!auth) return undefined;
-  return auth.type === "session" ? auth.session.userId : undefined;
 }

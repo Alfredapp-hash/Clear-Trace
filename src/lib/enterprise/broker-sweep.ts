@@ -13,11 +13,22 @@ import { createBrokerOptOutDeadline } from "./sla-service";
 import { isRuthlessModeForCase } from "@/lib/ruthless/resolve";
 import type { SessionPayload } from "@/lib/auth/session";
 
+/** Keys are real SCAN_SCOPES ids (src/lib/constants.ts). */
 const SCOPE_BROKER_TYPES: Record<string, BrokerEntry["type"][]> = {
   people_search: ["people_search", "data_broker"],
-  data_brokers: ["data_broker"],
+  data_brokers: ["data_broker"], // legacy alias
   public_records: ["public_records", "people_search"],
+  contact_info: ["people_search", "data_broker"],
 };
+
+/**
+ * Sweep match statuses:
+ * - "open"     — the broker was actually SEEN in this case (exposure/candidate URL match).
+ * - "to_check" — a broker in scope that has NOT been observed; it is a to-do to check
+ *                / proactively opt out, not a match. matchConfidence is 0 for these.
+ */
+export const SWEEP_STATUS_SEEN = "open";
+export const SWEEP_STATUS_TO_CHECK = "to_check";
 
 function brokerMatchesScope(broker: BrokerEntry, scanScopes: string[]): boolean {
   if (!scanScopes.length) return true;
@@ -29,6 +40,7 @@ function brokerMatchesScope(broker: BrokerEntry, scanScopes: string[]): boolean 
 }
 
 function confidenceForBroker(broker: BrokerEntry, reason: string): number {
+  if (reason === "scope_broker_universe") return 0; // unseen — no match confidence
   let score = broker.estimatedReach === "high" ? 0.82 : broker.estimatedReach === "medium" ? 0.72 : 0.62;
   if (broker.optOutUrl) score += 0.08;
   if (reason === "exposure_url_match") score += 0.1;
@@ -50,7 +62,9 @@ export async function runBrokerSweep(
     matchReason: string;
     matchConfidence: number;
     optOutUrl: string | null;
+    status: string;
   }>;
+  seenCount: number;
 }> {
   const privacyCase = await db.query.privacyCases.findFirst({
     where: and(
@@ -106,15 +120,19 @@ export async function runBrokerSweep(
   for (const broker of BROKER_UNIVERSE) {
     if (matchedBrokerIds.has(broker.id)) continue;
     if (!ruthless && !brokerMatchesScope(broker, scanScopes)) continue;
-    if (!ruthless && broker.estimatedReach === "low" && scanScopes.length > 1) continue;
+    // Low-reach brokers are included only for broad sweeps (ruthless, or several
+    // scopes). The previous condition was inverted (dropped them for broad sweeps).
+    if (!ruthless && broker.estimatedReach === "low" && scanScopes.length <= 1) continue;
     matchedBrokerIds.add(broker.id);
     matchRecords.push({ broker, matchReason: "scope_broker_universe" });
   }
 
+  const reachRank = { high: 3, medium: 2, low: 1 } as const;
   matchRecords.sort(
     (a, b) =>
       confidenceForBroker(b.broker, b.matchReason) -
-      confidenceForBroker(a.broker, a.matchReason),
+        confidenceForBroker(a.broker, a.matchReason) ||
+      reachRank[b.broker.estimatedReach] - reachRank[a.broker.estimatedReach],
   );
 
   const runId = uuid();
@@ -136,6 +154,8 @@ export async function runBrokerSweep(
   for (const record of matchRecords) {
     const matchId = uuid();
     const confidence = confidenceForBroker(record.broker, record.matchReason);
+    const status =
+      record.matchReason === "scope_broker_universe" ? SWEEP_STATUS_TO_CHECK : SWEEP_STATUS_SEEN;
     await db.insert(brokerSweepMatches).values({
       id: matchId,
       sweepRunId: runId,
@@ -145,7 +165,7 @@ export async function runBrokerSweep(
       matchReason: record.matchReason,
       matchConfidence: confidence,
       optOutUrl: record.broker.optOutUrl ?? null,
-      status: "open",
+      status,
       createdAt: now,
     });
     matches.push({
@@ -155,6 +175,7 @@ export async function runBrokerSweep(
       matchReason: record.matchReason,
       matchConfidence: confidence,
       optOutUrl: record.broker.optOutUrl ?? null,
+      status,
     });
   }
 
@@ -171,6 +192,7 @@ export async function runBrokerSweep(
     brokerCount: BROKER_UNIVERSE.length,
     matchCount: matches.length,
     matches,
+    seenCount: matches.filter((m) => m.status === SWEEP_STATUS_SEEN).length,
   };
 }
 

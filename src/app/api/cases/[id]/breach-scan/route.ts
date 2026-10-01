@@ -1,34 +1,41 @@
-import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import { getBreachScanData, runBreachScan } from "@/lib/breach-intel/service";
+import { requireCaseAccess } from "@/lib/auth/case-access";
+import { authRateKey } from "@/lib/auth/resolve-auth";
 import { jsonError, jsonOk } from "@/lib/api";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
-
   const { id } = await params;
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "cases:read",
+  });
+  if (access instanceof Response) return access;
+
   const data = await getBreachScanData(id);
   return jsonOk(data);
 }
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
-
-  const rate = await checkRateLimit(`breach-scan:${session.userId}`, 10);
-  if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
-
   const { id } = await params;
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "cases:write",
+  });
+  if (access instanceof Response) return access;
+  const { auth, session } = access;
+
+  const rate = await checkRateLimit(`breach-scan:${authRateKey(auth)}`, 10);
+  if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
 
   try {
     const result = await runBreachScan(session, id);

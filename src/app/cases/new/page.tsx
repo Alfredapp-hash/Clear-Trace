@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Button, Card, Input, Label } from "@/components/ui";
+import { callApi } from "@/lib/ui/call-api";
 import {
   AUTHORITY_BASES,
   CASE_TYPES,
@@ -21,7 +22,6 @@ export default function NewCasePage() {
 
   const [title, setTitle] = useState("");
   const [caseType, setCaseType] = useState("personal_exposure");
-  const [targetRelationship, setTargetRelationship] = useState("self");
   const [scanScopes, setScanScopes] = useState<string[]>(["people_search"]);
   const [authorityBasis, setAuthorityBasis] = useState("self");
   const [userAttestation, setUserAttestation] = useState(false);
@@ -36,10 +36,21 @@ export default function NewCasePage() {
   const [familyMemberId, setFamilyMemberId] = useState("");
 
   useEffect(() => {
-    fetch("/api/settings/family-members")
-      .then((r) => r.json())
-      .then((d) => setFamilyMembers(d.members ?? []));
+    const controller = new AbortController();
+    callApi<{ members?: { id: string; displayName: string; relationship: string }[] }>(
+      "/api/settings/family-members",
+      { signal: controller.signal },
+    ).then((res) => {
+      if (!controller.signal.aborted && res.ok) setFamilyMembers(res.data.members ?? []);
+    });
+    return () => controller.abort();
   }, []);
+
+  // Once the case exists, step-1 intake fields are persisted server-side and
+  // cannot be edited from the wizard (there is no update endpoint), so lock them.
+  const intakeLocked = caseId !== null;
+  const linkedMember = familyMembers.find((m) => m.id === familyMemberId);
+  const targetRelationship = linkedMember?.relationship ?? "self";
 
   function toggleScope(id: string) {
     setScanScopes((prev) =>
@@ -48,66 +59,52 @@ export default function NewCasePage() {
   }
 
   async function createCase(): Promise<string | null> {
-    setLoading(true);
-    setError("");
-    const res = await fetch("/api/cases", {
+    const res = await callApi<{ caseId?: string }>("/api/cases", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title,
+      body: {
+        title: title.trim(),
         caseType,
         targetRelationship,
         scanScopes,
         ruthlessMode: ruthlessMode && ruthlessAttestation,
         familyMemberId: familyMemberId || null,
-      }),
+      },
+      errorMessage: "Failed to create case",
     });
-    if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? "Failed to create case");
-      setLoading(false);
+    if (!res.ok || !res.data.caseId) {
+      setError(res.ok ? "Failed to create case" : res.error);
       return null;
     }
-    const data = await res.json();
-    setCaseId(data.caseId);
-    setLoading(false);
-    return data.caseId as string;
+    setCaseId(res.data.caseId);
+    return res.data.caseId;
   }
 
   async function submitAuthorization(id: string) {
-    const res = await fetch(`/api/cases/${id}/authorization`, {
+    const res = await callApi(`/api/cases/${id}/authorization`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ authorityBasis, userAttestation }),
+      body: { authorityBasis, userAttestation },
+      errorMessage: "Authorization failed",
     });
-    if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? "Authorization failed");
-      return false;
-    }
-    return true;
+    if (!res.ok) setError(res.error);
+    return res.ok;
   }
 
   async function submitClaims(id: string) {
     const validClaims = claims.filter((c) => c.value.trim());
     if (!validClaims.length) return true;
-    const res = await fetch(`/api/cases/${id}/identity-claims`, {
+    const res = await callApi(`/api/cases/${id}/identity-claims`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ claims: validClaims }),
+      body: { claims: validClaims },
+      errorMessage: "Failed to store identity claims",
     });
-    if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? "Failed to store identity claims");
-      return false;
-    }
-    return true;
+    if (!res.ok) setError(res.error);
+    return res.ok;
   }
 
   async function handleNext() {
     setError("");
     if (step === 1) {
-      if (!title.trim()) {
+      if (!intakeLocked && !title.trim()) {
         setError("Case title is required");
         return;
       }
@@ -120,22 +117,25 @@ export default function NewCasePage() {
         return;
       }
       setLoading(true);
-      const id = caseId ?? (await createCase());
-      if (!id) return;
-      if (!caseId) setCaseId(id);
-      const authOk = await submitAuthorization(id);
-      if (!authOk) {
+      try {
+        const id = caseId ?? (await createCase());
+        if (!id) return;
+        const authOk = await submitAuthorization(id);
+        if (!authOk) return;
+        setStep(3);
+      } finally {
         setLoading(false);
-        return;
       }
-      setLoading(false);
-      setStep(3);
       return;
     }
     if (step === 3 && caseId) {
       setLoading(true);
-      const claimsOk = await submitClaims(caseId);
-      setLoading(false);
+      let claimsOk = false;
+      try {
+        claimsOk = await submitClaims(caseId);
+      } finally {
+        setLoading(false);
+      }
       if (!claimsOk) return;
       router.push(`/cases/${caseId}`);
       router.refresh();
@@ -169,7 +169,14 @@ export default function NewCasePage() {
 
         <Card variant="elevated" className="mt-8 ct-animate-in">
           {step === 1 && (
-            <div className="space-y-4">
+            <fieldset disabled={intakeLocked} className="space-y-4 disabled:opacity-70">
+              <legend className="sr-only">Case intake</legend>
+              {intakeLocked && (
+                <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-400">
+                  This case has already been created, so intake details are locked. You can
+                  continue to the next step.
+                </p>
+              )}
               <div>
                 <Label htmlFor="title">Case title</Label>
                 <Input
@@ -237,8 +244,10 @@ export default function NewCasePage() {
                   </label>
                 )}
               </div>
-              <div>
-                <Label>Discovery scopes</Label>
+              <fieldset>
+                <legend className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  Discovery scopes
+                </legend>
                 <div className="mt-2 grid gap-2 sm:grid-cols-2">
                   {SCAN_SCOPES.map((scope) => (
                     <label
@@ -254,8 +263,8 @@ export default function NewCasePage() {
                     </label>
                   ))}
                 </div>
-              </div>
-            </div>
+              </fieldset>
+            </fieldset>
           )}
 
           {step === 2 && (
@@ -300,8 +309,9 @@ export default function NewCasePage() {
               {claims.map((claim, index) => (
                 <div key={index} className="grid gap-3 sm:grid-cols-2">
                   <div>
-                    <Label>Claim type</Label>
+                    <Label htmlFor={`claim-type-${index}`}>Claim type</Label>
                     <select
+                      id={`claim-type-${index}`}
                       value={claim.claimType}
                       onChange={(e) => {
                         const next = [...claims];
@@ -318,8 +328,9 @@ export default function NewCasePage() {
                     </select>
                   </div>
                   <div>
-                    <Label>Value</Label>
+                    <Label htmlFor={`claim-value-${index}`}>Value</Label>
                     <Input
+                      id={`claim-value-${index}`}
                       value={claim.value}
                       onChange={(e) => {
                         const next = [...claims];

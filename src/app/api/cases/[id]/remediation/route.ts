@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/auth/session";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { ensureDatabase } from "@/lib/db/init";
 import {
   approveAndRecordSent,
@@ -12,7 +12,7 @@ import {
   sendDraftViaConnector,
   updateDraft,
 } from "@/lib/remediation/service";
-import { jsonError, jsonOk } from "@/lib/api";
+import { jsonError, jsonOk, workflowErrorResponse } from "@/lib/api";
 import { enforceRateLimit } from "@/lib/security/enforce-rate-limit";
 
 export async function GET(
@@ -20,9 +20,9 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
   const { id } = await params;
+  const access = await requireCaseAccess(request, id);
+  if (access instanceof Response) return access;
   const url = new URL(request.url);
   const remediationCaseId = url.searchParams.get("remediationCaseId");
   const catalog = url.searchParams.get("catalog");
@@ -35,9 +35,8 @@ export async function GET(
     try {
       const templates = await getTemplateOptionsForRemediation(id, remediationCaseId);
       return jsonOk({ templates });
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : "Unknown error";
-      return jsonError(msg, 404);
+    } catch {
+      return jsonError("Remediation case not found", 404);
     }
   }
 
@@ -49,11 +48,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
-
   const { id } = await params;
-  const body = await request.json();
+  const access = await requireCaseAccess(request, id);
+  if (access instanceof Response) return access;
+  const { session } = access;
+
+  const body = await request.json().catch(() => ({}));
   const { action } = body as {
     action?: string;
     exposureId?: string;
@@ -102,7 +102,9 @@ export async function POST(
     return jsonError("Invalid action or missing parameters");
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    if (msg.includes("NOT_FOUND")) return jsonError(msg, 404);
+    if (msg.includes("NOT_FOUND")) return jsonError("Not found", 404);
+    const workflow = workflowErrorResponse(msg);
+    if (workflow) return workflow;
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("This feature requires Pro. Upgrade on Billing.", 402);
     }

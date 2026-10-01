@@ -94,8 +94,10 @@ async function deliverWebhook(
   let success = false;
   let httpStatus: number | undefined;
   let responseBody: string | undefined;
+  let attempts = 0;
 
   for (let attempt = 1; attempt <= 3; attempt++) {
+    attempts = attempt;
     try {
       const res = await connectorFetch({
         provider: "generic_webhook",
@@ -141,7 +143,7 @@ async function deliverWebhook(
       httpStatus: httpStatus ?? null,
       responseBody: responseBody ?? null,
       deliveredAt: success ? completedAt : null,
-      attemptCount: 3,
+      attemptCount: attempts,
     })
     .where(eq(webhookDeliveries.id, deliveryId));
 

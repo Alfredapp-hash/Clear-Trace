@@ -10,7 +10,7 @@ import {
   auditEvents,
 } from "@/lib/db/schema";
 import {
-  decryptValue,
+  tryDecryptValue,
   encryptValue,
   hashValue,
   redactValue,
@@ -35,7 +35,20 @@ export async function listCasesForOrganization(organizationId: string) {
   });
 }
 
+/**
+ * Row-level case access. Sessions see only cases they own inside their org; API-key
+ * principals (toSessionLike sets `apiKeyId` + role "api_key") see any case in the key's org.
+ */
 export async function getCaseForUser(caseId: string, session: SessionPayload) {
+  if (!caseId || !session.organizationId) return undefined;
+  if (session.role === "api_key" && session.apiKeyId) {
+    return db.query.privacyCases.findFirst({
+      where: and(
+        eq(privacyCases.id, caseId),
+        eq(privacyCases.organizationId, session.organizationId),
+      ),
+    });
+  }
   return db.query.privacyCases.findFirst({
     where: and(
       eq(privacyCases.id, caseId),
@@ -56,6 +69,12 @@ export async function createPrivacyCase(
     familyMemberId?: string | null;
   },
 ) {
+  if (input.familyMemberId) {
+    const { getFamilyMemberForOrg } = await import("@/lib/family/service");
+    const member = await getFamilyMemberForOrg(session.organizationId, input.familyMemberId);
+    if (!member) throw new Error("FAMILY_MEMBER_NOT_FOUND");
+  }
+
   const id = uuid();
   const now = new Date().toISOString();
 
@@ -222,7 +241,11 @@ export async function getIdentityClaimsRedacted(caseId: string) {
     id: c.id,
     claimType: c.claimType,
     scanEnabled: c.scanEnabled,
-    redactedPreview: redactValue(decryptValue(c.encryptedValue)),
+    // One undecryptable row (e.g. after a key change) must not break the whole list.
+    redactedPreview: (() => {
+      const plain = tryDecryptValue(c.encryptedValue);
+      return plain === null ? "[unreadable]" : redactValue(plain);
+    })(),
     createdAt: c.createdAt,
   }));
 }

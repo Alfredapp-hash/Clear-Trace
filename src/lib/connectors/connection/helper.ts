@@ -1,7 +1,13 @@
 import { ConnectorConnectionError } from "./errors";
 import {
+  resolveIntelligenceConnection,
+  type IntelligenceFeature,
+  type ResolvedConnection,
+} from "./intelligence";
+import {
   createGmailDraftMessage,
   polishWithAnthropic,
+  polishWithOllama,
   polishWithOpenAI,
   polishWithOpenRouter,
   searchWithProvider,
@@ -16,11 +22,7 @@ import type {
   ConnectorType,
 } from "../types";
 
-export interface ResolvedConnection {
-  type: ConnectorType;
-  credentials: ConnectorCredentials;
-  metadata: Record<string, string>;
-}
+export type { ResolvedConnection };
 
 export interface ConnectionHelperDeps {
   getOrgConnector: (
@@ -29,7 +31,9 @@ export interface ConnectionHelperDeps {
   resolveDiscoveryType: () => Promise<ConnectorType | null>;
   resolveEmailType: () => Promise<ConnectorType | null>;
   getAgentDefaults: () => Promise<AgentDefaults>;
-  intelligenceTypes: ConnectorType[];
+  /** @deprecated unused — intelligence resolution lives in ./intelligence */
+  intelligenceTypes?: ConnectorType[];
+  isFeatureEnabled?: (feature: IntelligenceFeature) => Promise<boolean>;
 }
 
 export class ConnectionHelper {
@@ -42,8 +46,12 @@ export class ConnectionHelper {
     return getSetupGuide(type);
   }
 
-  async test(type: ConnectorType, credentials: ConnectorCredentials): Promise<ConnectorTestResult> {
-    return testConnectorConnection(type, credentials);
+  async test(
+    type: ConnectorType,
+    credentials: ConnectorCredentials,
+    metadata: Record<string, string> = {},
+  ): Promise<ConnectorTestResult> {
+    return testConnectorConnection(type, credentials, metadata);
   }
 
   async require(type: ConnectorType): Promise<ResolvedConnection> {
@@ -75,22 +83,11 @@ export class ConnectionHelper {
   }
 
   async resolveIntelligence(): Promise<ResolvedConnection | null> {
-    const defaults = await this.deps.getAgentDefaults();
-    const preferred = defaults.intelligence;
-    if (!preferred || preferred === "rules_only") return null;
-
-    const candidates = preferred
-      ? [preferred, ...this.deps.intelligenceTypes.filter((t) => t !== preferred)]
-      : this.deps.intelligenceTypes;
-
-    for (const type of candidates) {
-      try {
-        return await this.require(type);
-      } catch {
-        continue;
-      }
-    }
-    return null;
+    return resolveIntelligenceConnection({
+      getAgentDefaults: this.deps.getAgentDefaults,
+      getOrgConnector: this.deps.getOrgConnector,
+      isFeatureEnabled: this.deps.isFeatureEnabled,
+    });
   }
 
   async runDiscoverySearch(queries: string[]): Promise<{
@@ -102,7 +99,7 @@ export class ConnectionHelper {
       throw new ConnectorConnectionError(
         "serpapi",
         "missing_credentials",
-        "No discovery connector configured. Add SerpAPI, Bing, or Google CSE in Settings.",
+        "No discovery connector configured. Add SerpAPI or Google CSE in Settings.",
       );
     }
 
@@ -126,48 +123,66 @@ export class ConnectionHelper {
     return { results: deduped, connectorType: connection.type };
   }
 
+  /**
+   * Polish a draft with the resolved LLM. Never throws and never tries a second
+   * provider: any failure returns the original (rules-based) draft.
+   */
   async polishDraft(
     subject: string,
     body: string,
     tone: string,
   ): Promise<{ subject: string; body: string; polished: boolean; provider?: ConnectorType }> {
-    const connection = await this.resolveIntelligence();
+    let connection: ResolvedConnection | null = null;
+    try {
+      connection = await this.resolveIntelligence();
+    } catch {
+      connection = null;
+    }
     if (!connection) return { subject, body, polished: false };
 
-    if (connection.type === "openai") {
-      const result = await polishWithOpenAI(
-        connection.credentials.apiKey,
-        connection.metadata.model ?? "gpt-4o-mini",
-        subject,
-        body,
-        tone,
-      );
-      if (result) return { ...result, polished: true, provider: "openai" };
+    const { type, credentials, metadata } = connection;
+    let result: { subject: string; body: string } | null = null;
+    try {
+      switch (type) {
+        case "ollama":
+          result = await polishWithOllama(credentials, metadata.model, subject, body, tone);
+          break;
+        case "openai":
+          result = await polishWithOpenAI(
+            credentials.apiKey,
+            metadata.model ?? "gpt-4o-mini",
+            subject,
+            body,
+            tone,
+          );
+          break;
+        case "anthropic":
+          result = await polishWithAnthropic(
+            credentials.apiKey,
+            metadata.model ?? "claude-haiku-4-5",
+            subject,
+            body,
+            tone,
+          );
+          break;
+        case "openrouter":
+          result = await polishWithOpenRouter(
+            credentials.apiKey,
+            metadata.model ?? "openai/gpt-4o-mini",
+            subject,
+            body,
+            tone,
+          );
+          break;
+        default:
+          result = null;
+      }
+    } catch {
+      result = null;
     }
 
-    if (connection.type === "anthropic") {
-      const result = await polishWithAnthropic(
-        connection.credentials.apiKey,
-        connection.metadata.model ?? "claude-haiku-4-5-20251001",
-        subject,
-        body,
-        tone,
-      );
-      if (result) return { ...result, polished: true, provider: "anthropic" };
-    }
-
-    if (connection.type === "openrouter") {
-      const result = await polishWithOpenRouter(
-        connection.credentials.apiKey,
-        connection.metadata.model ?? "openai/gpt-4o-mini",
-        subject,
-        body,
-        tone,
-      );
-      if (result) return { ...result, polished: true, provider: "openrouter" };
-    }
-
-    return { subject, body, polished: false, provider: connection.type };
+    if (result) return { ...result, polished: true, provider: type };
+    return { subject, body, polished: false, provider: type };
   }
 
   async pushGmailDraft(message: {

@@ -2,6 +2,34 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.2.0] — Unreleased — Sprint 1
+
+### Security
+- **IDOR fixes** — case-scoped routes (discovery, breach scan, remediation, verification, batch) check case ownership / org scope and return 404 across tenants; integration tests assert cross-tenant access is refused
+- **SSRF hardening** — outbound fetches keep the private-network blocklist; only exact `OLLAMA_ALLOWED_ORIGINS` origins bypass it for local Ollama, with redirects not followed
+- **Cron / worker auth** — `/api/cron/*` and `/api/worker/run` accept `CRON_SECRET` or `WORKER_SECRET` bearer tokens (constant-time compare) and fail closed in production when neither is set
+- **Production CSP fixed** — static CSP now allows Next.js inline bootstrap scripts (`'unsafe-inline'`, no `'unsafe-eval'` in production) so the app hydrates; `upgrade-insecure-requests` + HSTS only when `FORCE_HTTPS=1`
+
+### Changed
+- **Truthful verification** — removal verification reports what was actually checked instead of assuming success
+- **Complete case erasure** — deleting a case removes all of its dependent records
+
+### Added
+- **Ollama local/cloud LLM** — `ollama` intelligence connector (local via `http://localhost:11434` / `http://host.docker.internal:11434`, or Ollama Cloud with API key) for draft polish
+- **Local-only AI mode** — `llmLocalOnly` agent default (on by default): only local Ollama is used, no cloud fallback; drafts stay rules-based if Ollama is unavailable
+- **CI** — GitHub Actions: lint, `tsc --noEmit`, Vitest, production build; optional Playwright job
+
+### Deployment
+- **Docker is the supported deploy target**; `vercel.json` removed (SQLite needs a persistent writable disk)
+- Dockerfile: no database baked into the image, `/app/data` volume, `DATABASE_URL=/app/data/cleartrace.db`, `HEALTHCHECK` on `/api/health`, non-root user, skills + agent-builder files in the runtime image
+- docker-compose: required secrets (`${VAR:?…}`), `host.docker.internal` mapped for Ollama, worker-cron also runs `/api/cron/verify` hourly and `/api/cron/digest` weekly and treats non-2xx (incl. redirects) as failure
+- `.env.example`: empty secret placeholders (generate with `openssl rand -base64 48`), plus `CRON_SECRET`, `FORCE_HTTPS`, `TRUST_PROXY`, `OLLAMA_ALLOWED_ORIGINS`
+
+### Tooling
+- Vitest uses an isolated temp SQLite DB per test worker; Playwright uses its own `data/e2e.db`, recreated each run
+- `scripts/sync-skills.mjs` (ESM) fails the build when no skill pack is found; `create-cleartrace` skips `node_modules` when copying
+- ESLint ignores generated output (`skills/`, `agent-builder/dist/`, Playwright reports)
+
 ## [1.1.0] — 2026-06-19
 
 ### Added (Workflow completion tracking)

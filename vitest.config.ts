@@ -4,7 +4,15 @@ import path from "path";
 export default defineConfig({
   test: {
     environment: "node",
-    exclude: ["**/node_modules/**", "**/.next/**", "**/e2e/**"],
+    setupFiles: ["./src/lib/test/setup.ts"],
+    exclude: [
+      "**/node_modules/**",
+      "**/.next/**",
+      "**/e2e/**",
+      "**/agent-builder/dist/**",
+      "**/test-results/**",
+      "**/playwright-report/**",
+    ],
   },
   resolve: {
     alias: {

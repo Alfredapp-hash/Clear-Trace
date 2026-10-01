@@ -8,6 +8,13 @@ export interface BrokerEntry {
   estimatedReach: "low" | "medium" | "high";
 }
 
+/**
+ * Known broker universe. Domains are unique (duplicate peoplelooker.com /
+ * checkpeople.com entries removed in Sprint 1). `optOutUrl` must point at an actual
+ * opt-out / suppression flow; entries whose only known URL is a generic
+ * privacy/help/contact page have no optOutUrl (resolveFromPlaybook then falls back
+ * to the privacy contact) and carry a TODO to research the real flow.
+ */
 export const BROKER_UNIVERSE: BrokerEntry[] = [
   // High-reach people-search / data brokers
   { id: "spokeo", name: "Spokeo", domain: "spokeo.com", type: "data_broker", optOutUrl: "https://www.spokeo.com/optout", privacyUrl: "https://www.spokeo.com/privacy", estimatedReach: "high" },
@@ -42,7 +49,7 @@ export const BROKER_UNIVERSE: BrokerEntry[] = [
   { id: "publicdatausa", name: "PublicDataUSA", domain: "publicdatausa.com", type: "public_records", optOutUrl: "https://www.publicdatausa.com/remove.php", estimatedReach: "low" },
   { id: "smartbackgroundchecks", name: "SmartBackgroundChecks", domain: "smartbackgroundchecks.com", type: "data_broker", optOutUrl: "https://www.smartbackgroundchecks.com/optout", estimatedReach: "medium" },
   { id: "idtrue", name: "IDTrue", domain: "idtrue.com", type: "data_broker", optOutUrl: "https://www.idtrue.com/optout/", estimatedReach: "low" },
-  { id: "voterrecords", name: "VoterRecords", domain: "voterrecords.com", type: "public_records", optOutUrl: "https://voterrecords.com/faq", privacyUrl: "https://voterrecords.com/privacy", estimatedReach: "medium" },
+  { id: "voterrecords", name: "VoterRecords", domain: "voterrecords.com", type: "public_records", privacyUrl: "https://voterrecords.com/privacy", estimatedReach: "medium" }, // TODO(sprint-1): no verified opt-out URL — previous value was a help/privacy/contact page
   { id: "arrestfacts", name: "ArrestFacts", domain: "arrestfacts.com", type: "public_records", optOutUrl: "https://arrestfacts.com/ng/control/privacy", estimatedReach: "low" },
   { id: "mugshots", name: "Mugshots.com", domain: "mugshots.com", type: "public_records", privacyUrl: "https://mugshots.com/privacy.html", estimatedReach: "medium" },
   { id: "busted", name: "BustedMugshots", domain: "bustedmugshots.com", type: "public_records", optOutUrl: "https://www.bustedmugshots.com/removal", estimatedReach: "medium" },
@@ -50,8 +57,8 @@ export const BROKER_UNIVERSE: BrokerEntry[] = [
   { id: "neighborwho", name: "NeighborWho", domain: "neighborwho.com", type: "people_search", optOutUrl: "https://www.neighborwho.com/app/optout/search", estimatedReach: "medium" },
   { id: "telephonedirectories", name: "TelephoneDirectories", domain: "telephonedirectories.us", type: "people_search", optOutUrl: "https://www.telephonedirectories.us/edit_remove", estimatedReach: "low" },
   { id: "reversephonelookup", name: "Reverse Phone Lookup", domain: "reversephonelookup.com", type: "people_search", privacyUrl: "https://www.reversephonelookup.com/privacy", estimatedReach: "low" },
-  { id: "411", name: "411.com", domain: "411.com", type: "people_search", optOutUrl: "https://www.411.com/privacy", estimatedReach: "medium" },
-  { id: "yellowpages", name: "YellowPages", domain: "yellowpages.com", type: "people_search", optOutUrl: "https://www.yellowpages.com/help", estimatedReach: "medium" },
+  { id: "411", name: "411.com", domain: "411.com", type: "people_search", estimatedReach: "medium" }, // TODO(sprint-1): no verified opt-out URL — previous value was a help/privacy/contact page
+  { id: "yellowpages", name: "YellowPages", domain: "yellowpages.com", type: "people_search", estimatedReach: "medium" }, // TODO(sprint-1): no verified opt-out URL — previous value was a help/privacy/contact page
   { id: "opencorporates", name: "OpenCorporates", domain: "opencorporates.com", type: "public_records", privacyUrl: "https://opencorporates.com/privacy", estimatedReach: "medium" },
   { id: "peopleby", name: "PeopleByName", domain: "peoplebyname.com", type: "people_search", optOutUrl: "https://www.peoplebyname.com/remove.php", estimatedReach: "low" },
   { id: "peoplesmart", name: "PeopleSmart", domain: "peoplesmart.com", type: "data_broker", optOutUrl: "https://www.peoplesmart.com/optout-go", privacyUrl: "https://www.peoplesmart.com/privacy", estimatedReach: "medium" },
@@ -69,11 +76,10 @@ export const BROKER_UNIVERSE: BrokerEntry[] = [
   { id: "comscore", name: "Comscore", domain: "comscore.com", type: "data_broker", optOutUrl: "https://www.comscore.com/About-comScore/Privacy/Opt-out-of-comScore-panel", privacyUrl: "https://www.comscore.com/About-comScore/Privacy", estimatedReach: "medium" },
   { id: "towerdata", name: "TowerData / Zeta Global", domain: "towerdata.com", type: "data_broker", optOutUrl: "https://www.towerdata.com/company/opt_out.html", privacyUrl: "https://www.towerdata.com/company/privacy_policy.html", estimatedReach: "medium" },
   { id: "lexisnexis", name: "LexisNexis Risk Solutions", domain: "risk.lexisnexis.com", type: "data_broker", optOutUrl: "https://optout.lexisnexis.com/", privacyUrl: "https://risk.lexisnexis.com/privacy", estimatedReach: "high" },
-  { id: "veromi", name: "Veromi", domain: "veromi.net", type: "people_search", optOutUrl: "https://www.veromi.net/PrivacyPolicy.aspx", estimatedReach: "low" },
+  { id: "veromi", name: "Veromi", domain: "veromi.net", type: "people_search", estimatedReach: "low" }, // TODO(sprint-1): no verified opt-out URL — previous value was a help/privacy/contact page
   { id: "dobsearch", name: "DOBSearch", domain: "dobsearch.com", type: "people_search", optOutUrl: "https://www.dobsearch.com/people-finder/pf_remove_record.php", estimatedReach: "low" },
   { id: "checkr", name: "Checkr", domain: "checkr.com", type: "data_broker", optOutUrl: "https://checkr.com/privacy/consumer", privacyUrl: "https://checkr.com/privacy", estimatedReach: "medium" },
   { id: "backgroundcheck", name: "BackgroundCheck.run", domain: "backgroundcheck.run", type: "data_broker", optOutUrl: "https://backgroundcheck.run/optout", estimatedReach: "low" },
-  { id: "been_verified_pro", name: "PeopleLooker (sister)", domain: "peoplelooker.com", type: "data_broker", optOutUrl: "https://www.peoplelooker.com/optout", estimatedReach: "medium" },
 
   // v0.9 expansion — additional high-traffic people-search sites
   { id: "gladiknow", name: "Glad I Know", domain: "gladiknow.com", type: "people_search", optOutUrl: "https://gladiknow.com/optout", estimatedReach: "medium" },
@@ -87,12 +93,11 @@ export const BROKER_UNIVERSE: BrokerEntry[] = [
   { id: "freepeopledirectory", name: "Free People Directory", domain: "freepeopledirectory.com", type: "people_search", optOutUrl: "https://www.freepeopledirectory.com/optout", estimatedReach: "low" },
   { id: "mugshotlook", name: "MugshotLook", domain: "mugshotlook.com", type: "public_records", optOutUrl: "https://www.mugshotlook.com/optout", estimatedReach: "low" },
   { id: "publicrecordsnow", name: "PublicRecordsNow", domain: "publicrecordsnow.com", type: "public_records", optOutUrl: "https://www.publicrecordsnow.com/optout", estimatedReach: "medium" },
-  { id: "checkpeople_com", name: "CheckPeople.com", domain: "checkpeople.com", type: "data_broker", optOutUrl: "https://checkpeople.com/opt-out", estimatedReach: "medium" },
   { id: "contactout", name: "ContactOut", domain: "contactout.com", type: "data_broker", optOutUrl: "https://contactout.com/optout", privacyUrl: "https://contactout.com/privacy", estimatedReach: "medium" },
-  { id: "seamless", name: "Seamless.AI", domain: "seamless.ai", type: "data_broker", optOutUrl: "https://seamless.ai/contact", privacyUrl: "https://seamless.ai/privacy", estimatedReach: "medium" },
-  { id: "apollo", name: "Apollo.io", domain: "apollo.io", type: "data_broker", optOutUrl: "https://www.apollo.io/privacy-policy", privacyUrl: "https://www.apollo.io/privacy-policy", estimatedReach: "high" },
+  { id: "seamless", name: "Seamless.AI", domain: "seamless.ai", type: "data_broker", privacyUrl: "https://seamless.ai/privacy", estimatedReach: "medium" }, // TODO(sprint-1): no verified opt-out URL — previous value was a help/privacy/contact page
+  { id: "apollo", name: "Apollo.io", domain: "apollo.io", type: "data_broker", privacyUrl: "https://www.apollo.io/privacy-policy", estimatedReach: "high" }, // TODO(sprint-1): no verified opt-out URL — previous value was a help/privacy/contact page
   { id: "lusha", name: "Lusha", domain: "lusha.com", type: "data_broker", optOutUrl: "https://www.lusha.com/privacy-center/", privacyUrl: "https://www.lusha.com/privacy-policy/", estimatedReach: "medium" },
-  { id: "melissa", name: "Melissa Data", domain: "melissa.com", type: "data_broker", optOutUrl: "https://www.melissa.com/privacy", privacyUrl: "https://www.melissa.com/privacy", estimatedReach: "medium" },
+  { id: "melissa", name: "Melissa Data", domain: "melissa.com", type: "data_broker", privacyUrl: "https://www.melissa.com/privacy", estimatedReach: "medium" }, // TODO(sprint-1): no verified opt-out URL — previous value was a help/privacy/contact page
   { id: "spokeo_alt", name: "UnitedStatesPhonebook", domain: "unitedstatesphonebook.com", type: "people_search", optOutUrl: "https://www.unitedstatesphonebook.com/opt-out", estimatedReach: "medium" },
   { id: "revealphone", name: "RevealPhoneOwner", domain: "revealphoneowner.com", type: "people_search", privacyUrl: "https://www.revealphoneowner.com/privacy", estimatedReach: "low" },
   { id: "zlookup", name: "ZLookup", domain: "zlookup.com", type: "people_search", optOutUrl: "https://www.zlookup.com/optout", estimatedReach: "medium" },

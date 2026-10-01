@@ -4,10 +4,19 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 
 const BASE_URL = (process.env.CLEARTRACE_URL ?? "http://localhost:3000").replace(/\/$/, "");
-const API_KEY = process.env.CLEARTRACE_API_KEY ?? "";
+const API_KEY = (process.env.CLEARTRACE_API_KEY ?? "").trim();
 
-function headers() {
-  const h = { Accept: "application/json", "Content-Type": "application/json" };
+if (!API_KEY) {
+  console.error("[cleartrace-mcp] CLEARTRACE_API_KEY is not set — authenticated tools will return 401.");
+} else if (!API_KEY.startsWith("ct_live_")) {
+  console.error("[cleartrace-mcp] CLEARTRACE_API_KEY should be a ClearTrace API key (ct_live_…).");
+}
+
+/** Every request carries `Authorization: Bearer ct_live_…`; callers cannot override it. */
+function headers(extra = {}) {
+  const h = { Accept: "application/json", "Content-Type": "application/json", ...extra };
+  delete h.Authorization;
+  delete h.authorization;
   if (API_KEY) h.Authorization = `Bearer ${API_KEY}`;
   return h;
 }
@@ -15,8 +24,13 @@ function headers() {
 async function api(path, init = {}) {
   const res = await fetch(`${BASE_URL}${path}`, {
     ...init,
-    headers: { ...headers(), ...(init.headers ?? {}) },
+    headers: headers(init.headers ?? {}),
+    // Never forward the API key to a redirect target.
+    redirect: "manual",
   });
+  if (res.status >= 300 && res.status < 400) {
+    throw new Error(`Unexpected redirect (HTTP ${res.status}) — check CLEARTRACE_URL`);
+  }
   const text = await res.text();
   let data;
   try {

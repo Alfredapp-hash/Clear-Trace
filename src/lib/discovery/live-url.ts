@@ -20,6 +20,9 @@ import { logAuditEvent } from "@/lib/audit/logger";
 import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
 
+const PRE_CONSENT_STATUSES = new Set(["draft"]);
+const REVIEW_ENTRY_STATUSES = new Set(["consent_verified", "discovery_running", "candidate_review"]);
+
 export async function addLiveUrlCandidate(
   session: SessionPayload,
   caseId: string,
@@ -27,6 +30,8 @@ export async function addLiveUrlCandidate(
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  // Same consent gate as runDiscovery: no fetching before the owner has authorized the case.
+  if (PRE_CONSENT_STATUSES.has(privacyCase.status)) throw new Error("AUTHORIZATION_REQUIRED");
 
   const fetchResult = await safeFetchPublicPage(rawUrl);
   const visibleText = extractVisibleText(fetchResult.body);
@@ -94,10 +99,13 @@ export async function addLiveUrlCandidate(
     createdAt: now,
   });
 
-  await db
-    .update(privacyCases)
-    .set({ status: "candidate_review", updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
+  // Only advance early-stage cases; never pull a case that is further along back to review.
+  if (REVIEW_ENTRY_STATUSES.has(privacyCase.status)) {
+    await db
+      .update(privacyCases)
+      .set({ status: "candidate_review", updatedAt: now })
+      .where(eq(privacyCases.id, caseId));
+  }
 
   await logAuditEvent({
     caseId,

@@ -1,7 +1,6 @@
-import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
 import {
-  Button,
+  ButtonLink,
   EmptyState,
   ListRow,
   PageHeader,
@@ -27,9 +26,7 @@ export default async function CasesPage() {
         title="Privacy cases"
         description="Authorized remediation workflows with evidence, drafts, and verification."
         action={
-          <Link href="/cases/new">
-            <Button size="lg">New case</Button>
-          </Link>
+          <ButtonLink href="/cases/new" size="lg">New case</ButtonLink>
         }
       />
 
@@ -38,9 +35,7 @@ export default async function CasesPage() {
           title="No cases yet"
           description="Create your first privacy case to begin intake, discovery, and removal workflows."
           action={
-            <Link href="/cases/new">
-              <Button size="lg">Create first case</Button>
-            </Link>
+            <ButtonLink href="/cases/new" size="lg">Create first case</ButtonLink>
           }
         />
       ) : (

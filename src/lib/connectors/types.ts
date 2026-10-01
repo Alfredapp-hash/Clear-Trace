@@ -2,12 +2,12 @@ export type ConnectorCategory = "discovery" | "intelligence" | "email" | "webhoo
 
 export type ConnectorType =
   | "serpapi"
-  | "bing_search"
   | "google_cse"
   | "hibp"
   | "openai"
   | "anthropic"
   | "openrouter"
+  | "ollama"
   | "gmail"
   | "smtp"
   | "resend"
@@ -98,6 +98,12 @@ export interface AgentDefaults {
   /** Weekly progress digest email (requires email connector) */
   weeklyDigest?: boolean;
   weeklyDigestEmail?: string;
+  /**
+   * Keep all LLM work on this machine. When true (the default — `undefined` is
+   * treated as true) only a *local* Ollama connector may be used and there is
+   * no fallback to any cloud provider.
+   */
+  llmLocalOnly?: boolean;
 }
 
 export type ConnectorCredentials = Record<string, string>;

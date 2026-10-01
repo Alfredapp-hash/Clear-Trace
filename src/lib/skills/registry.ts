@@ -56,8 +56,8 @@ let cacheMtime = 0;
 
 function resolveSkillsDir(): string {
   const candidates = [
-    path.join(process.cwd(), "skills"),
-    path.join(process.cwd(), "..", "cleartrace_portable_skillpack", "skills"),
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "skills"),
+    path.join(/*turbopackIgnore: true*/ process.cwd(), "..", "cleartrace_portable_skillpack", "skills"),
   ];
   for (const dir of candidates) {
     if (fs.existsSync(dir)) return dir;

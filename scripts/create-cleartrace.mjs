@@ -4,7 +4,7 @@
  *
  * Usage:
  *   node scripts/create-cleartrace.mjs my-privacy-app
- *   npx create-cleartrace my-privacy-app   (via package.json bin)
+ *   npm run create-cleartrace -- my-privacy-app
  */
 import fs from "fs";
 import path from "path";
@@ -17,11 +17,11 @@ const MCP_SERVER = path.join(REPO_ROOT, "agent-builder", "mcp-server");
 
 const targetName = process.argv[2];
 if (!targetName) {
-  console.error("Usage: create-cleartrace <project-directory>");
+  console.error("Usage: node scripts/create-cleartrace.mjs <project-directory>");
   console.error("");
   console.error("Examples:");
-  console.error("  npx create-cleartrace my-privacy-app");
   console.error("  node scripts/create-cleartrace.mjs ../my-privacy-app");
+  console.error("  npm run create-cleartrace -- ../my-privacy-app");
   process.exit(1);
 }
 
@@ -31,9 +31,12 @@ if (fs.existsSync(targetDir)) {
   process.exit(1);
 }
 
+const SKIP_DIRS = new Set(["node_modules", ".git", "dist"]);
+
 function copyDir(src, dest) {
   fs.mkdirSync(dest, { recursive: true });
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
+    if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) continue;
     const srcPath = path.join(src, entry.name);
     const destPath = path.join(dest, entry.name);
     if (entry.isDirectory()) {

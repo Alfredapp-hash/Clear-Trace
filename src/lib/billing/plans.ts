@@ -15,7 +15,8 @@ export type BillingFeature =
   | "progress_reports"
   | "opt_out_dispatch"
   | "deindex_workflow"
-  | "email_digest";
+  | "email_digest"
+  | "ollama_cloud";
 
 export const PLAN_LIMITS: Record<
   PlanId,
@@ -44,6 +45,7 @@ export const PLAN_LIMITS: Record<
       "opt_out_dispatch",
       "deindex_workflow",
       "email_digest",
+      "ollama_cloud",
     ]),
   },
 };

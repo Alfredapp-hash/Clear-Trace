@@ -25,37 +25,91 @@ export function Card({
   return <div className={`${variants[variant]} ${className}`}>{children}</div>;
 }
 
+type ButtonVariant = "primary" | "secondary" | "ghost" | "danger";
+type ButtonSize = "sm" | "md" | "lg";
+
+const BUTTON_VARIANTS: Record<ButtonVariant, string> = {
+  primary:
+    "bg-gradient-to-b from-teal-300 to-teal-500 text-slate-950 shadow-[0_0_24px_-4px_var(--accent-glow)] hover:from-teal-200 hover:to-teal-400 hover:shadow-[0_0_32px_-4px_var(--accent-glow)] disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 disabled:shadow-none",
+  secondary: "ct-glass text-slate-100 hover:border-white/20 hover:bg-white/[0.06]",
+  ghost: "bg-transparent text-slate-300 hover:bg-white/[0.05] hover:text-white",
+  danger:
+    "bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-[0_0_20px_-6px_rgba(251,113,133,0.5)] hover:from-rose-400 hover:to-rose-500",
+};
+
+const BUTTON_SIZES: Record<ButtonSize, string> = {
+  sm: "rounded-lg px-3 py-1.5 text-xs",
+  md: "rounded-xl px-4 py-2.5 text-sm",
+  lg: "rounded-xl px-5 py-3 text-sm",
+};
+
+export function buttonClasses({
+  variant = "primary",
+  size = "md",
+  className = "",
+}: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}) {
+  return `inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]} ${className}`;
+}
+
 export function Button({
   children,
   variant = "primary",
   size = "md",
   className = "",
+  type = "button",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  variant?: "primary" | "secondary" | "ghost" | "danger";
-  size?: "sm" | "md" | "lg";
+  variant?: ButtonVariant;
+  size?: ButtonSize;
 }) {
-  const variants = {
-    primary:
-      "bg-gradient-to-b from-teal-300 to-teal-500 text-slate-950 shadow-[0_0_24px_-4px_var(--accent-glow)] hover:from-teal-200 hover:to-teal-400 hover:shadow-[0_0_32px_-4px_var(--accent-glow)] disabled:from-slate-700 disabled:to-slate-700 disabled:text-slate-500 disabled:shadow-none",
-    secondary:
-      "ct-glass text-slate-100 hover:border-white/20 hover:bg-white/[0.06]",
-    ghost: "bg-transparent text-slate-300 hover:bg-white/[0.05] hover:text-white",
-    danger:
-      "bg-gradient-to-b from-rose-500 to-rose-600 text-white shadow-[0_0_20px_-6px_rgba(251,113,133,0.5)] hover:from-rose-400 hover:to-rose-500",
-  };
-  const sizes = {
-    sm: "rounded-lg px-3 py-1.5 text-xs",
-    md: "rounded-xl px-4 py-2.5 text-sm",
-    lg: "rounded-xl px-5 py-3 text-sm",
-  };
   return (
-    <button
-      className={`inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 disabled:cursor-not-allowed ${variants[variant]} ${sizes[size]} ${className}`}
-      {...props}
-    >
+    <button type={type} className={buttonClasses({ variant, size, className })} {...props}>
       {children}
     </button>
+  );
+}
+
+/**
+ * A link styled as a button. Use instead of nesting <Button> inside <Link>/<a>
+ * (nested interactive elements are invalid HTML and confuse assistive tech).
+ * Internal paths use next/link; anything else renders a plain anchor.
+ */
+export function ButtonLink({
+  href,
+  children,
+  variant = "primary",
+  size = "md",
+  className = "",
+  external = false,
+  download,
+}: {
+  href: string;
+  children: ReactNode;
+  variant?: ButtonVariant;
+  size?: ButtonSize;
+  className?: string;
+  /** Open in a new tab with rel="noopener noreferrer". */
+  external?: boolean;
+  download?: boolean | string;
+}) {
+  const cls = buttonClasses({ variant, size, className });
+  const isInternal = href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/api/");
+  if (isInternal && !external && download === undefined) {
+    return (
+      <Link href={href} className={cls}>
+        {children}
+      </Link>
+    );
+  }
+  return (
+    <a
+      href={href}
+      className={cls}
+      download={download === true ? "" : download || undefined}
+      {...(external ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+    >
+      {children}
+    </a>
   );
 }
 

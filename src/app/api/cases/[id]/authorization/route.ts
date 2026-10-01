@@ -1,9 +1,9 @@
-import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import {
   queueIntakeSkillRun,
   recordAuthorization,
 } from "@/lib/cases/service";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { jsonError, jsonOk } from "@/lib/api";
 
 export async function POST(
@@ -11,11 +11,12 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
-
   const { id } = await params;
-  const body = await request.json();
+  const access = await requireCaseAccess(request, id);
+  if (access instanceof Response) return access;
+  const { session } = access;
+
+  const body = await request.json().catch(() => ({}));
   const {
     authorityBasis,
     userAttestation,
@@ -30,20 +31,20 @@ export async function POST(
     orgAuthRef?: string;
   };
 
-  if (!authorityBasis) {
+  if (!authorityBasis || typeof authorityBasis !== "string") {
     return jsonError("Authority basis is required");
   }
 
   try {
     const authId = await recordAuthorization(session, id, {
       authorityBasis,
-      userAttestation: Boolean(userAttestation),
+      userAttestation: userAttestation === true,
       guardianDocRef,
       poaRef,
       orgAuthRef,
     });
 
-    if (userAttestation) {
+    if (userAttestation === true) {
       await queueIntakeSkillRun(session, id);
     }
 

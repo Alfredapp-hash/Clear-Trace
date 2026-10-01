@@ -27,8 +27,21 @@ export async function createDeindexRequests(
   const ids: string[] = [];
   const now = new Date().toISOString();
 
+  // Dedupe: skip (url, engine) pairs that already have a non-rejected request.
+  const existing = await db.query.deindexRequests.findMany({
+    where: eq(deindexRequests.caseId, caseId),
+  });
+  const existingKeys = new Set(
+    existing
+      .filter((r) => r.status !== "rejected")
+      .map((r) => `${r.sourceUrl}|${r.searchEngine}`),
+  );
+
   for (const exp of exposures.slice(0, 5)) {
     for (const engine of targetEngines) {
+      const key = `${exp.canonicalUrl}|${engine}`;
+      if (existingKeys.has(key)) continue;
+      existingKeys.add(key);
       const draft = buildDeindexDraft(exp.canonicalUrl, engine);
       const id = uuid();
       await db.insert(deindexRequests).values({
@@ -55,6 +68,7 @@ export async function createDeindexRequests(
     eventType: "deindex_requests_created",
     summary: `Created ${ids.length} search deindex request draft(s)`,
   });
+  // (audit logged even when 0 were created so repeated clicks are traceable)
 
   return { created: ids.length, requests: ids };
 }

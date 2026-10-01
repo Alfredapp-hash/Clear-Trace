@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { getSession } from "@/lib/auth/session";
+import { requireOrgAdminSession } from "@/lib/auth/org-role";
 import { ensureDatabase } from "@/lib/db/init";
 import { db } from "@/lib/db";
 import { organizations } from "@/lib/db/schema";
@@ -9,8 +9,9 @@ import { jsonError, jsonOk } from "@/lib/api";
 
 export async function POST() {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const auth = await requireOrgAdminSession();
+  if (auth.error) return auth.error;
+  const { session } = auth;
 
   if (!isBillingConfigured()) {
     return jsonError("Stripe billing is not configured", 503);

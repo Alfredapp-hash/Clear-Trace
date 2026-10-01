@@ -28,6 +28,17 @@ import { buildDraft, buildAllDraftOptions } from "./draft-builder";
 import { getAllTemplates, listTemplateOptions } from "./templates";
 import type { DraftContext, RemedyType } from "./types";
 
+/** Case statuses from which resolving a controller may advance the case status. */
+const CONTROLLER_RESOLUTION_ENTRY_STATUSES = new Set([
+  "confirmed_exposure",
+  "controller_resolution",
+  "candidate_review",
+]);
+
+/** Draft status that may be approved / sent (see messageDrafts.status default). */
+const DRAFT_AWAITING_APPROVAL = "awaiting_user_approval";
+const DRAFT_SENT = "approved_sent";
+
 async function loadDraftContext(
   caseId: string,
   exposureId: string,
@@ -47,9 +58,13 @@ async function loadDraftContext(
         where: eq(remedyRoutes.id, remediation.remedyRouteId),
       })
     : null;
-  const controller = await db.query.controllerTargets.findFirst({
-    where: eq(controllerTargets.exposureId, exposureId),
-  });
+  // Use the controller the remedy was routed to (not "first controller for the
+  // exposure", which can be stale after a re-resolve).
+  const controller = remedy
+    ? await db.query.controllerTargets.findFirst({
+        where: eq(controllerTargets.id, remedy.controllerTargetId),
+      })
+    : null;
 
   if (!privacyCase || !exposure || !remedy || !controller) {
     throw new Error("MISSING_CONTEXT");
@@ -160,10 +175,47 @@ export async function resolveControllerForExposure(
   });
   if (!exposure) throw new Error("EXPOSURE_NOT_FOUND");
 
-  await db
-    .update(privacyCases)
-    .set({ status: "controller_resolution", updatedAt: new Date().toISOString() })
-    .where(eq(privacyCases.id, caseId));
+  // Idempotent: reuse an existing controller/remedy/remediation chain for this exposure.
+  const existingRemediation = await db.query.remediationCases.findFirst({
+    where: and(
+      eq(remediationCases.caseId, caseId),
+      eq(remediationCases.exposureId, exposureId),
+    ),
+  });
+  if (existingRemediation) {
+    const existingRemedy = await db.query.remedyRoutes.findFirst({
+      where: eq(remedyRoutes.id, existingRemediation.remedyRouteId),
+    });
+    const existingController = existingRemedy
+      ? await db.query.controllerTargets.findFirst({
+          where: eq(controllerTargets.id, existingRemedy.controllerTargetId),
+        })
+      : null;
+    if (existingRemedy && existingController) {
+      const ctx = await loadDraftContext(caseId, exposureId, existingRemediation.id);
+      const remedy = routeRemedy(
+        ctx.classification,
+        ctx.controller,
+        existingRemedy.remedyType as RemedyType,
+      );
+      return {
+        controllerId: existingController.id,
+        remedyId: existingRemedy.id,
+        remediationId: existingRemediation.id,
+        classification: ctx.classification,
+        remedy,
+        reused: true,
+      };
+    }
+  }
+
+  const advanceStatus = CONTROLLER_RESOLUTION_ENTRY_STATUSES.has(privacyCase.status);
+  if (advanceStatus) {
+    await db
+      .update(privacyCases)
+      .set({ status: "controller_resolution", updatedAt: new Date().toISOString() })
+      .where(eq(privacyCases.id, caseId));
+  }
 
   const classification = await classifyVerifiedExposure(exposureId, caseId);
   const resolved = await resolveControllerWithPolicy(
@@ -229,10 +281,12 @@ export async function resolveControllerForExposure(
     createdAt: now,
   });
 
-  await db
-    .update(privacyCases)
-    .set({ status: "remedy_selected", updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
+  if (advanceStatus) {
+    await db
+      .update(privacyCases)
+      .set({ status: "remedy_selected", updatedAt: now })
+      .where(eq(privacyCases.id, caseId));
+  }
 
   await logAuditEvent({
     caseId,
@@ -255,6 +309,7 @@ export async function resolveControllerForExposure(
     remediationId,
     classification,
     remedy,
+    reused: false,
   };
 }
 
@@ -316,14 +371,20 @@ export async function createRemovalDraft(
     remediationCaseId,
   );
   let built = buildDraft(ctx, templateId);
-  const polished = await optionalPolishDraft(
-    session.organizationId,
-    built.subject,
-    built.body,
-    "factual",
-  );
-  if (polished.polished) {
-    built = { ...built, subject: polished.subject, body: polished.body };
+  let llmPolished = false;
+  try {
+    const polished = await optionalPolishDraft(
+      session.organizationId,
+      built.subject,
+      built.body,
+      "factual",
+    );
+    if (polished.polished) {
+      built = { ...built, subject: polished.subject, body: polished.body };
+      llmPolished = true;
+    }
+  } catch {
+    // LLM polish is optional — a provider failure must never block draft creation.
   }
 
   const draftId = uuid();
@@ -373,10 +434,11 @@ export async function createRemovalDraft(
       templateId: built.templateId,
       remedyType: built.remedyType,
       reviewItems: built.reviewItems,
+      llmPolished,
     },
   });
 
-  return { draftId, ...built };
+  return { draftId, ...built, llmPolished };
 }
 
 export async function createFollowUpDraft(
@@ -434,6 +496,9 @@ export async function createAllDraftVariants(
   caseId: string,
   remediationCaseId: string,
 ) {
+  const privacyCase = await getCaseForUser(caseId, session);
+  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+
   const remediation = await db.query.remediationCases.findFirst({
     where: and(
       eq(remediationCases.id, remediationCaseId),
@@ -445,7 +510,7 @@ export async function createAllDraftVariants(
   const remedy = await db.query.remedyRoutes.findFirst({
     where: eq(remedyRoutes.id, remediation.remedyRouteId),
   });
-  if (!remedy) throw new Error("REMEDIY_NOT_FOUND");
+  if (!remedy) throw new Error("REMEDY_NOT_FOUND");
 
   const ctx = await loadDraftContext(
     caseId,
@@ -519,41 +584,39 @@ export async function updateDraft(
   return { version: newVersion };
 }
 
-export async function approveAndRecordSent(
+/**
+ * Record an outbound message for a draft that has ALREADY been claimed as sent
+ * (draft.status === approved_sent). Idempotent: at most one outbound row per draft.
+ */
+async function recordOutbound(
   session: SessionPayload,
   caseId: string,
-  draftId: string,
+  draft: { id: string; remediationCaseId: string; templateId: string | null },
   sentVia: "manual_copy" | "mailto" | "connected_email",
-  notes?: string,
-) {
-  const privacyCase = await getCaseForUser(caseId, session);
-  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
-
-  const draft = await db.query.messageDrafts.findFirst({
-    where: and(eq(messageDrafts.id, draftId), eq(messageDrafts.caseId, caseId)),
+  notes: string | null,
+  now: string,
+): Promise<{ recorded: boolean }> {
+  const existing = await db.query.outboundMessages.findFirst({
+    where: eq(outboundMessages.draftId, draft.id),
   });
-  if (!draft) throw new Error("DRAFT_NOT_FOUND");
-
-  const now = new Date().toISOString();
-
-  await db
-    .update(messageDrafts)
-    .set({ status: "approved_sent", updatedAt: now })
-    .where(eq(messageDrafts.id, draftId));
+  if (existing) return { recorded: false };
 
   await db.insert(outboundMessages).values({
     id: uuid(),
     caseId,
-    draftId,
+    draftId: draft.id,
     sentVia,
     sentAt: now,
-    notes: notes ?? null,
+    notes,
     createdAt: now,
   });
 
+  const remediation = await db.query.remediationCases.findFirst({
+    where: eq(remediationCases.id, draft.remediationCaseId),
+  });
   await db
     .update(remediationCases)
-    .set({ status: "sent", messageCount: 1 })
+    .set({ status: "sent", messageCount: (remediation?.messageCount ?? 0) + 1 })
     .where(eq(remediationCases.id, draft.remediationCaseId));
 
   await db
@@ -567,19 +630,81 @@ export async function approveAndRecordSent(
     userId: session.userId,
     eventType: "message_sent_recorded",
     summary: `Outbound message recorded via ${sentVia}`,
-    detail: { draftId, sentVia, templateId: draft.templateId },
+    detail: { draftId: draft.id, sentVia, templateId: draft.templateId },
   });
 
-  void import("@/lib/enterprise/sla-service").then(({ createSlaDeadlinesForSentMessage }) =>
-    createSlaDeadlinesForSentMessage({
-      organizationId: session.organizationId,
-      caseId,
-      remediationCaseId: draft.remediationCaseId,
-      sentAt: now,
-    }),
-  );
+  void import("@/lib/enterprise/sla-service")
+    .then(({ createSlaDeadlinesForSentMessage }) =>
+      createSlaDeadlinesForSentMessage({
+        organizationId: session.organizationId,
+        caseId,
+        remediationCaseId: draft.remediationCaseId,
+        sentAt: now,
+      }),
+    )
+    .catch((error: unknown) => {
+      console.error(
+        "[remediation] SLA deadline creation failed:",
+        error instanceof Error ? error.message : error,
+      );
+    });
 
-  return { ok: true };
+  return { recorded: true };
+}
+
+async function loadSendableDraft(caseId: string, draftId: string) {
+  const draft = await db.query.messageDrafts.findFirst({
+    where: and(eq(messageDrafts.id, draftId), eq(messageDrafts.caseId, caseId)),
+  });
+  if (!draft) throw new Error("DRAFT_NOT_FOUND");
+  const remediation = await db.query.remediationCases.findFirst({
+    where: and(
+      eq(remediationCases.id, draft.remediationCaseId),
+      eq(remediationCases.caseId, caseId),
+    ),
+  });
+  if (!remediation) throw new Error("REMEDIATION_NOT_FOUND");
+  return { draft, remediation };
+}
+
+/** Atomically move a draft awaiting approval → approved_sent. Returns false if already claimed. */
+function claimDraftForSend(draftId: string, now: string): boolean {
+  const res = db
+    .update(messageDrafts)
+    .set({ status: DRAFT_SENT, updatedAt: now })
+    .where(and(eq(messageDrafts.id, draftId), eq(messageDrafts.status, DRAFT_AWAITING_APPROVAL)))
+    .run();
+  return res.changes === 1;
+}
+
+export async function approveAndRecordSent(
+  session: SessionPayload,
+  caseId: string,
+  draftId: string,
+  sentVia: "manual_copy" | "mailto" | "connected_email",
+  notes?: string,
+) {
+  const privacyCase = await getCaseForUser(caseId, session);
+  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+
+  const { draft, remediation } = await loadSendableDraft(caseId, draftId);
+  const now = new Date().toISOString();
+
+  if (draft.status === DRAFT_SENT) {
+    // Idempotent re-record: make sure the outbound row exists, never duplicate it.
+    const { recorded } = await recordOutbound(session, caseId, draft, sentVia, notes ?? null, now);
+    return { ok: true, alreadyRecorded: !recorded };
+  }
+  if (draft.status !== DRAFT_AWAITING_APPROVAL) throw new Error("DRAFT_NOT_APPROVABLE");
+  if (remediation.doNotContact) throw new Error("DO_NOT_CONTACT");
+
+  if (!claimDraftForSend(draftId, now)) {
+    // Lost a race with a concurrent approve/send — the winner records the outbound row.
+    return { ok: true, alreadyRecorded: true };
+  }
+
+  await recordOutbound(session, caseId, draft, sentVia, notes ?? null, now);
+  return { ok: true, alreadyRecorded: false };
 }
 
 export async function pushDraftToGmail(
@@ -613,25 +738,46 @@ export async function pushDraftToGmail(
   return result;
 }
 
+/**
+ * Send a draft through the org's email connector. Requires the draft to be awaiting
+ * approval and the remediation not flagged doNotContact. The draft is claimed
+ * atomically before sending (so a double click cannot send twice) and the outbound
+ * message is ALWAYS recorded after a successful send.
+ *
+ * @param _recordAfterSend deprecated — recording is now unconditional.
+ */
 export async function sendDraftViaConnector(
   session: SessionPayload,
   caseId: string,
   draftId: string,
-  recordAfterSend = false,
+  _recordAfterSend?: boolean,
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
 
-  const draft = await db.query.messageDrafts.findFirst({
-    where: and(eq(messageDrafts.id, draftId), eq(messageDrafts.caseId, caseId)),
-  });
-  if (!draft) throw new Error("DRAFT_NOT_FOUND");
+  const { draft, remediation } = await loadSendableDraft(caseId, draftId);
+  if (draft.status === DRAFT_SENT) throw new Error("DRAFT_ALREADY_SENT");
+  if (draft.status !== DRAFT_AWAITING_APPROVAL) throw new Error("DRAFT_NOT_APPROVABLE");
+  if (remediation.doNotContact) throw new Error("DO_NOT_CONTACT");
 
-  const sent = await sendRemovalEmail(session.organizationId, {
-    to: draft.recipient,
-    subject: draft.subject,
-    body: draft.body,
-  });
+  const now = new Date().toISOString();
+  if (!claimDraftForSend(draftId, now)) throw new Error("DRAFT_ALREADY_SENT");
+
+  let sent: Awaited<ReturnType<typeof sendRemovalEmail>>;
+  try {
+    sent = await sendRemovalEmail(session.organizationId, {
+      to: draft.recipient,
+      subject: draft.subject,
+      body: draft.body,
+    });
+  } catch (error) {
+    // Release the claim so the user can retry after fixing the connector.
+    await db
+      .update(messageDrafts)
+      .set({ status: DRAFT_AWAITING_APPROVAL, updatedAt: new Date().toISOString() })
+      .where(and(eq(messageDrafts.id, draftId), eq(messageDrafts.status, DRAFT_SENT)));
+    throw error;
+  }
 
   await logAuditEvent({
     caseId,
@@ -642,9 +788,14 @@ export async function sendDraftViaConnector(
     detail: { draftId, provider: sent.provider, messageId: sent.messageId },
   });
 
-  if (recordAfterSend) {
-    await approveAndRecordSent(session, caseId, draftId, "connected_email", sent.messageId);
-  }
+  await recordOutbound(
+    session,
+    caseId,
+    draft,
+    "connected_email",
+    sent.messageId ?? null,
+    new Date().toISOString(),
+  );
 
   return sent;
 }

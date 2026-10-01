@@ -1,23 +1,25 @@
 {
   "name": "cleartrace",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
   "bin": {
     "create-cleartrace": "./scripts/create-cleartrace.mjs"
   },
   "scripts": {
-    "predev": "node scripts/sync-skills.js",
-    "prebuild": "node scripts/sync-skills.js",
+    "predev": "node scripts/sync-skills.mjs",
+    "prebuild": "node scripts/sync-skills.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
     "db:push": "drizzle-kit push",
     "create-cleartrace": "node scripts/create-cleartrace.mjs",
-    "materialize-kits": "tsx scripts/materialize-kits.ts"
+    "materialize-kits": "tsx scripts/materialize-kits.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
@@ -51,5 +53,8 @@
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^4.1.9"
+  },
+  "engines": {
+    "node": ">=22"
   }
 }

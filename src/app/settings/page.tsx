@@ -9,37 +9,62 @@ import { ConnectorSettings } from "@/components/ConnectorSettings";
 import { EnterpriseSettings } from "@/components/EnterpriseSettings";
 import { FamilySettings } from "@/components/FamilySettings";
 import { Button, Card, Input, Label, PageHeader, SectionTitle } from "@/components/ui";
+import { callApi } from "@/lib/ui/call-api";
 
 export default function SettingsPage() {
   const [retentionDays, setRetentionDays] = useState(365);
   const [rateLimit, setRateLimit] = useState(100);
-  const [saved, setSaved] = useState(false);
+  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
+  const [saveError, setSaveError] = useState("");
+  const [loadError, setLoadError] = useState("");
   const [userName, setUserName] = useState("");
   const [orgName, setOrgName] = useState("");
 
   useEffect(() => {
-    fetch("/api/auth/me")
-      .then((r) => r.json())
-      .then((d) => {
-        setUserName(d.user?.name ?? "");
-        setOrgName(d.user?.organizationName ?? "");
-      });
-    fetch("/api/settings")
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.retentionDays) setRetentionDays(d.retentionDays);
-        if (d.rateLimitPerHour) setRateLimit(d.rateLimitPerHour);
-      });
+    const controller = new AbortController();
+    const { signal } = controller;
+    callApi<{ user?: { name?: string; organizationName?: string } }>("/api/auth/me", {
+      signal,
+    }).then((res) => {
+      if (signal.aborted || !res.ok) return;
+      setUserName(res.data.user?.name ?? "");
+      setOrgName(res.data.user?.organizationName ?? "");
+    });
+    callApi<{ retentionDays?: number; rateLimitPerHour?: number }>("/api/settings", {
+      signal,
+      errorMessage: "Could not load organization settings",
+    }).then((res) => {
+      if (signal.aborted) return;
+      if (!res.ok) {
+        setLoadError(res.error);
+        return;
+      }
+      if (res.data.retentionDays) setRetentionDays(res.data.retentionDays);
+      if (res.data.rateLimitPerHour) setRateLimit(res.data.rateLimitPerHour);
+    });
+    return () => controller.abort();
   }, []);
 
+  useEffect(() => {
+    if (saveState !== "saved") return;
+    const timer = setTimeout(() => setSaveState("idle"), 2000);
+    return () => clearTimeout(timer);
+  }, [saveState]);
+
   async function saveOrgSettings() {
-    await fetch("/api/settings", {
+    setSaveState("saving");
+    setSaveError("");
+    const res = await callApi("/api/settings", {
       method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ retentionDays, rateLimitPerHour: rateLimit }),
+      body: { retentionDays, rateLimitPerHour: rateLimit },
+      errorMessage: "Could not save organization settings",
     });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    if (!res.ok) {
+      setSaveError(res.error);
+      setSaveState("idle");
+      return;
+    }
+    setSaveState("saved");
   }
 
   return (
@@ -70,7 +95,7 @@ export default function SettingsPage() {
               type="number"
               min={30}
               value={retentionDays}
-              onChange={(e) => setRetentionDays(Number(e.target.value))}
+              onChange={(e) => setRetentionDays(e.target.valueAsNumber || 0)}
             />
           </div>
           <div>
@@ -81,10 +106,26 @@ export default function SettingsPage() {
               min={10}
               max={1000}
               value={rateLimit}
-              onChange={(e) => setRateLimit(Number(e.target.value))}
+              onChange={(e) => setRateLimit(e.target.valueAsNumber || 0)}
             />
           </div>
-          <Button onClick={saveOrgSettings}>{saved ? "Saved ✓" : "Save organization settings"}</Button>
+          {loadError && (
+            <p role="alert" className="text-sm text-rose-300">
+              {loadError}
+            </p>
+          )}
+          {saveError && (
+            <p role="alert" className="text-sm text-rose-300">
+              {saveError}
+            </p>
+          )}
+          <Button onClick={saveOrgSettings} disabled={saveState === "saving"}>
+            {saveState === "saving"
+              ? "Saving…"
+              : saveState === "saved"
+                ? "Saved ✓"
+                : "Save organization settings"}
+          </Button>
         </div>
       </Card>
 

@@ -1,4 +1,4 @@
-import { resolveAuth, requireScope } from "@/lib/auth/resolve-auth";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { requireBillingFeature } from "@/lib/billing/service";
 import { ensureDatabase } from "@/lib/db/init";
 import {
@@ -13,15 +13,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const auth = await resolveAuth(request);
-  if (!auth) return jsonError("Not authenticated", 401);
-
   const { id } = await params;
-  const organizationId =
-    auth.type === "session" ? auth.session.organizationId : auth.apiKey.organizationId;
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "sla:read",
+  });
+  if (access instanceof Response) return access;
+  const organizationId = access.session.organizationId;
 
   try {
-    requireScope(auth, "sla:read");
     await requireBillingFeature(organizationId, "sla_tracking");
     await refreshMissedSlaDeadlines(organizationId);
     const summary = await getCaseSlaSummary(id, organizationId);
@@ -32,7 +32,6 @@ export async function GET(
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("SLA tracking requires Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "API_KEY_SCOPE_DENIED") return jsonError("API key missing sla:read scope", 403);
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);
   }
@@ -43,24 +42,28 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await resolveAuth(request);
-  if (!session || session.type !== "session") {
-    return jsonError("Session required for SLA updates", 401);
-  }
+  const { id } = await params;
+  const access = await requireCaseAccess(request, id);
+  if (access instanceof Response) return access;
+  const { session } = access;
 
-  const { id: _caseId } = await params;
   const body = await request.json().catch(() => ({}));
-  const { deadlineId, notes } = body as { deadlineId?: string; notes?: string };
+  const { deadlineId, notes } = body as { deadlineId?: unknown; notes?: unknown };
 
-  if (!deadlineId) return jsonError("deadlineId is required");
+  if (typeof deadlineId !== "string" || !deadlineId) return jsonError("deadlineId is required");
 
   try {
-    await requireBillingFeature(session.session.organizationId, "sla_tracking");
-    await markSlaDeadlineMet(deadlineId, session.session.organizationId, notes);
+    await requireBillingFeature(session.organizationId, "sla_tracking");
+    await markSlaDeadlineMet(
+      deadlineId,
+      session.organizationId,
+      typeof notes === "string" ? notes : undefined,
+      id,
+    );
     return jsonOk({ ok: true });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
-    if (msg === "SLA_NOT_FOUND") return jsonError(msg, 404);
+    if (msg === "SLA_NOT_FOUND") return jsonError("SLA deadline not found", 404);
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("SLA tracking requires Pro. Upgrade on Billing.", 402);
     }

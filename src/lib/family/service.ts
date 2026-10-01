@@ -4,6 +4,7 @@ import { db } from "@/lib/db";
 import { familyMembers } from "@/lib/db/schema";
 import { getBillingStatus } from "@/lib/billing/service";
 import { FAMILY_SEAT_LIMITS } from "@/lib/billing/plans";
+import { deleteFamilyMemberSafely } from "@/lib/cases/lifecycle";
 
 export async function getFamilySeatLimit(organizationId: string): Promise<number> {
   const status = await getBillingStatus(organizationId);
@@ -14,6 +15,17 @@ export async function listFamilyMembers(organizationId: string) {
   return db.query.familyMembers.findMany({
     where: eq(familyMembers.organizationId, organizationId),
     orderBy: [desc(familyMembers.createdAt)],
+  });
+}
+
+/** Returns the family member only if it belongs to the given organization. */
+export async function getFamilyMemberForOrg(organizationId: string, memberId: string) {
+  if (!memberId) return undefined;
+  return db.query.familyMembers.findFirst({
+    where: and(
+      eq(familyMembers.id, memberId),
+      eq(familyMembers.organizationId, organizationId),
+    ),
   });
 }
 
@@ -49,12 +61,6 @@ export async function createFamilyMember(
 }
 
 export async function deleteFamilyMember(organizationId: string, memberId: string) {
-  const row = await db.query.familyMembers.findFirst({
-    where: and(
-      eq(familyMembers.id, memberId),
-      eq(familyMembers.organizationId, organizationId),
-    ),
-  });
-  if (!row) throw new Error("NOT_FOUND");
-  await db.delete(familyMembers).where(eq(familyMembers.id, memberId));
+  // Detach linked cases first; family_member_id has no ON DELETE action.
+  if (!deleteFamilyMemberSafely(organizationId, memberId)) throw new Error("NOT_FOUND");
 }

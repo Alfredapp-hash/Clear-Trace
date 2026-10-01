@@ -457,6 +457,11 @@ const TABLES = [
   )`,
 ];
 
+/** Only "column already exists" is expected on an up-to-date DB; anything else is a real failure. */
+export function isIgnorableMigrationError(err: unknown): boolean {
+  return err instanceof Error && /duplicate column/i.test(err.message);
+}
+
 function migrateColumns() {
   const migrations = [
     "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
@@ -485,13 +490,84 @@ function migrateColumns() {
     "ALTER TABLE privacy_cases ADD COLUMN family_member_id TEXT REFERENCES family_members(id)",
     "ALTER TABLE deindex_requests ADD COLUMN resolved_at TEXT",
     "ALTER TABLE deindex_requests ADD COLUMN notes TEXT",
+    "ALTER TABLE organizations ADD COLUMN last_digest_sent_at TEXT",
+    "ALTER TABLE audit_events ADD COLUMN chain_key TEXT",
   ];
   for (const sql of migrations) {
     try {
       sqlite.exec(sql);
-    } catch {
-      // column already exists
+    } catch (err) {
+      if (isIgnorableMigrationError(err)) continue;
+      throw err;
     }
+  }
+}
+
+/**
+ * Secondary indexes. Every FK column that erasure (lifecycle.deleteCaseData) and the
+ * dashboards filter on is indexed, plus the hot audit / monitoring / rate-limit lookups.
+ */
+export const INDEXES = [
+  // audit log: per-case and per-org timelines, hash-chain tail lookup
+  "CREATE INDEX IF NOT EXISTS idx_audit_events_case_created ON audit_events(case_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_audit_events_org_created ON audit_events(organization_id, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_audit_events_chain_key ON audit_events(chain_key)",
+  // case_id FKs
+  "CREATE INDEX IF NOT EXISTS idx_authorization_records_case ON authorization_records(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_identity_profiles_case ON identity_profiles(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_identity_claims_case ON identity_claims(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_identity_claims_profile ON identity_claims(profile_id)",
+  "CREATE INDEX IF NOT EXISTS idx_scan_runs_case ON scan_runs(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_search_queries_case ON search_queries(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_search_queries_scan_run ON search_queries(scan_run_id)",
+  "CREATE INDEX IF NOT EXISTS idx_exposure_candidates_case ON exposure_candidates(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_exposure_candidates_scan_run ON exposure_candidates(scan_run_id)",
+  "CREATE INDEX IF NOT EXISTS idx_verified_exposures_case ON verified_exposures(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_verified_exposures_candidate ON verified_exposures(candidate_id)",
+  "CREATE INDEX IF NOT EXISTS idx_content_evidence_case ON content_evidence(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_controller_targets_case ON controller_targets(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_controller_targets_exposure ON controller_targets(exposure_id)",
+  "CREATE INDEX IF NOT EXISTS idx_remedy_routes_case ON remedy_routes(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_remedy_routes_exposure ON remedy_routes(exposure_id)",
+  "CREATE INDEX IF NOT EXISTS idx_remediation_cases_case ON remediation_cases(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_remediation_cases_exposure ON remediation_cases(exposure_id)",
+  "CREATE INDEX IF NOT EXISTS idx_message_drafts_case ON message_drafts(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_message_drafts_remediation_case ON message_drafts(remediation_case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_message_versions_draft ON message_versions(draft_id)",
+  "CREATE INDEX IF NOT EXISTS idx_outbound_messages_case ON outbound_messages(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_outbound_messages_draft ON outbound_messages(draft_id)",
+  "CREATE INDEX IF NOT EXISTS idx_verification_checks_case ON verification_checks(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_verification_checks_exposure ON verification_checks(exposure_id)",
+  "CREATE INDEX IF NOT EXISTS idx_monitoring_rules_case ON monitoring_rules(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_monitoring_rules_enabled_next ON monitoring_rules(enabled, next_check_at)",
+  "CREATE INDEX IF NOT EXISTS idx_follow_up_rules_remediation_case ON follow_up_rules(remediation_case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_agent_runs_case ON agent_runs(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_agent_tasks_run ON agent_tasks(run_id)",
+  "CREATE INDEX IF NOT EXISTS idx_remediation_batches_case ON remediation_batches(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_remediation_batch_items_batch ON remediation_batch_items(batch_id)",
+  "CREATE INDEX IF NOT EXISTS idx_sla_deadlines_case ON sla_deadlines(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_sla_deadlines_remediation_case ON sla_deadlines(remediation_case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_sla_deadlines_org_status ON sla_deadlines(organization_id, status)",
+  "CREATE INDEX IF NOT EXISTS idx_broker_sweep_runs_case ON broker_sweep_runs(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_broker_sweep_matches_run ON broker_sweep_matches(sweep_run_id)",
+  "CREATE INDEX IF NOT EXISTS idx_breach_scan_runs_case ON breach_scan_runs(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_breach_findings_case ON breach_findings(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_breach_findings_scan_run ON breach_findings(scan_run_id)",
+  "CREATE INDEX IF NOT EXISTS idx_opt_out_dispatches_case ON opt_out_dispatches(case_id)",
+  "CREATE INDEX IF NOT EXISTS idx_deindex_requests_case ON deindex_requests(case_id)",
+  // tenancy / misc
+  "CREATE INDEX IF NOT EXISTS idx_privacy_cases_owner ON privacy_cases(owner_user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_privacy_cases_org_status ON privacy_cases(organization_id, status)",
+  "CREATE INDEX IF NOT EXISTS idx_privacy_cases_family_member ON privacy_cases(family_member_id)",
+  "CREATE INDEX IF NOT EXISTS idx_memberships_org ON memberships(organization_id)",
+  "CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id)",
+  "CREATE INDEX IF NOT EXISTS idx_rate_limit_events_key_created ON rate_limit_events(key, created_at)",
+  "CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id)",
+];
+
+function createIndexes() {
+  for (const statement of INDEXES) {
+    sqlite.exec(statement);
   }
 }
 
@@ -503,5 +579,6 @@ export function ensureDatabase(): void {
     sqlite.exec(statement);
   }
   migrateColumns();
+  createIndexes();
   initialized = true;
 }

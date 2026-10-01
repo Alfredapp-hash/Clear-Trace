@@ -8,8 +8,14 @@ export async function optionalPolishDraft(
   body: string,
   tone: DraftTone,
 ): Promise<{ subject: string; body: string; polished: boolean }> {
-  const helper = getConnectionHelper(organizationId);
-  const result = await helper.polishDraft(subject, body, tone);
+  let result: { subject: string; body: string; polished: boolean };
+  try {
+    const helper = getConnectionHelper(organizationId);
+    result = await helper.polishDraft(subject, body, tone);
+  } catch {
+    // A provider problem must never block draft creation.
+    return { subject, body, polished: false };
+  }
   if (!result.polished) return { subject, body, polished: false };
 
   const full = `${result.subject}\n${result.body}`;

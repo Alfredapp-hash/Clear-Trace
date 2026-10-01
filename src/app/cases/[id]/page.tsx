@@ -61,8 +61,6 @@ export default async function CaseDetailPage({
     isOptionalEmailSendEnabled(session.organizationId),
   ]);
 
-  const scanScopes = JSON.parse(privacyCase.scanScopes) as string[];
-
   return (
     <AppShell userName={session.name} orgName={session.organizationName}>
       <Link
@@ -75,9 +73,9 @@ export default async function CaseDetailPage({
       <div className="mt-6 flex flex-wrap items-start justify-between gap-6 border-b border-white/[0.06] pb-8">
         <div className="max-w-2xl">
           <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-teal-400/80">
-            {privacyCase.caseType.replaceAll("_", " ")} · {privacyCase.targetRelationship}
+            {privacyCase.caseType.replaceAll("_", " ")} · {privacyCase.targetRelationship.replaceAll("_", " ")}
           </p>
-          <h1 className="text-3xl font-semibold tracking-tight text-white md:text-4xl">
+          <h1 className="text-3xl font-semibold tracking-tight text-white [overflow-wrap:anywhere] md:text-4xl">
             {privacyCase.title}
           </h1>
           <p className="mt-3 text-sm leading-relaxed text-slate-400">
@@ -91,13 +89,14 @@ export default async function CaseDetailPage({
         </div>
         <div className="flex flex-col items-end gap-3">
           <StatusBadge status={privacyCase.status} />
-          <CaseActions caseId={id} />
+          <CaseActions caseId={id} status={privacyCase.status} />
         </div>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-1">
           <GuidePanel
+            key={privacyCase.status}
             caseId={id}
             initialSkillId={getRecommendedSkill(privacyCase.status)}
           />
@@ -182,6 +181,9 @@ export default async function CaseDetailPage({
             initialRemedies={remediation.remedies}
             initialDrafts={remediation.drafts}
             initialChecks={verification.checks}
+            initialSimulateAllowed={
+              (verification as { simulateAllowed?: unknown }).simulateAllowed === true
+            }
             emailAutoSendEnabled={emailAutoSendEnabled}
           />
 

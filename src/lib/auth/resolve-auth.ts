@@ -5,6 +5,7 @@ import {
   apiKeyHasScope,
   type ApiKeyAuth,
 } from "@/lib/enterprise/api-keys";
+import { getCaseForUser } from "@/lib/cases/service";
 
 export type AuthContext =
   | { type: "session"; session: SessionPayload }
@@ -27,7 +28,12 @@ export function authOrganizationId(auth: AuthContext): string {
 }
 
 export function authUserId(auth: AuthContext): string | undefined {
-  return auth.type === "session" ? auth.session.userId : undefined;
+  return auth.type === "session" ? auth.session.userId : (auth.apiKey.actingUserId ?? undefined);
+}
+
+/** Stable identifier for per-principal rate limiting. */
+export function authRateKey(auth: AuthContext): string {
+  return auth.type === "session" ? auth.session.userId : `api_key:${auth.apiKey.apiKeyId}`;
 }
 
 export function requireScope(auth: AuthContext, scope: string): void {
@@ -37,16 +43,35 @@ export function requireScope(auth: AuthContext, scope: string): void {
   }
 }
 
+/**
+ * Builds a SessionPayload-shaped principal for service functions.
+ *
+ * For API keys, `userId` is the key's creator (or the org's first member for legacy keys)
+ * so that FK-bearing writes (case owner, audit user) reference a real user, and `apiKeyId`
+ * marks the principal so `getCaseForUser` scopes case access by organization instead of owner.
+ */
 export function toSessionLike(auth: AuthContext): SessionPayload {
   if (auth.type === "session") return auth.session;
+  if (!auth.apiKey.actingUserId) throw new Error("API_KEY_NO_ACTING_USER");
   return {
-    userId: `api_key:${auth.apiKey.apiKeyId}`,
+    userId: auth.apiKey.actingUserId,
     email: "api-key@cleartrace.local",
     name: "API Key",
     organizationId: auth.apiKey.organizationId,
     organizationName: auth.apiKey.organizationName,
     role: "api_key",
+    apiKeyId: auth.apiKey.apiKeyId,
   };
+}
+
+/**
+ * Case lookup for either principal type:
+ *  - session: case must be in the user's org AND owned by the user
+ *  - api key: case must be in the key's org
+ */
+export async function getCaseForAuth(caseId: string, auth: AuthContext) {
+  if (auth.type === "api_key" && !auth.apiKey.actingUserId) return undefined;
+  return getCaseForUser(caseId, toSessionLike(auth));
 }
 
 export function isApiKeyRequest(request: NextRequest): boolean {

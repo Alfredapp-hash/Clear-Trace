@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { Badge, Button, Card, Input, Label, SectionTitle } from "./ui";
+import { callApi, type ApiResult } from "@/lib/ui/call-api";
 
 interface FamilyMember {
   id: string;
@@ -9,6 +10,8 @@ interface FamilyMember {
   relationship: string;
   notes: string | null;
 }
+
+type FamilyResponse = { members?: FamilyMember[]; seatLimit?: number };
 
 const RELATIONSHIPS = [
   { id: "spouse", label: "Spouse / partner" },
@@ -28,42 +31,81 @@ export function FamilySettings() {
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/settings/family-members");
-    const data = await res.json();
-    setMembers(data.members ?? []);
-    setSeatLimit(data.seatLimit ?? 0);
-  }, []);
+  function applyLoaded(res: ApiResult<FamilyResponse>) {
+    if (res.ok) {
+      setMembers(res.data.members ?? []);
+      setSeatLimit(res.data.seatLimit ?? 0);
+    } else {
+      setError(res.error);
+    }
+  }
+
+  async function refresh() {
+    applyLoaded(
+      await callApi<FamilyResponse>("/api/settings/family-members", {
+        errorMessage: "Could not load household members",
+      }),
+    );
+  }
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    const controller = new AbortController();
+    callApi<FamilyResponse>("/api/settings/family-members", {
+      signal: controller.signal,
+      errorMessage: "Could not load household members",
+    }).then((res) => {
+      if (controller.signal.aborted) return;
+      if (res.ok) {
+        setMembers(res.data.members ?? []);
+        setSeatLimit(res.data.seatLimit ?? 0);
+      } else {
+        setError(res.error);
+      }
+    });
+    return () => controller.abort();
+  }, []);
 
   async function addMember() {
     setLoading("add");
     setError("");
-    const res = await fetch("/api/settings/family-members", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ displayName, relationship, notes }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Failed to add member");
-    } else {
+    setMessage("");
+    try {
+      const res = await callApi("/api/settings/family-members", {
+        method: "POST",
+        body: { displayName, relationship, notes },
+        errorMessage: "Failed to add member",
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
       setDisplayName("");
       setNotes("");
       setMessage("Family member added");
       await refresh();
+    } finally {
+      setLoading("");
     }
-    setLoading("");
   }
 
   async function removeMember(id: string) {
+    if (!confirm("Remove this household member?")) return;
     setLoading(`remove-${id}`);
-    await fetch(`/api/settings/family-members?id=${id}`, { method: "DELETE" });
-    await refresh();
-    setLoading("");
+    setError("");
+    setMessage("");
+    try {
+      const res = await callApi(`/api/settings/family-members?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        errorMessage: "Failed to remove member",
+      });
+      if (!res.ok) {
+        setError(res.error);
+        return;
+      }
+      await refresh();
+    } finally {
+      setLoading("");
+    }
   }
 
   return (
@@ -82,7 +124,11 @@ export function FamilySettings() {
         </Badge>
       </div>
 
-      {error && <p className="mt-3 text-sm text-rose-400">{error}</p>}
+      {error && (
+        <p role="alert" className="mt-3 text-sm text-rose-400">
+          {error}
+        </p>
+      )}
       {message && <p className="mt-3 text-sm text-teal-400">{message}</p>}
 
       {members.length > 0 && (

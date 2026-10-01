@@ -1,31 +1,64 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useMemo, useSyncExternalStore } from "react";
 import { Badge, Card, SectionTitle } from "./ui";
 import {
   BUILDER_CHECKLIST,
   CHECKLIST_STORAGE_KEY,
 } from "@/lib/guide/agent-builder-checklist";
 
-export function AgentBuilderChecklist() {
-  const [done, setDone] = useState<Record<string, boolean>>({});
+// Checklist progress lives in localStorage; subscribe to it as an external
+// store so we never setState synchronously inside an effect and SSR renders
+// an empty checklist without hydration mismatches.
+const listeners = new Set<() => void>();
 
-  useEffect(() => {
-    try {
-      const raw = localStorage.getItem(CHECKLIST_STORAGE_KEY);
-      if (raw) setDone(JSON.parse(raw) as Record<string, boolean>);
-    } catch {
-      /* ignore */
-    }
-  }, []);
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  const onStorage = (e: StorageEvent) => {
+    if (e.key === CHECKLIST_STORAGE_KEY) listener();
+  };
+  window.addEventListener("storage", onStorage);
+  return () => {
+    listeners.delete(listener);
+    window.removeEventListener("storage", onStorage);
+  };
+}
 
-  const persist = useCallback((next: Record<string, boolean>) => {
-    setDone(next);
+function readRaw(): string | null {
+  try {
+    return localStorage.getItem(CHECKLIST_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function writeDone(next: Record<string, boolean>) {
+  try {
     localStorage.setItem(CHECKLIST_STORAGE_KEY, JSON.stringify(next));
-  }, []);
+  } catch {
+    /* storage unavailable (private mode / quota) — progress just won't persist */
+  }
+  listeners.forEach((l) => l());
+}
+
+function parseDone(raw: string | null): Record<string, boolean> {
+  if (!raw) return {};
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? (parsed as Record<string, boolean>)
+      : {};
+  } catch {
+    return {};
+  }
+}
+
+export function AgentBuilderChecklist() {
+  const raw = useSyncExternalStore(subscribe, readRaw, () => null);
+  const done = useMemo(() => parseDone(raw), [raw]);
 
   function toggle(id: string) {
-    persist({ ...done, [id]: !done[id] });
+    writeDone({ ...done, [id]: !done[id] });
   }
 
   const completed = BUILDER_CHECKLIST.filter((i) => done[i.id]).length;
@@ -59,8 +92,12 @@ export function AgentBuilderChecklist() {
                       : "border-white/[0.06] bg-white/[0.02]"
                   }`}
                 >
-                  <label className="flex cursor-pointer items-start gap-3">
+                  <label
+                    htmlFor={`checklist-${item.id}`}
+                    className="flex cursor-pointer items-start gap-3"
+                  >
                     <input
+                      id={`checklist-${item.id}`}
                       type="checkbox"
                       className="mt-1"
                       checked={!!done[item.id]}
@@ -68,35 +105,34 @@ export function AgentBuilderChecklist() {
                     />
                     <span className="min-w-0 flex-1">
                       <span
-                        className={`text-sm font-medium ${
+                        className={`block text-sm font-medium ${
                           done[item.id] ? "text-emerald-200/90 line-through" : "text-slate-200"
                         }`}
                       >
                         {item.label}
                       </span>
-                      <p className="mt-1 text-xs leading-relaxed text-slate-500">
+                      <span className="mt-1 block text-xs leading-relaxed text-slate-500">
                         {item.description}
-                      </p>
-                      {(item.docPath || item.externalUrl) && (
-                        <p className="mt-1.5 text-[11px] text-slate-600">
-                          {item.docPath && (
-                            <span className="font-mono text-slate-500">{item.docPath}</span>
-                          )}
-                          {item.externalUrl && (
-                            <a
-                              href={item.externalUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="ml-2 text-teal-400 hover:underline"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              Open link →
-                            </a>
-                          )}
-                        </p>
-                      )}
+                      </span>
                     </span>
                   </label>
+                  {(item.docPath || item.externalUrl) && (
+                    <p className="mt-1.5 pl-7 text-[11px] text-slate-600 [overflow-wrap:anywhere]">
+                      {item.docPath && (
+                        <span className="font-mono text-slate-500">{item.docPath}</span>
+                      )}
+                      {item.externalUrl && (
+                        <a
+                          href={item.externalUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="ml-2 text-teal-400 hover:underline"
+                        >
+                          Open link →
+                        </a>
+                      )}
+                    </p>
+                  )}
                 </li>
               ))}
             </ul>

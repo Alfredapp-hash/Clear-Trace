@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   auditEvents,
@@ -7,6 +7,12 @@ import {
   verifiedExposures,
 } from "@/lib/db/schema";
 import type { SessionPayload } from "@/lib/auth/session";
+import { slaStatusFromDueAt } from "@/lib/enterprise/sla-calculator";
+import {
+  isActiveCaseStatus,
+  isRemovedCaseStatus,
+  isRemovedExposureStatus,
+} from "@/lib/ux/case-status";
 
 export interface ProgressReport {
   organizationId: string;
@@ -18,6 +24,8 @@ export interface ProgressReport {
     activeCases: number;
     confirmedExposures: number;
     removedOrVerified: number;
+    removedCases: number;
+    /** SLA deadlines that are missed (stored as "missed", or still "pending" past due). */
     overdueSlas: number;
   };
   casesByStatus: Record<string, number>;
@@ -42,16 +50,20 @@ export async function buildProgressReportForOrg(
         })
       : [];
 
-  const slas = await db.query.slaDeadlines.findMany({
+  const openOrMissedSlas = await db.query.slaDeadlines.findMany({
     where: and(
       eq(slaDeadlines.organizationId, organizationId),
-      eq(slaDeadlines.status, "overdue"),
+      inArray(slaDeadlines.status, ["missed", "pending"]),
     ),
   });
+  const now = new Date();
+  const missedSlas = openOrMissedSlas.filter(
+    (d) => d.status === "missed" || slaStatusFromDueAt(d.dueAt, now) === "missed",
+  );
 
   const events = await db.query.auditEvents.findMany({
     where: eq(auditEvents.organizationId, organizationId),
-    orderBy: [desc(auditEvents.createdAt)],
+    orderBy: [desc(auditEvents.createdAt), desc(sql`rowid`)],
     limit: 12,
   });
 
@@ -60,13 +72,9 @@ export async function buildProgressReportForOrg(
     casesByStatus[c.status] = (casesByStatus[c.status] ?? 0) + 1;
   }
 
-  const activeCases = cases.filter(
-    (c) => !["archived", "closed", "completed"].includes(c.status),
-  ).length;
-
-  const removedOrVerified = allExposures.filter((e) =>
-    ["removed", "verified_removed", "no_longer_visible"].includes(e.status),
-  ).length;
+  const activeCases = cases.filter((c) => isActiveCaseStatus(c.status)).length;
+  const removedCases = cases.filter((c) => isRemovedCaseStatus(c.status)).length;
+  const removedOrVerified = allExposures.filter((e) => isRemovedExposureStatus(e.status)).length;
 
   const generatedAt = new Date().toISOString();
   const report: ProgressReport = {
@@ -79,11 +87,13 @@ export async function buildProgressReportForOrg(
       activeCases,
       confirmedExposures: allExposures.length,
       removedOrVerified,
-      overdueSlas: slas.length,
+      removedCases,
+      overdueSlas: missedSlas.length,
     },
     casesByStatus,
+    // Event type only: the report is emailed, and legacy audit summaries may contain PII.
     recentActivity: events.map((e) => ({
-      action: `${e.eventType}: ${e.summary}`,
+      action: e.eventType.replaceAll("_", " "),
       caseId: e.caseId,
       at: e.createdAt,
     })),
@@ -103,8 +113,9 @@ export async function buildProgressReportForOrg(
     `| Total cases | ${report.summary.totalCases} |`,
     `| Active cases | ${report.summary.activeCases} |`,
     `| Confirmed exposures | ${report.summary.confirmedExposures} |`,
-    `| Removed / verified | ${report.summary.removedOrVerified} |`,
-    `| Overdue SLAs | ${report.summary.overdueSlas} |`,
+    `| Exposures verified removed | ${report.summary.removedOrVerified} |`,
+    `| Cases fully removed | ${report.summary.removedCases} |`,
+    `| Missed SLAs | ${report.summary.overdueSlas} |`,
     ``,
     `## Cases by status`,
     ``,

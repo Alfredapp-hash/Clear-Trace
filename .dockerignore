@@ -1,7 +1,16 @@
 node_modules
 .next
 .git
+.github
 data
+skills
 .env
-.env*.local
+.env*
+!.env.example
 npm-debug.log*
+test-results
+playwright-report
+agent-builder/dist
+agent-builder/mcp-server/node_modules
+*.tsbuildinfo
+docs

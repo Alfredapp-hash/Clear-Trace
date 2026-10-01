@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button, Input, Label } from "@/components/ui";
+import { callApi } from "@/lib/ui/call-api";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -20,15 +21,14 @@ export default function RegisterPage() {
     setLoading(true);
     setError("");
 
-    const res = await fetch("/api/auth/register", {
+    const res = await callApi("/api/auth/register", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, email, password, organizationName }),
+      body: { name, email, password, organizationName },
+      errorMessage: "Registration failed",
     });
 
     if (!res.ok) {
-      const data = await res.json();
-      setError(data.error ?? "Registration failed");
+      setError(res.error);
       setLoading(false);
       return;
     }
@@ -53,13 +53,20 @@ export default function RegisterPage() {
       <form onSubmit={handleSubmit} className="space-y-5">
         <div>
           <Label htmlFor="name">Full name</Label>
-          <Input id="name" value={name} onChange={(e) => setName(e.target.value)} required />
+          <Input
+            id="name"
+            autoComplete="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            required
+          />
         </div>
         <div>
           <Label htmlFor="email">Email</Label>
           <Input
             id="email"
             type="email"
+            autoComplete="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
@@ -70,23 +77,25 @@ export default function RegisterPage() {
           <Input
             id="password"
             type="password"
+            autoComplete="new-password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
-            minLength={8}
+            minLength={10}
           />
         </div>
         <div>
           <Label htmlFor="org">Organization (optional)</Label>
           <Input
             id="org"
+            autoComplete="organization"
             value={organizationName}
             onChange={(e) => setOrganizationName(e.target.value)}
             placeholder="Personal workspace"
           />
         </div>
         {error && (
-          <p className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+          <p role="alert" className="rounded-lg border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
             {error}
           </p>
         )}

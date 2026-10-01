@@ -36,4 +36,16 @@ describe("exposure classifier", () => {
     });
     expect(result.recommendedRemedyFamily).toBe("impersonation_report");
   });
+
+  it("does not treat a people-search 'listing' as a business listing", () => {
+    const result = classifyExposure({
+      evidenceExcerpt: "Data Broker Listing for Jane Doe. Contact information may be visible on this listing.",
+      sourceType: "people_search",
+      canonicalUrl: "https://databroker.example/listing/jane-doe-contact",
+      caseType: "people_search",
+      sensitivity: "medium",
+    });
+    expect(result.categories).not.toContain("business_listing");
+    expect(result.recommendedRemedyFamily).toBe("data_broker_optout");
+  });
 });

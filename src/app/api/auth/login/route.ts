@@ -11,30 +11,46 @@ import {
 import { logAuditEvent } from "@/lib/audit/logger";
 import { jsonError, jsonOk } from "@/lib/api";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
+import { getClientIp, normalizeEmailKey } from "@/lib/security/client-ip";
+
+// Compared against when the user does not exist so response timing does not reveal accounts.
+const DUMMY_HASH = "$2b$12$F4bey/.GqDKvaqHm.sWV/ewuZ34U6oYd1S.n8PMEmVE35KV/.W8Va";
+
+const LOGIN_LIMIT_PER_IP = 10;
+// When no trustworthy client IP is available every caller shares one bucket; keep it roomy
+// and rely on the per-email bucket to stop credential stuffing against a single account.
+const LOGIN_LIMIT_UNKNOWN_IP = 100;
+const LOGIN_LIMIT_PER_EMAIL = 10;
 
 export async function POST(request: Request) {
-  const ip =
-    request.headers.get("x-forwarded-for") ??
-    request.headers.get("x-real-ip") ??
-    "unknown";
-  const rateLimitResult = await checkRateLimit(`login:${ip}`, 10);
-  if (!rateLimitResult.allowed) {
+  ensureDatabase();
+
+  const ip = getClientIp(request);
+  const ipLimit = ip === "unknown" ? LOGIN_LIMIT_UNKNOWN_IP : LOGIN_LIMIT_PER_IP;
+  const ipResult = await checkRateLimit(`login:ip:${ip}`, ipLimit);
+  if (!ipResult.allowed) {
     return jsonError("Too many requests", 429);
   }
 
-  ensureDatabase();
-  const body = await request.json();
-  const { email, password } = body as { email?: string; password?: string };
+  const body = await request.json().catch(() => ({}));
+  const { email, password } = body as { email?: unknown; password?: unknown };
 
-  if (!email || !password) {
+  if (typeof email !== "string" || typeof password !== "string" || !email || !password) {
     return jsonError("Email and password are required");
   }
 
+  const emailKey = normalizeEmailKey(email);
+  const emailResult = await checkRateLimit(`login:email:${emailKey}`, LOGIN_LIMIT_PER_EMAIL);
+  if (!emailResult.allowed) {
+    return jsonError("Too many requests", 429);
+  }
+
   const user = await db.query.users.findFirst({
-    where: eq(users.email, email.toLowerCase()),
+    where: eq(users.email, emailKey),
   });
 
-  if (!user || !(await bcrypt.compare(password, user.passwordHash))) {
+  const passwordOk = await bcrypt.compare(password, user?.passwordHash ?? DUMMY_HASH);
+  if (!user || !passwordOk) {
     return jsonError("Invalid email or password", 401);
   }
 

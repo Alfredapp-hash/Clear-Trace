@@ -76,6 +76,8 @@ async function sendViaEmailConnector(
         subject: input.subject,
         text: input.body,
       }),
+      // Never auto-retry a send: a retried POST can deliver the email twice.
+      retries: 0,
     });
     return { provider: type, messageId: res.data.id ?? "unknown" };
   }
@@ -95,6 +97,7 @@ async function sendViaEmailConnector(
         subject: input.subject,
         content: [{ type: "text/plain", value: input.body }],
       }),
+      retries: 0,
     });
     return { provider: type, messageId: `sendgrid-${Date.now()}` };
   }
@@ -113,6 +116,7 @@ async function sendViaEmailConnector(
       Subject: input.subject,
       TextBody: input.body,
     }),
+    retries: 0,
   });
   return { provider: type, messageId: res.data.MessageID ?? "unknown" };
 }

@@ -27,19 +27,6 @@ export const CONNECTOR_SETUP_GUIDES: Record<ConnectorType, ConnectorSetupStep[]>
       body: "Click Save & test. A live account check confirms the key before discovery runs.",
     },
   ],
-  bing_search: [
-    {
-      order: 1,
-      title: "Create Azure Bing Search resource",
-      body: "In Azure Portal, create a Bing Search v7 resource and copy the subscription key.",
-      link: "https://portal.azure.com/",
-    },
-    {
-      order: 2,
-      title: "Paste subscription key",
-      body: "Use the key as the API key field. Live search uses the v7 endpoint.",
-    },
-  ],
   google_cse: [
     {
       order: 1,
@@ -106,6 +93,31 @@ export const CONNECTOR_SETUP_GUIDES: Record<ConnectorType, ConnectorSetupStep[]>
       body: "One key routes to multiple models. Set your preferred model in metadata.",
       link: "https://openrouter.ai/keys",
       copyable: "openai/gpt-4o-mini",
+    },
+  ],
+  ollama: [
+    {
+      order: 1,
+      title: "Install Ollama and pull a model",
+      body: "Install Ollama on this machine, then pull the default model. Drafts are polished locally — personal details never leave this machine.",
+      copyable: "ollama pull qwen3:8b",
+      link: "https://ollama.com/download",
+    },
+    {
+      order: 2,
+      title: "Point ClearTrace at it",
+      body: "Leave Server URL blank for http://localhost:11434. In Docker use http://host.docker.internal:11434. Other local origins must be added to OLLAMA_ALLOWED_ORIGINS.",
+    },
+    {
+      order: 3,
+      title: "Test, then pick a model",
+      body: "Save & test lists installed models. Choose one, then select Ollama as the Intelligence default.",
+    },
+    {
+      order: 4,
+      title: "Optional: Ollama Cloud (Pro)",
+      body: "Set Server URL to https://ollama.com and paste an API key. Cloud mode sends draft text — including personal details — to ollama.com, and requires turning off Local-only AI.",
+      link: "https://ollama.com/settings/keys",
     },
   ],
   gmail: [

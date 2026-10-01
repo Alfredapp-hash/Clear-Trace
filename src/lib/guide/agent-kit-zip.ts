@@ -11,8 +11,8 @@ export interface ZipEntry {
   content: string | Buffer;
 }
 
-const SKILLPACK_ROOT = path.join(process.cwd(), "agent-builder", "skillpack");
-const MCP_ROOT = path.join(process.cwd(), "agent-builder", "mcp-server");
+const SKILLPACK_ROOT = path.join(/*turbopackIgnore: true*/ process.cwd(), "agent-builder", "skillpack");
+const MCP_ROOT = path.join(/*turbopackIgnore: true*/ process.cwd(), "agent-builder", "mcp-server");
 
 function walkFiles(dir: string, zipPrefix: string): ZipEntry[] {
   if (!fs.existsSync(dir)) return [];

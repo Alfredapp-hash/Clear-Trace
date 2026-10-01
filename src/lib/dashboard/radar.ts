@@ -1,4 +1,4 @@
-import { eq, desc } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
   privacyCases,
@@ -6,24 +6,42 @@ import {
   verifiedExposures,
 } from "@/lib/db/schema";
 import { assessExposureImpact } from "@/lib/ux/impact-score";
+import { isActiveCaseStatus, isRemovedCaseStatus } from "@/lib/ux/case-status";
 
-export async function getExposureRadar(userId: string) {
+function ownerScope(userId: string, organizationId?: string) {
+  return organizationId
+    ? and(eq(privacyCases.ownerUserId, userId), eq(privacyCases.organizationId, organizationId))
+    : eq(privacyCases.ownerUserId, userId);
+}
+
+export async function getExposureRadar(userId: string, organizationId?: string) {
   const cases = await db.query.privacyCases.findMany({
-    where: eq(privacyCases.ownerUserId, userId),
+    where: ownerScope(userId, organizationId),
     orderBy: [desc(privacyCases.updatedAt)],
     limit: 10,
   });
 
+  const caseIds = cases.map((c) => c.id);
+  const [allCandidates, allExposures] =
+    caseIds.length > 0
+      ? await Promise.all([
+          db.query.exposureCandidates.findMany({
+            where: inArray(exposureCandidates.caseId, caseIds),
+          }),
+          db.query.verifiedExposures.findMany({
+            where: inArray(verifiedExposures.caseId, caseIds),
+          }),
+        ])
+      : [[], []];
+
   const radar = [];
   for (const c of cases) {
-    const [candidates, exposures] = await Promise.all([
-      db.query.exposureCandidates.findMany({
-        where: eq(exposureCandidates.caseId, c.id),
-      }),
-      db.query.verifiedExposures.findMany({
-        where: eq(verifiedExposures.caseId, c.id),
-      }),
-    ]);
+    const exposures = allExposures.filter((e) => e.caseId === c.id);
+    const promoted = new Set(exposures.map((e) => e.candidateId));
+    // Confirmed candidates are represented by their exposure row; don't count them twice.
+    const candidates = allCandidates.filter(
+      (x) => x.caseId === c.id && x.matchStatus !== "confirmed_match" && !promoted.has(x.id),
+    );
 
     const surfaces = [
       ...exposures.map((e) => ({
@@ -64,13 +82,11 @@ export async function getExposureRadar(userId: string) {
   return radar;
 }
 
-export async function getVictoryStats(userId: string) {
+export async function getVictoryStats(userId: string, organizationId?: string) {
   const cases = await db.query.privacyCases.findMany({
-    where: eq(privacyCases.ownerUserId, userId),
+    where: ownerScope(userId, organizationId),
   });
-  const removed = cases.filter((c) => c.status === "removed_confirmed").length;
-  const active = cases.filter(
-    (c) => !["archived", "paused", "removed_confirmed", "closed"].includes(c.status),
-  ).length;
+  const removed = cases.filter((c) => isRemovedCaseStatus(c.status)).length;
+  const active = cases.filter((c) => isActiveCaseStatus(c.status)).length;
   return { totalCases: cases.length, removed, active, winRate: cases.length ? removed / cases.length : 0 };
 }

@@ -1,8 +1,9 @@
 import net from "net";
-import { assertSafeUrl } from "@/lib/tools/safe-fetch";
+import { assertSafeUrl, resolveSafeHost } from "@/lib/tools/safe-fetch";
 import { getConnectorDefinition } from "../registry";
 import { ConnectorConnectionError, friendlyProviderMessage } from "./errors";
 import { connectorFetch } from "./http";
+import { polishWithOllama, testOllamaConnection } from "./ollama";
 import type {
   ConnectorCredentials,
   ConnectorTestResult,
@@ -157,49 +158,6 @@ export async function searchSerpApi(apiKey: string, query: string): Promise<Serp
     }));
 }
 
-export async function testBingSearch(credentials: ConnectorCredentials): Promise<ConnectorTestResult> {
-  const creds = trimCredentials(credentials);
-  const missing = validateRequired("bing_search", creds);
-  if (missing) return testFailure("bing_search", new ConnectorConnectionError("bing_search", "missing_credentials", missing));
-
-  try {
-    const res = await connectorFetch<{
-      webPages?: { totalEstimatedMatches?: number };
-    }>({
-      provider: "bing_search",
-      url: "https://api.bing.microsoft.com/v7.0/search?q=cleartrace+connection+test&count=1",
-      headers: { "Ocp-Apim-Subscription-Key": creds.apiKey },
-    });
-    return testSuccess(
-      "bing_search",
-      "Bing Web Search key verified",
-      { estimatedMatches: res.data.webPages?.totalEstimatedMatches },
-      res.latencyMs,
-    );
-  } catch (error) {
-    return testFailure("bing_search", error);
-  }
-}
-
-export async function searchBing(apiKey: string, query: string): Promise<SerpResult[]> {
-  const res = await connectorFetch<{
-    webPages?: { value?: Array<{ name?: string; url?: string; snippet?: string }> };
-  }>({
-    provider: "bing_search",
-    url: `https://api.bing.microsoft.com/v7.0/search?q=${encodeURIComponent(query)}&count=10`,
-    headers: { "Ocp-Apim-Subscription-Key": apiKey },
-    timeoutMs: 20_000,
-  });
-  return (res.data.webPages?.value ?? [])
-    .filter((r) => r.url)
-    .map((r) => ({
-      title: r.name ?? "Search result",
-      link: r.url!,
-      snippet: r.snippet ?? "",
-      source: "bing_search" as const,
-    }));
-}
-
 export async function testGoogleCse(credentials: ConnectorCredentials): Promise<ConnectorTestResult> {
   const creds = trimCredentials(credentials);
   const missing = validateRequired("google_cse", creds);
@@ -324,7 +282,7 @@ export async function polishWithAnthropic(
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      model: model || "claude-haiku-4-5-20251001",
+      model: model || "claude-haiku-4-5",
       max_tokens: 1024,
       system:
         "Polish privacy removal request drafts. Never add legal threats, deadlines with consequences, or facts not in the original. Keep all URLs and factual claims. Return JSON only: {\"subject\":\"...\",\"body\":\"...\"}",
@@ -362,24 +320,23 @@ export async function testAnthropic(credentials: ConnectorCredentials): Promise<
   }
 
   try {
-    const res = await connectorFetch<unknown>({
+    const res = await connectorFetch<{ data?: Array<{ id?: string }> }>({
       provider: "anthropic",
-      url: "https://api.anthropic.com/v1/messages",
-      method: "POST",
+      url: "https://api.anthropic.com/v1/models",
+      method: "GET",
       headers: {
         "x-api-key": creds.apiKey,
         "anthropic-version": "2023-06-01",
-        "Content-Type": "application/json",
       },
-      body: JSON.stringify({
-        model: "claude-3-5-haiku-20241022",
-        max_tokens: 1,
-        messages: [{ role: "user", content: "ping" }],
-      }),
       timeoutMs: 20_000,
       retries: 0,
     });
-    return testSuccess("anthropic", "Anthropic key verified", {}, res.latencyMs);
+    return testSuccess(
+      "anthropic",
+      "Anthropic key verified",
+      { modelCount: res.data.data?.length },
+      res.latencyMs,
+    );
   } catch (error) {
     return testFailure("anthropic", error);
   }
@@ -484,25 +441,69 @@ export async function testGmail(credentials: ConnectorCredentials): Promise<Conn
   }
 }
 
+const HEADER_UNSAFE = /[\r\n\0]/;
+const EMAIL_ADDRESS = /^[^\s@<>(),;:"\[\]\\]+@[^\s@<>(),;:"\[\]\\]+$/;
+
+function assertHeaderSafe(field: string, value: string): string {
+  if (HEADER_UNSAFE.test(value)) {
+    throw new ConnectorConnectionError("gmail", "invalid_config", `${field} contains a line break`);
+  }
+  return value.trim();
+}
+
+function assertAddress(field: string, value: string): string {
+  const v = assertHeaderSafe(field, value);
+  if (!EMAIL_ADDRESS.test(v)) {
+    throw new ConnectorConnectionError("gmail", "invalid_config", `${field} is not a valid email address`);
+  }
+  return v;
+}
+
+/** RFC 2047 encoded-word for non-ASCII header values. */
+function encodeHeaderValue(value: string): string {
+  if (/^[\x20-\x7e]*$/.test(value)) return value;
+  return `=?UTF-8?B?${Buffer.from(value, "utf8").toString("base64")}?=`;
+}
+
+/**
+ * Build a base64url RFC 5322 message for the Gmail API. Rejects CR/LF in any
+ * header value (header injection), encodes non-ASCII subjects per RFC 2047 and
+ * base64-encodes the body.
+ */
+export function buildGmailRawMessage(message: {
+  to: string;
+  from?: string | null;
+  subject: string;
+  body: string;
+}): string {
+  const to = assertAddress("To", message.to);
+  const subject = assertHeaderSafe("Subject", message.subject);
+  const lines = [
+    ...(message.from && message.from !== "me" ? [`From: ${assertAddress("From", message.from)}`] : []),
+    `To: ${to}`,
+    `Subject: ${encodeHeaderValue(subject)}`,
+    "MIME-Version: 1.0",
+    "Content-Type: text/plain; charset=utf-8",
+    "Content-Transfer-Encoding: base64",
+    "",
+    (Buffer.from(message.body, "utf8").toString("base64").match(/.{1,76}/g) ?? []).join("\r\n"),
+  ];
+  return Buffer.from(lines.join("\r\n"))
+    .toString("base64")
+    .replace(/\+/g, "-")
+    .replace(/\//g, "_")
+    .replace(/=+$/, "");
+}
+
 export async function createGmailDraftMessage(
   credentials: ConnectorCredentials,
   metadata: Record<string, string>,
   message: { subject: string; body: string; to: string; from?: string },
 ): Promise<{ draftId: string }> {
+  const from = metadata.fromEmail?.trim() || message.from?.trim() || null;
+  // Validate before touching the network.
+  const raw = buildGmailRawMessage({ ...message, from });
   const accessToken = await refreshGmailAccessToken(credentials);
-  const from = metadata.fromEmail ?? message.from ?? "me";
-  const lines = [
-    `To: ${message.to}`,
-    `Subject: ${message.subject}`,
-    "Content-Type: text/plain; charset=utf-8",
-    "",
-    message.body,
-  ];
-  const raw = Buffer.from(lines.join("\r\n"))
-    .toString("base64")
-    .replace(/\+/g, "-")
-    .replace(/\//g, "_")
-    .replace(/=+$/, "");
 
   const res = await connectorFetch<{ id?: string }>({
     provider: "gmail",
@@ -511,10 +512,14 @@ export async function createGmailDraftMessage(
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify({ message: { raw } }),
     timeoutMs: 20_000,
+    retries: 0,
   });
 
   return { draftId: res.data.id ?? "unknown" };
 }
+
+/** Ports an SMTP connector may target — anything else would turn the tester into a port scanner. */
+export const ALLOWED_SMTP_PORTS = new Set([25, 465, 587, 2525]);
 
 export async function testSmtp(credentials: ConnectorCredentials): Promise<ConnectorTestResult> {
   const creds = trimCredentials(credentials);
@@ -525,8 +530,25 @@ export async function testSmtp(credentials: ConnectorCredentials): Promise<Conne
   if (!Number.isFinite(port) || port <= 0) {
     return testFailure("smtp", new ConnectorConnectionError("smtp", "invalid_config", "SMTP port must be a valid number"));
   }
+  if (!ALLOWED_SMTP_PORTS.has(port)) {
+    return testFailure(
+      "smtp",
+      new ConnectorConnectionError("smtp", "invalid_config", "SMTP port must be 25, 465, 587 or 2525"),
+    );
+  }
 
-  const reachable = await testTcpReachable(creds.host, port);
+  let address: string;
+  try {
+    address = await resolveSafeHost(creds.host);
+  } catch {
+    return testFailure(
+      "smtp",
+      new ConnectorConnectionError("smtp", "invalid_config", "SMTP host must be a public hostname"),
+    );
+  }
+
+  // Connect to the validated address (pinned), not the hostname.
+  const reachable = await testTcpReachable(address, port);
   if (!reachable) {
     return testFailure(
       "smtp",
@@ -651,15 +673,58 @@ export async function testWebhook(credentials: ConnectorCredentials): Promise<Co
   }
 }
 
+export async function testOllama(
+  credentials: ConnectorCredentials,
+  metadata: Record<string, string> = {},
+): Promise<ConnectorTestResult> {
+  const creds = trimCredentials(credentials);
+  try {
+    const result = await testOllamaConnection(creds, metadata);
+    const detail = {
+      mode: result.endpoint.mode,
+      origin: result.endpoint.origin,
+      models: result.models,
+      model: result.model,
+      modelAvailable: result.modelAvailable,
+    };
+    if (!result.modelAvailable) {
+      return {
+        ok: false,
+        message: result.models.length
+          ? `Connected, but model "${result.model}" is not available. Pick one of: ${result.models.slice(0, 8).join(", ")}`
+          : `Connected, but no models are installed. Run: ollama pull ${result.model}`,
+        detail: { provider: "ollama", ...detail },
+        latencyMs: result.latencyMs,
+        errorCode: "invalid_config",
+      };
+    }
+    const where =
+      result.endpoint.mode === "local" ? "local — stays on this machine" : "Ollama Cloud";
+    return testSuccess("ollama", `Ollama reachable (${where}); model ${result.model} ready`, detail, result.latencyMs);
+  } catch (error) {
+    if (error instanceof ConnectorConnectionError && error.code === "invalid_config") {
+      return {
+        ok: false,
+        message: error.userMessage,
+        detail: { provider: "ollama", code: error.code },
+        errorCode: error.code,
+      };
+    }
+    return testFailure("ollama", error);
+  }
+}
+
+export { polishWithOllama };
+
 async function testHibp(credentials: ConnectorCredentials): Promise<ConnectorTestResult> {
   const creds = trimCredentials(credentials);
   const missing = validateRequired("hibp", creds);
   if (missing) return testFailure("hibp", new ConnectorConnectionError("hibp", "missing_credentials", missing));
 
   try {
-    const res = await connectorFetch<unknown[]>({
+    const res = await connectorFetch<{ SubscriptionName?: string }>({
       provider: "hibp",
-      url: "https://haveibeenpwned.com/api/v3/breaches?domain=adobe.com",
+      url: "https://haveibeenpwned.com/api/v3/subscription/status",
       method: "GET",
       headers: {
         "hibp-api-key": creds.apiKey,
@@ -670,8 +735,10 @@ async function testHibp(credentials: ConnectorCredentials): Promise<ConnectorTes
     });
     return testSuccess(
       "hibp",
-      `HIBP API key valid (${Array.isArray(res.data) ? res.data.length : 0} sample breaches visible)`,
-      { status: res.status },
+      res.data?.SubscriptionName
+        ? `HIBP API key valid (${res.data.SubscriptionName})`
+        : "HIBP API key valid",
+      { status: res.status, subscription: res.data?.SubscriptionName },
       res.latencyMs,
     );
   } catch (error) {
@@ -681,15 +748,18 @@ async function testHibp(credentials: ConnectorCredentials): Promise<ConnectorTes
 
 const TESTERS: Record<
   ConnectorType,
-  (credentials: ConnectorCredentials) => Promise<ConnectorTestResult>
+  (
+    credentials: ConnectorCredentials,
+    metadata?: Record<string, string>,
+  ) => Promise<ConnectorTestResult>
 > = {
   serpapi: testSerpApi,
-  bing_search: testBingSearch,
   google_cse: testGoogleCse,
   hibp: testHibp,
   openai: testOpenAI,
   anthropic: testAnthropic,
   openrouter: testOpenRouter,
+  ollama: testOllama,
   gmail: testGmail,
   smtp: testSmtp,
   resend: testResend,
@@ -701,12 +771,13 @@ const TESTERS: Record<
 export async function testConnectorConnection(
   type: ConnectorType,
   credentials: ConnectorCredentials,
+  metadata: Record<string, string> = {},
 ): Promise<ConnectorTestResult> {
   const tester = TESTERS[type];
   if (!tester) {
     return testFailure(type, new ConnectorConnectionError(type, "unsupported", `No tester for ${type}`));
   }
-  return tester(trimCredentials(credentials));
+  return tester(trimCredentials(credentials), metadata);
 }
 
 export async function searchWithProvider(
@@ -718,8 +789,6 @@ export async function searchWithProvider(
   switch (type) {
     case "serpapi":
       return searchSerpApi(creds.apiKey, query);
-    case "bing_search":
-      return searchBing(creds.apiKey, query);
     case "google_cse":
       return searchGoogleCse(creds.apiKey, creds.searchEngineId, query);
     default:

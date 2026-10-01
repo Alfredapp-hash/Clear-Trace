@@ -1,6 +1,6 @@
-import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import { addLiveUrlCandidate } from "@/lib/discovery/live-url";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { jsonError, jsonOk } from "@/lib/api";
 
@@ -9,17 +9,18 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const { id } = await params;
+  const access = await requireCaseAccess(request, id);
+  if (access instanceof Response) return access;
+  const { session } = access;
 
   const rate = await checkRateLimit(`live-url:${session.userId}`, 10);
   if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
 
-  const { id } = await params;
-  const body = await request.json();
-  const { url } = body as { url?: string };
+  const body = await request.json().catch(() => ({}));
+  const { url } = body as { url?: unknown };
 
-  if (!url) return jsonError("URL is required");
+  if (typeof url !== "string" || !url) return jsonError("URL is required");
 
   try {
     const result = await addLiveUrlCandidate(session, id, url);
@@ -27,6 +28,7 @@ export async function POST(
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);
+    if (msg === "AUTHORIZATION_REQUIRED") return jsonError("Consent required", 403);
     if (msg.includes("BLOCKED") || msg.includes("PRIVATE") || msg === "INVALID_URL") {
       return jsonError(`URL blocked by safety policy: ${msg}`, 403);
     }

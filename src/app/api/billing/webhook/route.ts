@@ -41,6 +41,9 @@ export async function POST(request: Request) {
     case "checkout.session.completed": {
       const session = event.data.object as Stripe.Checkout.Session;
       const organizationId = session.metadata?.organizationId;
+      // Only grant Pro once Stripe reports the payment as captured. Async
+      // methods finish later via customer.subscription.updated.
+      if (session.payment_status !== "paid") break;
       if (organizationId && session.subscription && session.customer) {
         await updateOrgSubscription(organizationId, {
           plan: "pro",

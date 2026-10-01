@@ -30,7 +30,6 @@ export async function seedTestUser(suffix = uuid().slice(0, 8)): Promise<TestUse
   const orgId = uuid();
   const email = `api-test-${suffix}@test.local`;
   const password = "testpass123";
-  const now = new Date().toISOString();
 
   await db.insert(users).values({
     id: userId,

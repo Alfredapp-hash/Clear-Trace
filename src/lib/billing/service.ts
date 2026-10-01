@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { organizations, privacyCases } from "@/lib/db/schema";
 import { type BillingFeature, type PlanId, planHasFeature, PLAN_LIMITS } from "./plans";
@@ -61,6 +61,7 @@ export async function getBillingStatus(organizationId: string): Promise<BillingS
     "opt_out_dispatch",
     "deindex_workflow",
     "email_digest",
+    "ollama_cloud",
   ] as const).filter(
     (f) => planHasFeature(plan, f),
   );

@@ -4,12 +4,19 @@ import { db } from "@/lib/db";
 import { connectorConfigs, organizations } from "@/lib/db/schema";
 import { decryptValue, encryptValue, redactValue } from "@/lib/crypto/encryption";
 import { logAuditEvent } from "@/lib/audit/logger";
+import { requireBillingFeature } from "@/lib/billing/service";
+import { assertSafeUrl } from "@/lib/tools/safe-fetch";
 import { CONNECTOR_REGISTRY, getConnectorDefinition } from "./registry";
 import { testConnectorConnection } from "./connection/providers";
 import { ConnectionHelper } from "./connection/helper";
+import {
+  resolveIntelligenceConnection,
+  type IntelligenceFeature,
+  type IntelligenceResolverDeps,
+} from "./connection/intelligence";
+import { classifyOllamaBaseUrl } from "./connection/ollama-origin";
 import { getSetupGuide } from "./connection/setup-guides";
 import {
-  CATEGORY_DEFAULT_CONNECTORS,
   breachIntelConnectorTypes,
   discoveryConnectorTypes,
   emailConnectorTypes,
@@ -155,11 +162,13 @@ export async function resolveDiscoveryConnector(
     where: eq(organizations.id, organizationId),
   });
   const defaults = parseAgentDefaults(org?.agentDefaultsJson);
-  const preferred = defaults.discovery;
+  const allowed = discoveryConnectorTypes();
+  // Ignore stale / retired preferences (e.g. the removed bing_search).
+  const preferred = defaults.discovery && allowed.includes(defaults.discovery) ? defaults.discovery : undefined;
 
   const candidates = preferred
-    ? [preferred, ...discoveryConnectorTypes().filter((t) => t !== preferred)]
-    : discoveryConnectorTypes();
+    ? [preferred, ...allowed.filter((t) => t !== preferred)]
+    : allowed;
 
   for (const type of candidates) {
     const status = await getConnectorStatus(organizationId, type);
@@ -175,11 +184,13 @@ export async function resolveBreachIntelConnector(
     where: eq(organizations.id, organizationId),
   });
   const defaults = parseAgentDefaults(org?.agentDefaultsJson);
-  const preferred = defaults.breachIntel;
+  const allowed = breachIntelConnectorTypes();
+  // Ignore stale / retired preferences (e.g. the removed bing_search).
+  const preferred = defaults.breachIntel && allowed.includes(defaults.breachIntel) ? defaults.breachIntel : undefined;
 
   const candidates = preferred
-    ? [preferred, ...breachIntelConnectorTypes().filter((t) => t !== preferred)]
-    : breachIntelConnectorTypes();
+    ? [preferred, ...allowed.filter((t) => t !== preferred)]
+    : allowed;
 
   for (const type of candidates) {
     const status = await getConnectorStatus(organizationId, type);
@@ -195,11 +206,13 @@ export async function resolveEmailConnector(
     where: eq(organizations.id, organizationId),
   });
   const defaults = parseAgentDefaults(org?.agentDefaultsJson);
-  const preferred = defaults.email;
+  const allowed = emailConnectorTypes();
+  // Ignore stale / retired preferences (e.g. the removed bing_search).
+  const preferred = defaults.email && allowed.includes(defaults.email) ? defaults.email : undefined;
 
   const candidates = preferred
-    ? [preferred, ...emailConnectorTypes().filter((t) => t !== preferred)]
-    : emailConnectorTypes();
+    ? [preferred, ...allowed.filter((t) => t !== preferred)]
+    : allowed;
 
   for (const type of candidates) {
     const status = await getConnectorStatus(organizationId, type);
@@ -245,30 +258,121 @@ export async function getConnectorHealth(
   };
 }
 
-async function mergeCredentialsOnUpdate(
+/** Fields that decide *where* credentials are sent. */
+export const DESTINATION_FIELDS = ["url", "host", "baseUrl", "port"] as const;
+
+function trimmedNonEmpty(credentials: ConnectorCredentials): ConnectorCredentials {
+  const out: ConnectorCredentials = {};
+  for (const [key, value] of Object.entries(credentials ?? {})) {
+    if (typeof value === "string" && value.trim()) out[key] = value.trim();
+  }
+  return out;
+}
+
+/**
+ * Merge incoming form values onto stored credentials ("leave blank to keep").
+ * If any destination field changes, stored *secret* fields are discarded so a
+ * saved key/password can never be replayed against a new destination; they
+ * must be re-entered in the same request.
+ */
+export function mergeStoredCredentials(
+  type: ConnectorType,
+  stored: ConnectorCredentials | null,
+  incoming: ConnectorCredentials,
+): { credentials: ConnectorCredentials; destinationChanged: boolean } {
+  const fresh = trimmedNonEmpty(incoming);
+  if (!stored) return { credentials: fresh, destinationChanged: false };
+
+  const destinationChanged = DESTINATION_FIELDS.some(
+    (key) => fresh[key] !== undefined && fresh[key] !== (stored[key] ?? "").trim(),
+  );
+  if (!destinationChanged) return { credentials: { ...stored, ...fresh }, destinationChanged };
+
+  const def = getConnectorDefinition(type);
+  const secretKeys = new Set(
+    (def?.fields ?? []).filter((f) => f.type === "password").map((f) => f.key),
+  );
+  const kept: ConnectorCredentials = {};
+  for (const [key, value] of Object.entries(stored)) {
+    if (!secretKeys.has(key)) kept[key] = value;
+  }
+  const merged = { ...kept, ...fresh };
+
+  const missing = (def?.fields ?? []).filter(
+    (f) => f.type === "password" && f.required && !merged[f.key],
+  );
+  if (missing.length) {
+    throw new Error(
+      `CONNECTOR_TEST_FAILED:Destination changed — re-enter ${missing.map((f) => f.label).join(", ")}`,
+    );
+  }
+  return { credentials: merged, destinationChanged };
+}
+
+async function loadStoredCredentials(
   organizationId: string,
   type: ConnectorType,
-  incoming: ConnectorCredentials,
-): Promise<ConnectorCredentials> {
+): Promise<ConnectorCredentials | null> {
   const existing = await db.query.connectorConfigs.findFirst({
     where: and(
       eq(connectorConfigs.organizationId, organizationId),
       eq(connectorConfigs.connectorType, type),
     ),
   });
-  if (!existing) return incoming;
-
+  if (!existing) return null;
   try {
-    const stored = JSON.parse(
-      decryptValue(existing.encryptedCredentials),
-    ) as ConnectorCredentials;
-    const merged = { ...stored };
-    for (const [key, value] of Object.entries(incoming)) {
-      if (value?.trim()) merged[key] = value.trim();
-    }
-    return merged;
+    return JSON.parse(decryptValue(existing.encryptedCredentials)) as ConnectorCredentials;
   } catch {
-    return incoming;
+    return null;
+  }
+}
+
+async function mergeCredentialsOnUpdate(
+  organizationId: string,
+  type: ConnectorType,
+  incoming: ConnectorCredentials,
+): Promise<ConnectorCredentials> {
+  const stored = await loadStoredCredentials(organizationId, type);
+  return mergeStoredCredentials(type, stored, incoming).credentials;
+}
+
+async function orgHasFeature(organizationId: string, feature: IntelligenceFeature) {
+  try {
+    await requireBillingFeature(organizationId, feature);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Connector-specific policy checks that apply whether or not a live test runs. */
+async function assertConnectorPolicy(
+  organizationId: string,
+  type: ConnectorType,
+  credentials: ConnectorCredentials,
+) {
+  if (type === "ollama") {
+    const endpoint = classifyOllamaBaseUrl(credentials.baseUrl);
+    if (!endpoint) {
+      throw new Error(
+        "CONNECTOR_TEST_FAILED:Ollama URL must be https://ollama.com or a local origin listed in OLLAMA_ALLOWED_ORIGINS",
+      );
+    }
+    if (endpoint.mode === "cloud") {
+      if (!credentials.apiKey) {
+        throw new Error("CONNECTOR_TEST_FAILED:An API key is required for Ollama Cloud");
+      }
+      if (!(await orgHasFeature(organizationId, "ollama_cloud"))) {
+        throw new Error("CONNECTOR_TEST_FAILED:Ollama Cloud requires the Pro plan");
+      }
+    }
+  }
+  if (type === "generic_webhook" && credentials.url) {
+    try {
+      await assertSafeUrl(credentials.url);
+    } catch {
+      throw new Error("CONNECTOR_TEST_FAILED:Webhook URL must not target private or internal hosts");
+    }
   }
 }
 
@@ -288,10 +392,16 @@ export async function saveOrgConnector(
     type,
     credentials,
   );
+  await assertConnectorPolicy(organizationId, type, mergedCredentials);
+  if (type === "ollama") {
+    // Server-derived, never trusted from the client: drives the Local/Cloud badge.
+    const endpoint = classifyOllamaBaseUrl(mergedCredentials.baseUrl);
+    metadata = { ...metadata, mode: endpoint?.mode ?? "local" };
+  }
 
   let testResult = { ok: true, message: "Saved without test" };
   if (options.test !== false) {
-    testResult = await testConnectorConnection(type, mergedCredentials);
+    testResult = await testConnectorConnection(type, mergedCredentials, metadata);
     if (!testResult.ok) throw new Error(`CONNECTOR_TEST_FAILED:${testResult.message}`);
   }
 
@@ -347,31 +457,33 @@ export async function testOrgConnector(
   organizationId: string,
   type: ConnectorType,
   credentials?: ConnectorCredentials,
+  metadata?: Record<string, string>,
 ) {
-  let creds = credentials;
-  if (!creds) {
-    const row = await db.query.connectorConfigs.findFirst({
-      where: and(
-        eq(connectorConfigs.organizationId, organizationId),
-        eq(connectorConfigs.connectorType, type),
-      ),
-    });
-    if (!row) throw new Error("CONNECTOR_NOT_FOUND");
-    creds = JSON.parse(decryptValue(row.encryptedCredentials)) as ConnectorCredentials;
-  } else {
-    creds = await mergeCredentialsOnUpdate(organizationId, type, creds);
-  }
-
-  const result = await testConnectorConnection(type, creds);
-  const now = new Date().toISOString();
-
   const row = await db.query.connectorConfigs.findFirst({
     where: and(
       eq(connectorConfigs.organizationId, organizationId),
       eq(connectorConfigs.connectorType, type),
     ),
   });
-  if (row) {
+
+  let creds: ConnectorCredentials;
+  const hasIncoming = !!credentials && Object.values(credentials).some((v) => v?.trim?.());
+  if (!hasIncoming) {
+    if (!row) throw new Error("CONNECTOR_NOT_FOUND");
+    creds = JSON.parse(decryptValue(row.encryptedCredentials)) as ConnectorCredentials;
+  } else {
+    creds = await mergeCredentialsOnUpdate(organizationId, type, credentials!);
+  }
+  await assertConnectorPolicy(organizationId, type, creds);
+
+  const meta = metadata && Object.keys(metadata).length
+    ? metadata
+    : parseMetadata(row?.metadataJson ?? null);
+  const result = await testConnectorConnection(type, creds, meta);
+  const now = new Date().toISOString();
+
+  // Only record status when testing what is actually stored.
+  if (row && !hasIncoming) {
     await db
       .update(connectorConfigs)
       .set({
@@ -450,25 +562,20 @@ export async function getAgentDefaults(organizationId: string): Promise<AgentDef
   return parseAgentDefaults(org?.agentDefaultsJson);
 }
 
+function intelligenceDeps(organizationId: string): IntelligenceResolverDeps {
+  return {
+    getAgentDefaults: () => getAgentDefaults(organizationId),
+    getOrgConnector: (type) => getOrgConnector(organizationId, type),
+    isFeatureEnabled: (feature) => orgHasFeature(organizationId, feature),
+  };
+}
+
+/** Same resolution as ConnectionHelper.resolveIntelligence() (shared implementation). */
 export async function resolveIntelligenceConnector(
   organizationId: string,
 ): Promise<ConnectorType | null> {
-  const org = await db.query.organizations.findFirst({
-    where: eq(organizations.id, organizationId),
-  });
-  const defaults = parseAgentDefaults(org?.agentDefaultsJson);
-  const preferred = defaults.intelligence;
-  if (!preferred || preferred === "rules_only") return null;
-
-  const candidates = preferred
-    ? [preferred, ...CATEGORY_DEFAULT_CONNECTORS.intelligence.filter((t) => t !== preferred)]
-    : CATEGORY_DEFAULT_CONNECTORS.intelligence;
-
-  for (const type of candidates) {
-    const status = await getConnectorStatus(organizationId, type);
-    if (status.connected) return type;
-  }
-  return null;
+  const connection = await resolveIntelligenceConnection(intelligenceDeps(organizationId));
+  return connection?.type ?? null;
 }
 
 export function getConnectionHelper(organizationId: string): ConnectionHelper {
@@ -477,7 +584,7 @@ export function getConnectionHelper(organizationId: string): ConnectionHelper {
     resolveDiscoveryType: () => resolveDiscoveryConnector(organizationId),
     resolveEmailType: () => resolveEmailConnector(organizationId),
     getAgentDefaults: () => getAgentDefaults(organizationId),
-    intelligenceTypes: CATEGORY_DEFAULT_CONNECTORS.intelligence,
+    isFeatureEnabled: (feature) => orgHasFeature(organizationId, feature),
   });
 }
 
