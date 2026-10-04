@@ -7,7 +7,11 @@ const PORT = 3456;
 const E2E_DB = path.resolve(__dirname, "data", "e2e.db");
 const usingExternalServer = !!process.env.PLAYWRIGHT_BASE_URL;
 
-if (!usingExternalServer) {
+// Playwright re-evaluates this config in every worker process. Reset the DB only once,
+// in the main process: deleting it after the web server has opened it leaves parts of the
+// app on a fresh empty file (sessions then fail and pages bounce to /login).
+if (!usingExternalServer && !process.env.CLEARTRACE_E2E_DB_RESET) {
+  process.env.CLEARTRACE_E2E_DB_RESET = "1";
   for (const suffix of ["", "-wal", "-shm", "-journal"]) {
     fs.rmSync(`${E2E_DB}${suffix}`, { force: true });
   }
