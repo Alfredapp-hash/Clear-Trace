@@ -44,6 +44,7 @@ describe("PWA manifest icons", () => {
     for (const icon of manifest.icons) {
       expect(matcher.test(icon.src), icon.src).toBe(false);
     }
+    expect(matcher.test("/apple-touch-icon.png")).toBe(false);
     expect(matcher.test("/cases")).toBe(true);
   });
 });
