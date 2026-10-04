@@ -14,7 +14,8 @@ export function buildGlobalSetupMarkdown(): string {
 
 | Connector | Purpose | Get a key |
 |-----------|---------|-----------|
-| SerpAPI / Bing / Google CSE | Live public search | serpapi.com, Azure Bing, Google CSE |
+| SerpAPI / Google CSE | Live public search | serpapi.com, Google CSE |
+| Ollama (local) | Private draft polish — personal data stays on this machine | ollama.com/download |
 | OpenAI / Anthropic | Draft polish & classification | platform.openai.com |
 | Gmail / SMTP | Push drafts to your mailbox | Google Cloud OAuth |
 

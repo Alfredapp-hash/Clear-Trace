@@ -1,27 +1,27 @@
-import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import {
-  getCaseForUser,
   getCaseTimeline,
   getIdentityClaimsRedacted,
   getLatestAuthorization,
 } from "@/lib/cases/service";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { db } from "@/lib/db";
 import { agentRuns } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
-import { jsonError, jsonOk } from "@/lib/api";
+import { jsonOk } from "@/lib/api";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
-
   const { id } = await params;
-  const privacyCase = await getCaseForUser(id, session);
-  if (!privacyCase) return jsonError("Case not found", 404);
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "cases:read",
+  });
+  if (access instanceof Response) return access;
+  const { privacyCase } = access;
 
   const [authorization, claims, timeline, runs] = await Promise.all([
     getLatestAuthorization(id),

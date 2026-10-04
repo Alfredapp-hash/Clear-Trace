@@ -12,16 +12,6 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
     ],
   },
   {
-    type: "bing_search",
-    name: "Bing Web Search",
-    category: "discovery",
-    description: "Microsoft Bing Search API for discovery queries.",
-    docsUrl: "https://www.microsoft.com/en-us/bing/apis/bing-web-search-api",
-    fields: [
-      { key: "apiKey", label: "API key", type: "password", required: true },
-    ],
-  },
-  {
     type: "hibp",
     name: "Have I Been Pwned",
     category: "breach_intel",
@@ -69,7 +59,7 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
         key: "model",
         label: "Default model",
         type: "text",
-        placeholder: "claude-sonnet-4-20250514",
+        placeholder: "claude-haiku-4-5",
       },
     ],
   },
@@ -86,6 +76,62 @@ export const CONNECTOR_REGISTRY: ConnectorDefinition[] = [
         label: "Default model",
         type: "text",
         placeholder: "openai/gpt-4o-mini",
+      },
+    ],
+  },
+  {
+    type: "ollama",
+    name: "Ollama",
+    category: "intelligence",
+    description:
+      "Run the LLM on this machine (recommended — personal details never leave it). Optional Ollama Cloud for Pro plans.",
+    docsUrl: "https://docs.ollama.com/api",
+    fields: [
+      {
+        key: "baseUrl",
+        label: "Server URL",
+        type: "text",
+        placeholder: "http://localhost:11434",
+        helpText:
+          "Defaults to http://localhost:11434. Local servers must be listed in OLLAMA_ALLOWED_ORIGINS. Cloud: https://ollama.com",
+      },
+      {
+        key: "apiKey",
+        label: "API key (Ollama Cloud only)",
+        type: "password",
+        helpText: "Only needed for https://ollama.com. Never sent to a local server.",
+      },
+    ],
+    metadataFields: [
+      {
+        key: "model",
+        label: "Model",
+        type: "text",
+        placeholder: "qwen3:8b",
+      },
+    ],
+  },
+  {
+    type: "apple_intelligence",
+    name: "Apple Intelligence (on-device)",
+    category: "intelligence",
+    description:
+      "Apple's on-device model on this Mac via the ClearTrace Apple bridge — personal details never leave the Mac. Requires macOS 26+ with Apple Intelligence on.",
+    docsUrl: "https://developer.apple.com/documentation/foundationmodels",
+    fields: [
+      {
+        key: "baseUrl",
+        label: "Bridge URL",
+        type: "text",
+        placeholder: "http://127.0.0.1:11435",
+        helpText:
+          "Defaults to http://127.0.0.1:11435. Other local origins must be listed in APPLE_BRIDGE_ALLOWED_ORIGINS.",
+      },
+      {
+        key: "token",
+        label: "Bridge token (optional)",
+        type: "password",
+        helpText: "Only if you started the bridge with APPLE_BRIDGE_TOKEN.",
       },
     ],
   },

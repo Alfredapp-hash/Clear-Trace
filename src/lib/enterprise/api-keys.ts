@@ -1,8 +1,8 @@
 import { createHash, randomBytes } from "crypto";
-import { and, desc, eq, isNull } from "drizzle-orm";
+import { and, asc, desc, eq, isNull } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
-import { apiKeys, organizations } from "@/lib/db/schema";
+import { apiKeys, memberships, organizations } from "@/lib/db/schema";
 
 export const DEFAULT_API_KEY_SCOPES = [
   "cases:read",
@@ -13,12 +13,30 @@ export const DEFAULT_API_KEY_SCOPES = [
 
 export type ApiKeyScope = (typeof DEFAULT_API_KEY_SCOPES)[number];
 
+/** The complete set of scopes an API key may be granted. Wildcards are not allowed. */
+export const ALLOWED_API_KEY_SCOPES: ReadonlySet<string> = new Set<string>(DEFAULT_API_KEY_SCOPES);
+
+export function validateApiKeyScopes(scopes: unknown): string[] {
+  if (scopes == null) return [...DEFAULT_API_KEY_SCOPES];
+  if (!Array.isArray(scopes)) throw new Error("INVALID_SCOPES");
+  if (scopes.length === 0) return [...DEFAULT_API_KEY_SCOPES];
+  const unique = [...new Set(scopes)];
+  for (const scope of unique) {
+    if (typeof scope !== "string" || !ALLOWED_API_KEY_SCOPES.has(scope)) {
+      throw new Error("INVALID_SCOPES");
+    }
+  }
+  return unique as string[];
+}
+
 export interface ApiKeyAuth {
   type: "api_key";
   apiKeyId: string;
   organizationId: string;
   organizationName: string;
   scopes: string[];
+  /** User the key acts on behalf of (creator, or the org's first member for legacy keys). */
+  actingUserId: string | null;
 }
 
 function hashApiKey(rawKey: string): string {
@@ -45,7 +63,7 @@ export async function createApiKey(
   const { rawKey, prefix } = generateRawKey();
   const id = uuid();
   const now = new Date().toISOString();
-  const resolvedScopes = scopes?.length ? scopes : [...DEFAULT_API_KEY_SCOPES];
+  const resolvedScopes = validateApiKeyScopes(scopes);
 
   await db.insert(apiKeys).values({
     id,
@@ -123,6 +141,23 @@ export async function authenticateApiKey(
   });
   if (!org) return null;
 
+  let actingUserId = row.createdByUserId ?? null;
+  if (!actingUserId) {
+    const firstMember = await db.query.memberships.findFirst({
+      where: eq(memberships.organizationId, row.organizationId),
+      orderBy: [asc(memberships.createdAt)],
+    });
+    actingUserId = firstMember?.userId ?? null;
+  }
+
+  let scopes: string[] = [];
+  try {
+    const parsed = JSON.parse(row.scopesJson) as unknown;
+    if (Array.isArray(parsed)) scopes = parsed.filter((s): s is string => typeof s === "string");
+  } catch {
+    scopes = [];
+  }
+
   const now = new Date().toISOString();
   await db.update(apiKeys).set({ lastUsedAt: now }).where(eq(apiKeys.id, row.id));
 
@@ -131,10 +166,12 @@ export async function authenticateApiKey(
     apiKeyId: row.id,
     organizationId: row.organizationId,
     organizationName: org.name,
-    scopes: JSON.parse(row.scopesJson) as string[],
+    scopes,
+    actingUserId,
   };
 }
 
+/** Explicit scopes only — legacy "*" grants are no longer honored. */
 export function apiKeyHasScope(auth: ApiKeyAuth, scope: string): boolean {
-  return auth.scopes.includes(scope) || auth.scopes.includes("*");
+  return ALLOWED_API_KEY_SCOPES.has(scope) && auth.scopes.includes(scope);
 }

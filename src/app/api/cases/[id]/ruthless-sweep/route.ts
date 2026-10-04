@@ -1,21 +1,21 @@
-import { getSession } from "@/lib/auth/session";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { ensureDatabase } from "@/lib/db/init";
 import { runRuthlessSweep } from "@/lib/ruthless/service";
 import { jsonError, jsonOk } from "@/lib/api";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 
 export async function POST(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const { id } = await params;
+  const access = await requireCaseAccess(request, id);
+  if (access instanceof Response) return access;
+  const { session } = access;
 
   const rate = await checkRateLimit(`ruthless-sweep:${session.userId}`, 6);
   if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
-
-  const { id } = await params;
 
   try {
     const result = await runRuthlessSweep(session, id);

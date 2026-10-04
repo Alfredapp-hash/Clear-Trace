@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useState, Suspense } from "react";
 import { AuthLayout } from "@/components/AuthLayout";
 import { Button, Input, Label } from "@/components/ui";
+import { safeRedirectPath } from "@/lib/auth/safe-redirect";
 
 function LoginForm() {
   const router = useRouter();
@@ -32,7 +33,7 @@ function LoginForm() {
       return;
     }
 
-    const from = searchParams.get("from") ?? "/";
+    const from = safeRedirectPath(searchParams.get("from"));
     router.push(from);
     router.refresh();
   }

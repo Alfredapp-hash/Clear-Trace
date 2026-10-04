@@ -1,6 +1,7 @@
 import { and, eq, inArray, lte } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { deindexRequests, monitoringRules, optOutDispatches, privacyCases } from "@/lib/db/schema";
+import { isActiveCaseStatus, isRemovedCaseStatus } from "@/lib/ux/case-status";
 
 export interface ActionItem {
   caseId: string;
@@ -17,10 +18,18 @@ export interface ActionItem {
   priority: "high" | "medium" | "low";
 }
 
-export async function getActionItems(userId: string): Promise<ActionItem[]> {
-  const cases = await db.query.privacyCases.findMany({
-    where: eq(privacyCases.ownerUserId, userId),
+/** Cases owned by the user, scoped to the org when known (a user can belong to several orgs). */
+export async function listDashboardCases(userId: string, organizationId?: string) {
+  return db.query.privacyCases.findMany({
+    where: organizationId
+      ? and(eq(privacyCases.ownerUserId, userId), eq(privacyCases.organizationId, organizationId))
+      : eq(privacyCases.ownerUserId, userId),
   });
+}
+
+export async function getActionItems(userId: string, organizationId?: string): Promise<ActionItem[]> {
+  const cases = await listDashboardCases(userId, organizationId);
+  const caseIds = cases.map((c) => c.id);
 
   const items: ActionItem[] = [];
   const now = new Date().toISOString();
@@ -55,16 +64,21 @@ export async function getActionItems(userId: string): Promise<ActionItem[]> {
     }
   }
 
-  const dueRules = await db.query.monitoringRules.findMany({
-    where: and(
-      eq(monitoringRules.enabled, true),
-      lte(monitoringRules.nextCheckAt, now),
-    ),
-  });
+  const dueRules =
+    caseIds.length > 0
+      ? await db.query.monitoringRules.findMany({
+          where: and(
+            inArray(monitoringRules.caseId, caseIds),
+            eq(monitoringRules.enabled, true),
+            lte(monitoringRules.nextCheckAt, now),
+          ),
+        })
+      : [];
 
+  const casesById = new Map(cases.map((c) => [c.id, c]));
   const dueCaseIds = [...new Set(dueRules.map((r) => r.caseId))];
   for (const caseId of dueCaseIds) {
-    const c = cases.find((x) => x.id === caseId);
+    const c = casesById.get(caseId);
     if (c) {
       items.push({
         caseId: c.id,
@@ -76,7 +90,6 @@ export async function getActionItems(userId: string): Promise<ActionItem[]> {
     }
   }
 
-  const caseIds = cases.map((c) => c.id);
   if (caseIds.length > 0) {
     const [optOuts, deindexes] = await Promise.all([
       db.query.optOutDispatches.findMany({
@@ -134,27 +147,12 @@ export async function getActionItems(userId: string): Promise<ActionItem[]> {
   return items.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 }
 
-export async function getDashboardStats(userId: string) {
-  const cases = await db.query.privacyCases.findMany({
-    where: eq(privacyCases.ownerUserId, userId),
-  });
-
-  const activeStatuses = [
-    "consent_verified",
-    "discovery_running",
-    "candidate_review",
-    "confirmed_exposure",
-    "draft_ready",
-    "sent",
-    "verification_due",
-    "follow_up_eligible",
-    "reopened",
-  ];
-
+export async function getDashboardStats(userId: string, organizationId?: string) {
+  const cases = await listDashboardCases(userId, organizationId);
   return {
     total: cases.length,
-    active: cases.filter((c) => activeStatuses.includes(c.status)).length,
-    removed: cases.filter((c) => c.status === "removed_confirmed").length,
+    active: cases.filter((c) => isActiveCaseStatus(c.status)).length,
+    removed: cases.filter((c) => isRemovedCaseStatus(c.status)).length,
     archived: cases.filter((c) => c.status === "archived").length,
   };
 }

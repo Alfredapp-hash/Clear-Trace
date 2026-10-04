@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { test, expect } from "@playwright/test";
 
-test("v1.0 workflow sections appear on case page", async ({ page, request }) => {
+test("v1.0 workflow sections appear on case page", async ({ page }) => {
   const suffix = randomUUID().slice(0, 8);
   const email = `v1-${suffix}@test.local`;
 

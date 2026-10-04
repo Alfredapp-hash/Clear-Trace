@@ -70,7 +70,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
       {
         id: "connector",
         label: "Configure discovery connector (optional)",
-        description: "SerpAPI, Bing, or Google CSE for live search. Demo discovery works without keys.",
+        description: "SerpAPI or Google CSE for live search. Demo discovery works without keys.",
         done: ctx.connectorHealth.discoveryReady || ctx.candidateCount > 0,
         inAppHint: "Settings → Connectors → Discovery",
       },
@@ -628,7 +628,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
       {
         id: "discovery",
         label: "Discovery connector (optional)",
-        description: "SerpAPI, Bing, or Google CSE for live search.",
+        description: "SerpAPI or Google CSE for live search.",
         done: ctx.connectorHealth.discoveryReady,
         inAppHint: "Settings → Connectors",
       },

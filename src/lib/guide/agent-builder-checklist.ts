@@ -66,7 +66,7 @@ export const BUILDER_CHECKLIST: BuilderChecklistItem[] = [
     id: "connectors",
     phase: "Integrations",
     label: "Add BYOK connectors",
-    description: "SerpAPI/Bing for live SERP, OpenAI for draft polish, HIBP for breach intel, Gmail/SMTP for outbound.",
+    description: "SerpAPI or Google CSE for live SERP, local Ollama for private draft polish (Local-only AI), HIBP for breach intel, Gmail/SMTP for outbound.",
   },
   {
     id: "first-case",
@@ -79,13 +79,13 @@ export const BUILDER_CHECKLIST: BuilderChecklistItem[] = [
     id: "tests-green",
     phase: "Validate",
     label: "Run npm test && npm run build",
-    description: "137+ tests cover API, Hermes, SSRF, SLA, broker sweep. Build must pass before shipping.",
+    description: "The test suite covers API, Hermes, SSRF, SLA, broker sweep. Build must pass before shipping.",
   },
   {
     id: "deploy",
     phase: "Ship",
-    label: "Deploy (Docker, Vercel, or self-host)",
-    description: "docker-compose up for worker + app, or Vercel with cron. Omit Stripe env for full Pro on self-host.",
+    label: "Deploy (Docker / self-host)",
+    description: "docker compose up for app + worker-cron (set SESSION_SECRET, ENCRYPTION_KEY, WORKER_SECRET). Omit Stripe env for full Pro on self-host.",
     docPath: "docker-compose.yml",
   },
   {

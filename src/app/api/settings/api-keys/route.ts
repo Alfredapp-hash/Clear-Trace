@@ -1,13 +1,20 @@
-import { getSession } from "@/lib/auth/session";
+import { requireOrgAdminSession } from "@/lib/auth/org-role";
 import { requireBillingFeature } from "@/lib/billing/service";
 import { ensureDatabase } from "@/lib/db/init";
-import { createApiKey, listApiKeys, revokeApiKey } from "@/lib/enterprise/api-keys";
+import {
+  ALLOWED_API_KEY_SCOPES,
+  createApiKey,
+  listApiKeys,
+  revokeApiKey,
+  validateApiKeyScopes,
+} from "@/lib/enterprise/api-keys";
 import { jsonError, jsonOk } from "@/lib/api";
 
 export async function GET() {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const guard = await requireOrgAdminSession();
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   try {
     await requireBillingFeature(session.organizationId, "api_keys");
@@ -23,13 +30,25 @@ export async function GET() {
 
 export async function POST(request: Request) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const guard = await requireOrgAdminSession();
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const body = await request.json().catch(() => ({}));
-  const { name, scopes } = body as { name?: string; scopes?: string[] };
+  const { name, scopes } = body as { name?: unknown; scopes?: unknown };
 
-  if (!name?.trim()) return jsonError("Name is required");
+  if (typeof name !== "string" || !name.trim()) return jsonError("Name is required");
+  if (name.length > 100) return jsonError("Name is too long");
+
+  let validScopes: string[];
+  try {
+    validScopes = validateApiKeyScopes(scopes);
+  } catch {
+    return jsonError(
+      `Invalid scopes. Allowed: ${[...ALLOWED_API_KEY_SCOPES].join(", ")}`,
+      400,
+    );
+  }
 
   try {
     await requireBillingFeature(session.organizationId, "api_keys");
@@ -37,7 +56,7 @@ export async function POST(request: Request) {
       session.organizationId,
       session.userId,
       name,
-      scopes,
+      validScopes,
     );
     return jsonOk(created, 201);
   } catch (error) {
@@ -50,8 +69,9 @@ export async function POST(request: Request) {
 
 export async function DELETE(request: Request) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const guard = await requireOrgAdminSession();
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
@@ -66,7 +86,7 @@ export async function DELETE(request: Request) {
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("API keys require Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "API_KEY_NOT_FOUND") return jsonError(msg, 404);
+    if (msg === "API_KEY_NOT_FOUND") return jsonError("API key not found", 404);
     throw error;
   }
 }

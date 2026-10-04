@@ -26,35 +26,102 @@ const CATEGORY_LABELS: Record<string, string> = {
   webhook: "Webhooks",
 };
 
+interface ConnectorSettingsData {
+  connectors?: ConnectorPublicView[];
+  health?: HealthSummary | null;
+  agentDefaults?: AgentDefaults;
+  setupGuides?: Record<string, ConnectorSetupStep[]>;
+  canManage?: boolean;
+}
+
+async function fetchConnectorSettings(): Promise<ConnectorSettingsData> {
+  const res = await fetch("/api/settings/connectors");
+  const data = (await res.json().catch(() => ({}))) as ConnectorSettingsData & { error?: string };
+  if (!res.ok) throw new Error(data.error ?? "Could not load connector settings");
+  return data;
+}
+
+async function readJson(res: Response): Promise<Record<string, unknown>> {
+  try {
+    return (await res.json()) as Record<string, unknown>;
+  } catch {
+    return {};
+  }
+}
+
+const OLLAMA_CLOUD_ORIGIN = "https://ollama.com";
+
+/** Client-side hint only; the server re-derives the mode on save. */
+function ollamaModeFor(baseUrl: string | undefined, stored?: string): "local" | "cloud" {
+  const raw = baseUrl?.trim();
+  if (!raw) return stored === "cloud" ? "cloud" : "local";
+  try {
+    return new URL(raw).origin === OLLAMA_CLOUD_ORIGIN ? "cloud" : "local";
+  } catch {
+    return "local";
+  }
+}
+
+function OllamaModeBadge({ mode }: { mode: "local" | "cloud" }) {
+  return mode === "cloud" ? (
+    <Badge tone="warning">Cloud — draft text including personal details is sent to ollama.com</Badge>
+  ) : (
+    <Badge tone="success">Local — stays on this machine</Badge>
+  );
+}
+
 export function ConnectorSettings() {
   const [connectors, setConnectors] = useState<ConnectorPublicView[]>([]);
   const [health, setHealth] = useState<HealthSummary | null>(null);
   const [agentDefaults, setAgentDefaults] = useState<AgentDefaults>({});
   const [setupGuides, setSetupGuides] = useState<Record<string, ConnectorSetupStep[]>>({});
+  const [canManage, setCanManage] = useState(true);
   const [expanded, setExpanded] = useState<ConnectorType | null>(null);
   const [formValues, setFormValues] = useState<Record<string, string>>({});
   const [metaValues, setMetaValues] = useState<Record<string, string>>({});
+  const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [loading, setLoading] = useState("");
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
-  const refresh = useCallback(async () => {
-    const res = await fetch("/api/settings/connectors");
-    const data = await res.json();
+  const applyData = useCallback((data: ConnectorSettingsData) => {
     setConnectors(data.connectors ?? []);
     setHealth(data.health ?? null);
     setAgentDefaults(data.agentDefaults ?? {});
     setSetupGuides(data.setupGuides ?? {});
+    setCanManage(data.canManage !== false);
   }, []);
 
+  const refresh = useCallback(async () => {
+    try {
+      applyData(await fetchConnectorSettings());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not load connector settings");
+    }
+  }, [applyData]);
+
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let cancelled = false;
+    fetchConnectorSettings().then(
+      (data) => {
+        if (!cancelled) applyData(data);
+      },
+      (err: unknown) => {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : "Could not load connector settings");
+        }
+      },
+    );
+    return () => {
+      cancelled = true;
+    };
+  }, [applyData]);
 
   function openConnector(c: ConnectorPublicView) {
     setExpanded(c.type);
     setFormValues({});
     setMetaValues(c.metadata ?? {});
+    setOllamaModels([]);
     setError("");
     setMessage("");
   }
@@ -63,48 +130,100 @@ export function ConnectorSettings() {
     setLoading(testOnly ? `test-${type}` : `save-${type}`);
     setError("");
     setMessage("");
-    const res = await fetch("/api/settings/connectors", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        action: testOnly ? "test" : "save",
-        type,
-        credentials: formValues,
-        metadata: metaValues,
-      }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? data.message ?? "Request failed");
-    } else {
-      const latency =
-        typeof data.latencyMs === "number" ? ` (${data.latencyMs}ms)` : "";
-      setMessage((data.message ?? (testOnly ? "Test passed" : "Saved")) + latency);
-      if (!testOnly) {
-        setExpanded(null);
-        await refresh();
+    try {
+      const res = await fetch("/api/settings/connectors", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: testOnly ? "test" : "save",
+          type,
+          credentials: formValues,
+          metadata: metaValues,
+        }),
+      });
+      const data = await readJson(res);
+      const detail = (data.detail ?? {}) as { models?: unknown };
+      if (type === "ollama" && Array.isArray(detail.models)) {
+        setOllamaModels(detail.models.filter((m): m is string => typeof m === "string"));
       }
+      // A test that ran but failed comes back 200 with ok:false — show it as an error.
+      if (!res.ok || data.ok === false) {
+        setError(String(data.error ?? data.message ?? "Request failed"));
+      } else {
+        const latency =
+          typeof data.latencyMs === "number" ? ` (${data.latencyMs}ms)` : "";
+        setMessage(String(data.message ?? (testOnly ? "Test passed" : "Saved")) + latency);
+        if (!testOnly) setExpanded(null);
+      }
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      // Status / lastError may have changed either way.
+      await refresh();
+      setLoading("");
     }
-    setLoading("");
   }
 
   async function removeConnector(type: ConnectorType) {
     setLoading(`remove-${type}`);
-    await fetch(`/api/settings/connectors?type=${type}`, { method: "DELETE" });
-    await refresh();
-    setLoading("");
+    setError("");
+    setMessage("");
+    try {
+      const res = await fetch(`/api/settings/connectors?type=${encodeURIComponent(type)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) {
+        const data = await readJson(res);
+        setError(String(data.error ?? "Could not remove connector"));
+      }
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      await refresh();
+      setLoading("");
+    }
   }
 
   async function saveDefaults() {
     setLoading("defaults");
-    await fetch("/api/settings/connectors", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ agentDefaults }),
-    });
-    setLoading("");
-    setMessage("Agent defaults saved");
+    setError("");
+    setMessage("");
+    try {
+      const payload = {
+        ...agentDefaults,
+        // Send explicit nulls so "Auto" / "Rules only" clear a stored preference.
+        discovery: agentDefaults.discovery ?? null,
+        breachIntel: agentDefaults.breachIntel ?? null,
+        intelligence: agentDefaults.intelligence ?? null,
+        email: agentDefaults.email ?? null,
+        weeklyDigestEmail: agentDefaults.weeklyDigestEmail ?? null,
+        llmLocalOnly: agentDefaults.llmLocalOnly !== false,
+      };
+      const res = await fetch("/api/settings/connectors", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ agentDefaults: payload }),
+      });
+      const data = await readJson(res);
+      if (!res.ok) {
+        setError(String(data.error ?? "Could not save agent defaults"));
+      } else {
+        if (data.agentDefaults) setAgentDefaults(data.agentDefaults as AgentDefaults);
+        setMessage("Agent defaults saved");
+      }
+    } catch {
+      setError("Network error — please try again");
+    } finally {
+      setLoading("");
+    }
   }
+
+  const localOnly = agentDefaults.llmLocalOnly !== false;
+  const cloudIntelligenceSelected =
+    !!agentDefaults.intelligence &&
+    agentDefaults.intelligence !== "rules_only" &&
+    agentDefaults.intelligence !== "ollama" &&
+    agentDefaults.intelligence !== "apple_intelligence";
 
   const byCategory = connectors.reduce<Record<string, ConnectorPublicView[]>>(
     (acc, c) => {
@@ -127,7 +246,7 @@ export function ConnectorSettings() {
         <Card variant="warning">
           <p className="text-sm leading-relaxed text-amber-100/90">
             Agents need at least one <strong className="text-white">discovery</strong> connector
-            (SerpAPI, Bing, or Google CSE) before live search can run. Demo discovery still works
+            (SerpAPI or Google CSE) before live search can run. Demo discovery still works
             without keys.
           </p>
         </Card>
@@ -148,6 +267,11 @@ export function ConnectorSettings() {
         </div>
       )}
 
+      {!canManage && (
+        <p className="text-sm text-amber-200/90">
+          Only the workspace owner or an admin can change connectors and agent defaults.
+        </p>
+      )}
       {error && <p className="text-sm text-rose-400">{error}</p>}
       {message && <p className="text-sm text-teal-400">{message}</p>}
 
@@ -164,6 +288,21 @@ export function ConnectorSettings() {
                   <div>
                     <p className="font-medium text-slate-200">{c.name}</p>
                     <p className="mt-1 text-xs text-slate-500">{c.description}</p>
+                    {c.type === "ollama" && (c.configured || expanded === "ollama") && (
+                      <div className="mt-2">
+                        <OllamaModeBadge
+                          mode={ollamaModeFor(
+                            expanded === "ollama" ? formValues.baseUrl : undefined,
+                            c.metadata?.mode,
+                          )}
+                        />
+                      </div>
+                    )}
+                    {c.type === "apple_intelligence" && (
+                      <div className="mt-2">
+                        <Badge tone="success">On-device — stays on this Mac</Badge>
+                      </div>
+                    )}
                     {c.configured && c.maskedPreview && (
                       <p className="mt-1 font-mono text-xs text-slate-600">
                         {c.maskedPreview}
@@ -191,6 +330,7 @@ export function ConnectorSettings() {
                       variant="secondary"
                       className="!px-3 !py-1 text-xs"
                       onClick={() => openConnector(c)}
+                      disabled={!canManage}
                     >
                       {c.configured ? "Update" : "Add"}
                     </Button>
@@ -199,7 +339,7 @@ export function ConnectorSettings() {
                         variant="ghost"
                         className="!px-3 !py-1 text-xs"
                         onClick={() => removeConnector(c.type)}
-                        disabled={loading === `remove-${c.type}`}
+                        disabled={!canManage || loading === `remove-${c.type}`}
                       >
                         Remove
                       </Button>
@@ -265,20 +405,50 @@ export function ConnectorSettings() {
                         )}
                       </div>
                     ))}
-                    {c.metadataFields?.map((field) => (
-                      <div key={field.key}>
-                        <Label htmlFor={`${c.type}-meta-${field.key}`}>{field.label}</Label>
-                        <Input
-                          id={`${c.type}-meta-${field.key}`}
-                          type="text"
-                          placeholder={field.placeholder}
-                          value={metaValues[field.key] ?? ""}
-                          onChange={(e) =>
-                            setMetaValues({ ...metaValues, [field.key]: e.target.value })
-                          }
-                        />
-                      </div>
-                    ))}
+                    {c.metadataFields?.map((field) =>
+                      c.type === "ollama" && field.key === "model" && ollamaModels.length > 0 ? (
+                        <div key={field.key}>
+                          <Label htmlFor={`${c.type}-meta-${field.key}`}>{field.label}</Label>
+                          <select
+                            id={`${c.type}-meta-${field.key}`}
+                            className="w-full rounded-xl border border-white/10 bg-black/30 px-3 py-2.5 text-sm text-slate-100"
+                            value={metaValues.model ?? ""}
+                            onChange={(e) =>
+                              setMetaValues({ ...metaValues, model: e.target.value })
+                            }
+                          >
+                            <option value="">Default (qwen3:8b)</option>
+                            {ollamaModels.map((m) => (
+                              <option key={m} value={m}>
+                                {m}
+                              </option>
+                            ))}
+                          </select>
+                          <p className="mt-1 text-xs text-slate-500">
+                            Installed models reported by the server. Save to use the selection.
+                          </p>
+                        </div>
+                      ) : (
+                        <div key={field.key}>
+                          <Label htmlFor={`${c.type}-meta-${field.key}`}>{field.label}</Label>
+                          <Input
+                            id={`${c.type}-meta-${field.key}`}
+                            type="text"
+                            placeholder={field.placeholder}
+                            value={metaValues[field.key] ?? ""}
+                            onChange={(e) =>
+                              setMetaValues({ ...metaValues, [field.key]: e.target.value })
+                            }
+                          />
+                        </div>
+                      ),
+                    )}
+                    {c.type === "ollama" && (
+                      <p className="text-xs text-slate-500">
+                        Use <strong className="text-slate-300">Test</strong> to list installed
+                        models. Changing the server URL clears any saved API key.
+                      </p>
+                    )}
                     <div className="flex flex-wrap gap-2">
                       <Button
                         onClick={() => saveConnector(c.type)}
@@ -286,13 +456,17 @@ export function ConnectorSettings() {
                       >
                         {loading === `save-${c.type}` ? "Saving…" : "Save & test"}
                       </Button>
-                      {c.configured && (
+                      {(c.configured || c.type === "ollama") && (
                         <Button
                           variant="secondary"
                           onClick={() => saveConnector(c.type, true)}
                           disabled={loading === `test-${c.type}`}
                         >
-                          {loading === `test-${c.type}` ? "Testing…" : "Re-test saved"}
+                          {loading === `test-${c.type}`
+                            ? "Testing…"
+                            : c.configured
+                              ? "Test"
+                              : "Test & list models"}
                         </Button>
                       )}
                       <Button variant="ghost" onClick={() => setExpanded(null)}>
@@ -374,13 +548,17 @@ export function ConnectorSettings() {
                 })
               }
             >
-              <option value="">Rules only (no LLM)</option>
-              <option value="rules_only">Rules only</option>
+              <option value="">Auto (local Ollama or Apple on-device, if connected)</option>
+              <option value="rules_only">Rules only (no LLM)</option>
               {connectors
                 .filter((c) => c.category === "intelligence")
                 .map((c) => (
                   <option key={c.type} value={c.type}>
-                    {c.name}
+                    {c.type === "ollama"
+                      ? "Ollama (local or cloud)"
+                      : c.type === "apple_intelligence"
+                        ? "Apple Intelligence (on-device)"
+                        : `${c.name} (cloud)`}
                   </option>
                 ))}
             </select>
@@ -408,6 +586,33 @@ export function ConnectorSettings() {
                 ))}
             </select>
           </div>
+        </div>
+        <div className="mt-6 space-y-2 border-t border-white/[0.06] pt-4">
+          <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={localOnly}
+              onChange={(e) =>
+                setAgentDefaults({ ...agentDefaults, llmLocalOnly: e.target.checked })
+              }
+            />
+            <span>
+              <strong className="text-white">Local-only AI (recommended)</strong> — drafts are only
+              polished by a model on this machine (Ollama or Apple Intelligence); no cloud LLM is ever
+              used, and if no local model is available the draft is kept as written.
+            </span>
+          </label>
+          {localOnly && cloudIntelligenceSelected && (
+            <p className="text-xs text-amber-200/90">
+              Your Intelligence default is a cloud provider, so drafts will not be AI-polished while
+              Local-only AI is on. Choose Ollama (local) or turn Local-only AI off.
+            </p>
+          )}
+          <p className="text-xs text-slate-500">
+            Note: discovery search (SerpAPI / Google CSE) and breach lookups (HIBP) still use external
+            services by design — only the search terms or email address needed for that lookup are sent.
+          </p>
         </div>
         <div className="mt-6 space-y-3 border-t border-white/[0.06] pt-4">
           <p className="text-sm font-medium text-slate-300">Optional automation</p>
@@ -486,7 +691,11 @@ export function ConnectorSettings() {
             </div>
           )}
         </div>
-        <Button className="mt-4" onClick={saveDefaults} disabled={loading === "defaults"}>
+        <Button
+          className="mt-4"
+          onClick={saveDefaults}
+          disabled={!canManage || loading === "defaults"}
+        >
           Save agent defaults
         </Button>
       </Card>

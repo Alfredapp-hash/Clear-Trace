@@ -3,7 +3,7 @@ import { AppShell } from "@/components/AppShell";
 import {
   Alert,
   Badge,
-  Button,
+  ButtonLink,
   Card,
   EmptyState,
   ListRow,
@@ -15,7 +15,7 @@ import {
 import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import { redirect } from "next/navigation";
-import { eq, desc } from "drizzle-orm";
+import { and, eq, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { privacyCases, auditEvents } from "@/lib/db/schema";
 import { getActionItems, getDashboardStats } from "@/lib/dashboard/actions";
@@ -33,7 +33,10 @@ export default async function DashboardPage() {
   const [cases, recentEvents, actionItems, stats, connectorHealth, radar, victories] =
     await Promise.all([
       db.query.privacyCases.findMany({
-        where: eq(privacyCases.ownerUserId, session.userId),
+        where: and(
+          eq(privacyCases.ownerUserId, session.userId),
+          eq(privacyCases.organizationId, session.organizationId),
+        ),
         orderBy: [desc(privacyCases.updatedAt)],
         limit: 5,
       }),
@@ -42,11 +45,11 @@ export default async function DashboardPage() {
         orderBy: [desc(auditEvents.createdAt)],
         limit: 8,
       }),
-      getActionItems(session.userId),
-      getDashboardStats(session.userId),
+      getActionItems(session.userId, session.organizationId),
+      getDashboardStats(session.userId, session.organizationId),
       getConnectorHealth(session.organizationId),
-      getExposureRadar(session.userId),
-      getVictoryStats(session.userId),
+      getExposureRadar(session.userId, session.organizationId),
+      getVictoryStats(session.userId, session.organizationId),
     ]);
 
   return (
@@ -56,9 +59,7 @@ export default async function DashboardPage() {
         title="Dashboard"
         description="Exposure radar, case momentum, and audit activity — all in one view."
         action={
-          <Link href="/cases/new">
-            <Button size="lg">New case</Button>
-          </Link>
+          <ButtonLink href="/cases/new" size="lg">New case</ButtonLink>
         }
       />
 
@@ -69,14 +70,8 @@ export default async function DashboardPage() {
             description="Start with intake and consent, then run demo discovery — no API keys required. Configure connectors in Settings when you are ready for live search or Gmail draft push."
             action={
               <div className="flex flex-wrap justify-center gap-3">
-                <Link href="/cases/new">
-                  <Button size="lg">Start intake wizard</Button>
-                </Link>
-                <Link href="/settings">
-                  <Button variant="secondary" size="lg">
-                    Configure connectors
-                  </Button>
-                </Link>
+                <ButtonLink href="/cases/new" size="lg">Start intake wizard</ButtonLink>
+                <ButtonLink href="/settings" variant="secondary" size="lg">Configure connectors</ButtonLink>
               </div>
             }
           />
@@ -89,13 +84,11 @@ export default async function DashboardPage() {
             tone="warning"
             title="Configure connectors to unlock agents"
             action={
-              <Link href="/settings">
-                <Button variant="secondary">Open Settings</Button>
-              </Link>
+              <ButtonLink href="/settings" variant="secondary">Open Settings</ButtonLink>
             }
           >
-            Add SerpAPI, Bing, or Google CSE for live discovery; Gmail for draft push; LLM keys
-            for optional draft polish. Demo discovery works without keys. SMTP/Resend/webhook
+            Add SerpAPI or Google CSE for live discovery; Gmail for draft push; a local Ollama
+            model for private draft polish (Local-only AI keeps personal data on this machine). Demo discovery works without keys. SMTP/Resend/webhook
             connectors can test or optionally send (Resend/SendGrid/Postmark) when enabled in Agent defaults.
           </Alert>
         </div>

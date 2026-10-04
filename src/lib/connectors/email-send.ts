@@ -1,3 +1,4 @@
+import { createHash } from "crypto";
 import { requireBillingFeature } from "@/lib/billing/service";
 import { ConnectorConnectionError } from "./connection/errors";
 import { connectorFetch } from "./connection/http";
@@ -13,11 +14,32 @@ export interface SendEmailInput {
   to: string;
   subject: string;
   body: string;
+  /**
+   * Stable key for provider-side de-duplication (Resend `Idempotency-Key`). Callers that send a
+   * stored draft should pass `removal-email/<draftId>`; when omitted it is derived from the
+   * organization, recipient, subject and body so a retried send of the same message is deduped.
+   */
+  idempotencyKey?: string;
 }
 
 export interface SendEmailResult {
   provider: ConnectorType;
   messageId: string;
+}
+
+/** Resend caps idempotency keys at 256 characters and keeps them for 24 hours. */
+const MAX_IDEMPOTENCY_KEY_LENGTH = 256;
+
+export function emailIdempotencyKey(organizationId: string, input: SendEmailInput): string {
+  const explicit = input.idempotencyKey?.trim();
+  if (explicit) {
+    if (explicit.length <= MAX_IDEMPOTENCY_KEY_LENGTH) return explicit;
+    return `key-sha256/${createHash("sha256").update(explicit).digest("hex")}`;
+  }
+  const digest = createHash("sha256")
+    .update(JSON.stringify([organizationId, input.to.trim().toLowerCase(), input.subject, input.body]))
+    .digest("hex");
+  return `email/${digest}`;
 }
 
 const SEND_CAPABLE: ConnectorType[] = ["smtp", "resend", "sendgrid", "postmark"];
@@ -69,6 +91,8 @@ async function sendViaEmailConnector(
       headers: {
         Authorization: `Bearer ${connector.credentials.apiKey}`,
         "Content-Type": "application/json",
+        // Resend returns the original response for a repeated key instead of sending again.
+        "Idempotency-Key": emailIdempotencyKey(organizationId, input),
       },
       body: JSON.stringify({
         from,
@@ -76,6 +100,8 @@ async function sendViaEmailConnector(
         subject: input.subject,
         text: input.body,
       }),
+      // Never auto-retry a send: a retried POST can deliver the email twice.
+      retries: 0,
     });
     return { provider: type, messageId: res.data.id ?? "unknown" };
   }
@@ -95,6 +121,7 @@ async function sendViaEmailConnector(
         subject: input.subject,
         content: [{ type: "text/plain", value: input.body }],
       }),
+      retries: 0,
     });
     return { provider: type, messageId: `sendgrid-${Date.now()}` };
   }
@@ -113,6 +140,7 @@ async function sendViaEmailConnector(
       Subject: input.subject,
       TextBody: input.body,
     }),
+    retries: 0,
   });
   return { provider: type, messageId: res.data.MessageID ?? "unknown" };
 }

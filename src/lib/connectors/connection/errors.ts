@@ -76,8 +76,11 @@ export function friendlyProviderMessage(
   if (provider === "google_cse" && code === "forbidden") {
     msg += " Ensure Custom Search API is enabled and cx matches your search engine.";
   }
-  if (provider === "bing_search" && code === "auth_failed") {
-    msg += " Use a Bing Web Search v7 key from Azure Portal.";
+  if (provider === "apple_intelligence" && code === "network_error") {
+    msg += " Is the Apple bridge running? Start it with `apple-bridge/.build/release/cleartrace-apple-bridge`.";
+  }
+  if (provider === "ollama" && code === "network_error") {
+    msg += " Is Ollama running? Start it with `ollama serve`.";
   }
   return msg;
 }

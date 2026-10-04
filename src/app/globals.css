@@ -149,3 +149,15 @@ body {
   background: rgba(255, 255, 255, 0.2);
   background-clip: padding-box;
 }
+/* Respect users who ask the OS to minimise motion. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    animation-delay: 0ms !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

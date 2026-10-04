@@ -27,10 +27,10 @@ export async function runBackgroundJobs(): Promise<WorkerJobResult> {
   const cutoff = new Date(Date.now() - 60 * 60 * 1000).toISOString();
   await db.delete(rateLimitEvents).where(lt(rateLimitEvents.createdAt, cutoff));
 
-  const [verificationResults, retentionResults] = await Promise.all([
-    runDueVerifications(),
-    purgeExpiredArchivedCases(),
-  ]);
+  // Sequential: purging archived cases while their verification checks are being
+  // written would race (FK errors / orphaned rows).
+  const verificationResults = await runDueVerifications();
+  const retentionResults = await purgeExpiredArchivedCases();
 
   return {
     verifications: {

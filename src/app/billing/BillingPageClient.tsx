@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { callApi } from "@/lib/ui/call-api";
+import { safeHttpUrl } from "@/lib/ui/safe-url";
 import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Alert, Badge, Button, Card, PageHeader, SectionTitle } from "@/components/ui";
@@ -26,49 +28,45 @@ export function BillingPageClient() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    void (async () => {
-      const [meRes, billingRes] = await Promise.all([
-        fetch("/api/auth/me"),
-        fetch("/api/billing/status"),
-      ]);
-      if (meRes.ok) {
-        const me = await meRes.json();
-        setUserName(me.user?.name ?? "User");
-        setOrgName(me.user?.organizationName ?? "Workspace");
+    const controller = new AbortController();
+    const { signal } = controller;
+    Promise.all([
+      callApi<{ user?: { name?: string; organizationName?: string } }>("/api/auth/me", { signal }),
+      callApi<BillingStatus>("/api/billing/status", {
+        signal,
+        errorMessage: "Could not load billing status",
+      }),
+    ]).then(([me, billing]) => {
+      if (signal.aborted) return;
+      if (me.ok) {
+        setUserName(me.data.user?.name ?? "User");
+        setOrgName(me.data.user?.organizationName ?? "Workspace");
       }
-      if (billingRes.ok) {
-        setStatus(await billingRes.json());
-      }
-    })();
+      if (billing.ok) setStatus(billing.data);
+      else setError(billing.error);
+    });
+    return () => controller.abort();
   }, []);
 
-  async function startCheckout() {
-    setLoading("checkout");
+  async function redirectTo(kind: "checkout" | "portal") {
+    setLoading(kind);
     setError("");
-    const res = await fetch("/api/billing/checkout", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Checkout failed");
+    const res = await callApi<{ url?: string }>(`/api/billing/${kind}`, {
+      method: "POST",
+      errorMessage: kind === "checkout" ? "Checkout failed" : "Portal failed",
+    });
+    const url = res.ok ? safeHttpUrl(res.data.url) : null;
+    if (!url) {
+      setError(res.ok ? "Billing provider did not return a valid URL" : res.error);
       setLoading("");
       return;
     }
-    if (data.url) window.location.href = data.url;
-    setLoading("");
+    // Keep the loading state while the browser navigates away.
+    window.location.assign(url);
   }
 
-  async function openPortal() {
-    setLoading("portal");
-    setError("");
-    const res = await fetch("/api/billing/portal", { method: "POST" });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Portal failed");
-      setLoading("");
-      return;
-    }
-    if (data.url) window.location.href = data.url;
-    setLoading("");
-  }
+  const startCheckout = () => redirectTo("checkout");
+  const openPortal = () => redirectTo("portal");
 
   const success = params.get("success") === "1";
   const canceled = params.get("canceled") === "1";

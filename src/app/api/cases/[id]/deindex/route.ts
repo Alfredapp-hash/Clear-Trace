@@ -1,4 +1,5 @@
-import { resolveAuth, requireScope, toSessionLike } from "@/lib/auth/resolve-auth";
+import { authRateKey } from "@/lib/auth/resolve-auth";
+import { requireCaseAccess } from "@/lib/auth/case-access";
 import { requireBillingFeature } from "@/lib/billing/service";
 import { ensureDatabase } from "@/lib/db/init";
 import {
@@ -13,25 +14,30 @@ import { checkRateLimit } from "@/lib/security/rate-limiter";
 
 const VALID_ENGINES = new Set<SearchEngine>(["google", "bing", "duckduckgo", "yahoo"]);
 
+/** API action verbs → persisted outcome statuses expected by the deindex service. */
+const OUTCOME_BY_ACTION = {
+  resolve: "resolved",
+  reject: "rejected",
+} as const;
+
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const auth = await resolveAuth(_request);
-  if (!auth) return jsonError("Not authenticated", 401);
-
   const { id } = await params;
-  const session = toSessionLike(auth);
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "cases:read",
+  });
+  if (access instanceof Response) return access;
 
   try {
-    requireScope(auth, "cases:read");
-    const requests = await listDeindexRequests(id, session);
+    const requests = await listDeindexRequests(id, access.session);
     return jsonOk({ requests });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);
-    if (msg === "API_KEY_SCOPE_DENIED") return jsonError("API key missing cases:read scope", 403);
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);
   }
@@ -42,38 +48,44 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   ensureDatabase();
-  const auth = await resolveAuth(request);
-  if (!auth) return jsonError("Not authenticated", 401);
+  const { id } = await params;
+  const access = await requireCaseAccess(request, id, {
+    allowApiKey: true,
+    scope: "cases:write",
+  });
+  if (access instanceof Response) return access;
+  const { auth, session } = access;
 
-  const session = toSessionLike(auth);
-  const rateKey =
-    auth.type === "session" ? `deindex:${session.userId}` : `deindex:${auth.apiKey.apiKeyId}`;
-  const rate = await checkRateLimit(rateKey, 20);
+  const rate = await checkRateLimit(`deindex:${authRateKey(auth)}`, 20);
   if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
 
-  const { id } = await params;
-  const body = await request.json().catch(() => ({}));
+  const body = (await request.json().catch(() => ({}))) as Record<string, unknown>;
   const action = (body.action as string | undefined) ?? "create";
   const engines = Array.isArray(body.engines)
-    ? (body.engines as string[]).filter((e): e is SearchEngine => VALID_ENGINES.has(e as SearchEngine))
+    ? (body.engines as unknown[]).filter((e): e is SearchEngine => VALID_ENGINES.has(e as SearchEngine))
     : undefined;
+  const notes = typeof body.notes === "string" ? body.notes : undefined;
 
   try {
-    requireScope(auth, "cases:write");
     await requireBillingFeature(session.organizationId, "deindex_workflow");
 
     if (action === "submit") {
       const requestId = body.requestId as string | undefined;
-      if (!requestId) return jsonError("requestId required", 400);
+      if (!requestId || typeof requestId !== "string") return jsonError("requestId required", 400);
       await recordDeindexSubmitted(session, id, requestId);
       return jsonOk({ submitted: true });
     }
 
     if (action === "resolve" || action === "reject") {
       const requestId = body.requestId as string | undefined;
-      if (!requestId) return jsonError("requestId required", 400);
-      await recordDeindexOutcome(session, id, requestId, action, body.notes as string | undefined);
-      return jsonOk({ status: action });
+      if (!requestId || typeof requestId !== "string") return jsonError("requestId required", 400);
+      const outcome = OUTCOME_BY_ACTION[action];
+      await recordDeindexOutcome(session, id, requestId, outcome, notes);
+      return jsonOk({ status: outcome });
+    }
+
+    if (action !== "create") {
+      return jsonError("Unknown action. Use create, submit, resolve, or reject.", 400);
     }
 
     const result = await createDeindexRequests(session, id, engines);
@@ -88,7 +100,6 @@ export async function POST(
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("Search deindex workflow requires Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "API_KEY_SCOPE_DENIED") return jsonError("API key missing cases:write scope", 403);
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);
   }

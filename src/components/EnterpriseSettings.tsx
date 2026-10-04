@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Button, Card, Input, Label, SectionTitle } from "@/components/ui";
+import { callApi } from "@/lib/ui/call-api";
 
 interface ApiKeyRow {
   id: string;
@@ -20,6 +21,14 @@ interface WebhookRow {
   failureCount: number;
 }
 
+async function loadAll(signal?: AbortSignal) {
+  const [keysRes, whRes] = await Promise.all([
+    callApi<{ keys?: ApiKeyRow[] }>("/api/settings/api-keys", { signal }),
+    callApi<{ webhooks?: WebhookRow[] }>("/api/settings/webhooks", { signal }),
+  ]);
+  return { keysRes, whRes };
+}
+
 export function EnterpriseSettings() {
   const [keys, setKeys] = useState<ApiKeyRow[]>([]);
   const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
@@ -31,84 +40,83 @@ export function EnterpriseSettings() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState("");
 
+  function applyLoaded({ keysRes, whRes }: Awaited<ReturnType<typeof loadAll>>) {
+    if (keysRes.ok) setKeys(keysRes.data.keys ?? []);
+    if (whRes.ok) setWebhooks(whRes.data.webhooks ?? []);
+  }
+
   async function refresh() {
-    const [keysRes, whRes] = await Promise.all([
-      fetch("/api/settings/api-keys"),
-      fetch("/api/settings/webhooks"),
-    ]);
-    if (keysRes.ok) {
-      const data = await keysRes.json();
-      setKeys(data.keys ?? []);
-    }
-    if (whRes.ok) {
-      const data = await whRes.json();
-      setWebhooks(data.webhooks ?? []);
-    }
+    applyLoaded(await loadAll());
   }
 
   useEffect(() => {
-    void refresh();
+    const controller = new AbortController();
+    loadAll(controller.signal).then(({ keysRes, whRes }) => {
+      if (controller.signal.aborted) return;
+      if (keysRes.ok) setKeys(keysRes.data.keys ?? []);
+      if (whRes.ok) setWebhooks(whRes.data.webhooks ?? []);
+    });
+    return () => controller.abort();
   }, []);
 
-  async function createKey() {
-    setLoading("key");
+  async function mutate(
+    key: string,
+    url: string,
+    method: "POST" | "PATCH" | "DELETE",
+    body: unknown,
+    errorMessage: string,
+  ) {
+    setLoading(key);
     setError("");
-    setCreatedKey(null);
-    const res = await fetch("/api/settings/api-keys", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: keyName }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Failed to create API key");
+    try {
+      const res = await callApi<Record<string, unknown>>(url, { method, body, errorMessage });
+      if (!res.ok) {
+        setError(res.error);
+        return null;
+      }
+      await refresh();
+      return res.data;
+    } finally {
       setLoading("");
-      return;
     }
-    setCreatedKey(data.rawKey);
-    setKeyName("");
-    await refresh();
-    setLoading("");
+  }
+
+  async function createKey() {
+    setCreatedKey(null);
+    const data = await mutate("key", "/api/settings/api-keys", "POST", { name: keyName }, "Failed to create API key");
+    if (data) {
+      setCreatedKey(typeof data.rawKey === "string" ? data.rawKey : null);
+      setKeyName("");
+    }
   }
 
   async function revokeKey(id: string) {
-    await fetch(`/api/settings/api-keys?id=${id}`, { method: "DELETE" });
-    await refresh();
+    if (!confirm("Revoke this API key? Integrations using it will stop working.")) return;
+    await mutate(`revoke-${id}`, `/api/settings/api-keys?id=${encodeURIComponent(id)}`, "DELETE", undefined, "Failed to revoke key");
   }
 
   async function createWebhook() {
-    setLoading("webhook");
-    setError("");
-    const res = await fetch("/api/settings/webhooks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: whName, url: whUrl, secret: whSecret }),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      setError(data.error ?? "Failed to create webhook");
-      setLoading("");
-      return;
+    const data = await mutate(
+      "webhook",
+      "/api/settings/webhooks",
+      "POST",
+      { name: whName, url: whUrl, secret: whSecret },
+      "Failed to create webhook",
+    );
+    if (data) {
+      setWhName("");
+      setWhUrl("");
+      setWhSecret("");
     }
-    setWhName("");
-    setWhUrl("");
-    setWhSecret("");
-    await refresh();
-    setLoading("");
   }
 
   async function toggleWebhook(id: string, enabled: boolean) {
-    await fetch("/api/settings/webhooks", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, enabled }),
-    });
-    await refresh();
+    await mutate(`toggle-${id}`, "/api/settings/webhooks", "PATCH", { id, enabled }, "Failed to update webhook");
   }
 
   async function deleteWebhook(id: string) {
-    await fetch(`/api/settings/webhooks?id=${id}`, { method: "DELETE" });
-    await refresh();
+    if (!confirm("Delete this webhook?")) return;
+    await mutate(`delete-${id}`, `/api/settings/webhooks?id=${encodeURIComponent(id)}`, "DELETE", undefined, "Failed to delete webhook");
   }
 
   return (
@@ -147,7 +155,12 @@ export function EnterpriseSettings() {
               <span>
                 {key.name} · <code>{key.keyPrefix}…</code>
               </span>
-              <Button variant="ghost" size="sm" onClick={() => revokeKey(key.id)}>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => revokeKey(key.id)}
+                disabled={!!loading}
+              >
                 Revoke
               </Button>
             </li>
@@ -168,7 +181,7 @@ export function EnterpriseSettings() {
           </div>
           <div>
             <Label htmlFor="whUrl">URL</Label>
-            <Input id="whUrl" value={whUrl} onChange={(e) => setWhUrl(e.target.value)} />
+            <Input id="whUrl" type="url" inputMode="url" value={whUrl} onChange={(e) => setWhUrl(e.target.value)} />
           </div>
           <div>
             <Label htmlFor="whSecret">Signing secret</Label>
@@ -180,7 +193,11 @@ export function EnterpriseSettings() {
             />
           </div>
         </div>
-        <Button className="mt-4" onClick={createWebhook} disabled={loading === "webhook"}>
+        <Button
+          className="mt-4"
+          onClick={createWebhook}
+          disabled={loading === "webhook" || !whName.trim() || !whUrl.trim()}
+        >
           Add webhook
         </Button>
         <ul className="mt-4 space-y-2 text-sm text-slate-400">
@@ -189,7 +206,7 @@ export function EnterpriseSettings() {
               key={wh.id}
               className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.06] px-3 py-2"
             >
-              <span>
+              <span className="min-w-0 [overflow-wrap:anywhere]">
                 {wh.name} · {wh.enabled ? "enabled" : "disabled"}
                 {wh.failureCount > 0 ? ` · ${wh.failureCount} failures` : ""}
               </span>
@@ -198,10 +215,16 @@ export function EnterpriseSettings() {
                   variant="secondary"
                   size="sm"
                   onClick={() => toggleWebhook(wh.id, !wh.enabled)}
+                  disabled={!!loading}
                 >
                   {wh.enabled ? "Disable" : "Enable"}
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => deleteWebhook(wh.id)}>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => deleteWebhook(wh.id)}
+                  disabled={!!loading}
+                >
                   Delete
                 </Button>
               </div>
@@ -212,7 +235,7 @@ export function EnterpriseSettings() {
       </Card>
 
       {error && (
-        <p className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
+        <p role="alert" className="rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
           {error}
         </p>
       )}

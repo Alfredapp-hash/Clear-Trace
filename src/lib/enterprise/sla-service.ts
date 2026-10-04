@@ -96,10 +96,15 @@ export async function listCaseSlaDeadlines(caseId: string, organizationId: strin
   });
 }
 
+/**
+ * Mark a deadline met. Pass `caseId` (the route's case id) so a deadline from another
+ * case in the same org cannot be modified through this case's URL.
+ */
 export async function markSlaDeadlineMet(
   deadlineId: string,
   organizationId: string,
   notes?: string,
+  caseId?: string,
 ) {
   const row = await db.query.slaDeadlines.findFirst({
     where: and(
@@ -108,6 +113,7 @@ export async function markSlaDeadlineMet(
     ),
   });
   if (!row) throw new Error("SLA_NOT_FOUND");
+  if (caseId !== undefined && row.caseId !== caseId) throw new Error("SLA_NOT_FOUND");
 
   const now = new Date().toISOString();
   await db

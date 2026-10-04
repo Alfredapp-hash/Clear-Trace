@@ -65,7 +65,7 @@ export const WORKFLOW_SKILLS: WorkflowSkillDef[] = [
   },
 ];
 
-const discoveryConnectors: ConnectorType[] = ["serpapi", "bing_search", "google_cse"];
+const discoveryConnectors: ConnectorType[] = ["serpapi", "google_cse"];
 const intelligenceConnectors: ConnectorType[] = ["openai", "anthropic", "openrouter"];
 const emailConnectors: ConnectorType[] = ["gmail", "smtp", "resend", "sendgrid", "postmark"];
 

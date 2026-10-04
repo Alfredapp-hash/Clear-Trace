@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Badge, Button } from "./ui";
+import { callApi } from "@/lib/ui/call-api";
 
 interface TemplateOption {
   id: string;
@@ -30,23 +31,40 @@ export function DraftTemplatePicker({
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch(
-      `/api/cases/${caseId}/remediation?remediationCaseId=${remediationCaseId}`,
-    )
-      .then((r) => r.json())
-      .then((d) => {
-        setTemplates(d.templates ?? []);
-        if (d.templates?.[0]) setSelected(d.templates[0].id);
-      })
-      .finally(() => setLoading(false));
+    const controller = new AbortController();
+    callApi<{ templates?: TemplateOption[] }>(
+      `/api/cases/${caseId}/remediation?remediationCaseId=${encodeURIComponent(remediationCaseId)}`,
+      { signal: controller.signal, errorMessage: "Could not load draft templates" },
+    ).then((res) => {
+      if (controller.signal.aborted) return;
+      if (res.ok) {
+        const list = Array.isArray(res.data.templates) ? res.data.templates : [];
+        setTemplates(list);
+        setSelected(list[0]?.id ?? null);
+        setError("");
+      } else {
+        setError(res.error);
+      }
+      setLoading(false);
+    });
+    return () => controller.abort();
   }, [caseId, remediationCaseId]);
 
   const active = templates.find((t) => t.id === selected);
 
   if (loading) {
     return <p className="text-sm text-slate-500">Loading draft templates…</p>;
+  }
+
+  if (error) {
+    return (
+      <p role="alert" className="text-sm text-rose-300">
+        {error}
+      </p>
+    );
   }
 
   if (!templates.length) {

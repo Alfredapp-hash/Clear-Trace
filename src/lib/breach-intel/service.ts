@@ -16,6 +16,7 @@ import { getCaseForUser } from "@/lib/cases/service";
 import type { SessionPayload } from "@/lib/auth/session";
 import { DEMO_HIBP_BREACHES, queryHibpBreaches, type HibpBreach } from "./hibp-client";
 import { breachResponsePlaybook } from "./playbook";
+import { isDemoCase } from "@/lib/verification/check-mode";
 
 function redactEmail(email: string): string {
   const [local, domain] = email.split("@");
@@ -98,6 +99,13 @@ export async function runBreachScan(
 
   const connectorType = await resolveBreachIntelConnector(session.organizationId);
   const mode = connectorType ? "live" : "demo";
+
+  // Never write synthetic breach findings into a real (non-demo) case: without a
+  // breach-intel connector a real case must configure HIBP instead of getting
+  // DEMO_HIBP_BREACHES presented as findings for the user's real email.
+  if (mode === "demo" && !(await isDemoCase(caseId))) {
+    throw new Error("CONNECTOR_REQUIRED:hibp");
+  }
   let apiKey: string | null = null;
 
   if (mode === "live" && connectorType === "hibp") {

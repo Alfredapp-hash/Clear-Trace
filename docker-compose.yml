@@ -1,31 +1,62 @@
+# ClearTrace self-hosted stack.
+# Required: create a .env next to this file with SESSION_SECRET, ENCRYPTION_KEY
+# and WORKER_SECRET (generate each with `openssl rand -base64 48`).
+# `docker compose up` refuses to start while any of them is unset.
+
 services:
   cleartrace:
     build: .
     ports:
       - "3000:3000"
     environment:
-      SESSION_SECRET: ${SESSION_SECRET:-change-me-in-production}
-      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-change-me-in-production}
-      WORKER_SECRET: ${WORKER_SECRET:-change-me-in-production}
+      SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET (openssl rand -base64 48)}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY (openssl rand -base64 48)}
+      WORKER_SECRET: ${WORKER_SECRET:?set WORKER_SECRET (openssl rand -base64 48)}
+      CRON_SECRET: ${CRON_SECRET:-}
       DATABASE_URL: /app/data/cleartrace.db
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      # Set FORCE_HTTPS=1 only when served behind TLS (adds upgrade-insecure-requests + HSTS).
+      FORCE_HTTPS: ${FORCE_HTTPS:-}
+      # Set TRUST_PROXY=1 only when a reverse proxy you control sets X-Forwarded-For.
+      TRUST_PROXY: ${TRUST_PROXY:-}
+      # Ollama on the Docker host is reachable as host.docker.internal (see extra_hosts).
+      OLLAMA_ALLOWED_ORIGINS: ${OLLAMA_ALLOWED_ORIGINS:-http://localhost:11434,http://127.0.0.1:11434,http://host.docker.internal:11434}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - cleartrace-data:/app/data
     restart: unless-stopped
 
-  # Optional: hit the worker endpoint on a schedule (replace URL and secret).
+  # Scheduler: worker hourly, verification hourly, digest weekly (Mon 09:00 UTC).
+  # Redirects count as failures (no -L; only 2xx is success).
   worker-cron:
     image: curlimages/curl:8.12.1
     depends_on:
-      - cleartrace
+      cleartrace:
+        condition: service_healthy
     environment:
-      WORKER_SECRET: ${WORKER_SECRET:-change-me-in-production}
+      WORKER_SECRET: ${WORKER_SECRET:?set WORKER_SECRET (openssl rand -base64 48)}
     entrypoint: ["/bin/sh", "-c"]
     command:
       - |
-        while true; do
-          curl -sf -X POST \
+        call() {
+          code=$$(curl -fsS -o /dev/null -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $$WORKER_SECRET" \
-            http://cleartrace:3000/api/worker/run || true
+            "http://cleartrace:3000$$1") || code="$${code:-000}"
+          case "$$code" in
+            2??) echo "$$(date -u +%FT%TZ) $$1 ok ($$code)" ;;
+            *)   echo "$$(date -u +%FT%TZ) $$1 FAILED ($$code)" >&2 ;;
+          esac
+        }
+        last_digest=""
+        while true; do
+          call /api/worker/run
+          call /api/cron/verify
+          week=$$(date -u +%G-%V)
+          if [ "$$(date -u +%u)" = "1" ] && [ "$$(date -u +%H)" -ge 9 ] && [ "$$last_digest" != "$$week" ]; then
+            call /api/cron/digest
+            last_digest="$$week"
+          fi
           sleep 3600
         done
     restart: unless-stopped

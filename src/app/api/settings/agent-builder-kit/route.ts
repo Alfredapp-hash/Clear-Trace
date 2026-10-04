@@ -1,4 +1,5 @@
-import { getSession } from "@/lib/auth/session";
+import { requireOrgAdminSession } from "@/lib/auth/org-role";
+import { ensureDatabase } from "@/lib/db/init";
 import {
   buildAgentBuilderKit,
   BUILDER_PLATFORMS,
@@ -15,8 +16,9 @@ function parsePlatform(raw: string | null): BuilderPlatform | null {
 }
 
 export async function GET(request: Request) {
-  const session = await getSession();
-  if (!session) return jsonError("Unauthorized", 401);
+  ensureDatabase();
+  const guard = await requireOrgAdminSession();
+  if (guard.error) return guard.error;
 
   const { searchParams } = new URL(request.url);
   const platform = parsePlatform(searchParams.get("platform"));
@@ -45,7 +47,7 @@ export async function GET(request: Request) {
     kit,
     templateUrl: "https://github.com/Alfredapp-hash/Clear-Trace/generate",
     repoUrl: "https://github.com/Alfredapp-hash/Clear-Trace",
-    cliCommand: "npx create-cleartrace my-app",
+    cliCommand: "node scripts/create-cleartrace.mjs my-app",
     mcpPath: "agent-builder/mcp-server",
   });
 }

@@ -1,8 +1,9 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { Badge, Button, Card, SectionTitle } from "./ui";
+import { Badge, Button, ButtonLink, Card, SectionTitle } from "./ui";
+import { callApi } from "@/lib/ui/call-api";
 import { CopyBlock } from "./CopyBlock";
 import type { AgentPack, CaseGuide } from "@/lib/guide/types";
 
@@ -18,34 +19,39 @@ export function GuidePanel({
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(true);
   const [agentTab, setAgentTab] = useState(0);
-  const [selectedSkill, setSelectedSkill] = useState(initialSkillId ?? "");
-
-  const loadGuide = useCallback(
-    async (skill?: string) => {
-      setLoading(true);
-      setError("");
-      const qs = skill ? `?step=${encodeURIComponent(skill)}` : "";
-      const res = await fetch(`/api/cases/${caseId}/guide${qs}`);
-      const data = await res.json();
-      if (!res.ok) {
-        setError(data.error ?? "Could not load guide");
-        setGuide(null);
-      } else {
-        setGuide(data);
-        if (!skill && data.recommendedSkillId) {
-          setSelectedSkill(data.recommendedSkillId);
-        }
-      }
-      setLoading(false);
-    },
-    [caseId],
-  );
+  // The step the user explicitly asked for; empty means "server's recommendation".
+  const [requestedSkill, setRequestedSkill] = useState(initialSkillId ?? "");
+  const selectedSkill = requestedSkill || guide?.recommendedSkillId || "";
 
   useEffect(() => {
-    loadGuide(selectedSkill || undefined);
-  }, [loadGuide, selectedSkill]);
+    const controller = new AbortController();
+    const qs = requestedSkill ? `?step=${encodeURIComponent(requestedSkill)}` : "";
+    callApi<CaseGuide>(`/api/cases/${caseId}/guide${qs}`, {
+      signal: controller.signal,
+      errorMessage: "Could not load guide",
+    }).then((res) => {
+      // Ignore responses for a superseded step / unmounted panel.
+      if (controller.signal.aborted) return;
+      if (res.ok) {
+        setGuide(res.data);
+        setError("");
+      } else {
+        setGuide(null);
+        setError(res.error);
+      }
+      setLoading(false);
+    });
+    return () => controller.abort();
+  }, [caseId, requestedSkill]);
 
-  const activePack: AgentPack | undefined = guide?.agentPacks[agentTab];
+  function selectSkill(skillId: string) {
+    if (skillId === requestedSkill) return;
+    setLoading(true);
+    setAgentTab(0);
+    setRequestedSkill(skillId);
+  }
+
+  const activePack: AgentPack | undefined = guide?.agentPacks[agentTab] ?? guide?.agentPacks[0];
   const step = guide?.currentStep;
   const doneCount = step?.checklist.filter((c) => c.done).length ?? 0;
   const totalCount = step?.checklist.length ?? 0;
@@ -64,7 +70,12 @@ export function GuidePanel({
             <p className="mt-1 text-sm text-slate-400">{guide.statusSummary}</p>
           )}
         </div>
-        <Button variant="ghost" size="sm" onClick={() => setExpanded((e) => !e)}>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => setExpanded((e) => !e)}
+          aria-expanded={expanded}
+        >
           {expanded ? "Collapse" : "Expand"}
         </Button>
       </div>
@@ -127,11 +138,9 @@ export function GuidePanel({
                     </li>
                   ))}
               </ul>
-              <Link href="/settings" className="mt-3 inline-block">
-                <Button variant="secondary" size="sm">
-                  Open Settings
-                </Button>
-              </Link>
+              <ButtonLink href="/settings" variant="secondary" size="sm" className="mt-3">
+                Open Settings
+              </ButtonLink>
             </div>
           )}
 
@@ -140,12 +149,14 @@ export function GuidePanel({
               <SectionTitle>In-app actions</SectionTitle>
               <ul className="mt-2 space-y-2 text-sm text-slate-400">
                 {step.inAppActions.map((a) => {
-                  const isPath = a.location.startsWith("/");
+                  const isPath = a.location.startsWith("/") && !a.location.startsWith("//");
                   const content = (
                     <>
                       <span className="font-medium text-slate-300">{a.label}</span>
                       <span className="text-slate-500"> — {a.description}</span>
-                      <p className="mt-0.5 font-mono text-[10px] text-slate-600">{a.location}</p>
+                      <span className="mt-0.5 block font-mono text-[10px] text-slate-600 break-all">
+                        {a.location}
+                      </span>
                     </>
                   );
                   return (
@@ -177,7 +188,8 @@ export function GuidePanel({
                   <button
                     key={s.skillId}
                     type="button"
-                    onClick={() => setSelectedSkill(s.skillId)}
+                    onClick={() => selectSkill(s.skillId)}
+                    aria-pressed={selectedSkill === s.skillId}
                     className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
                       selectedSkill === s.skillId
                         ? "bg-teal-500/20 text-teal-300"
@@ -195,6 +207,7 @@ export function GuidePanel({
                   key={pack.variant}
                   type="button"
                   onClick={() => setAgentTab(i)}
+                  aria-pressed={agentTab === i}
                   className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                     agentTab === i
                       ? "bg-white/10 text-white"

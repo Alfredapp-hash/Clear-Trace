@@ -4,6 +4,7 @@ import { seedTestUser, seedTestCase, readJson } from "@/lib/test/api-helpers";
 import { GET as healthGet } from "./health/route";
 import { POST as loginPost } from "./auth/login/route";
 import { GET as casesGet, POST as casesPost } from "./cases/route";
+import { GET as caseGet } from "./cases/[id]/route";
 import { POST as runNextStepPost } from "./cases/[id]/run-next-step/route";
 import { GET as connectorsGet } from "./settings/connectors/route";
 import { POST as workerPost } from "./worker/run/route";
@@ -15,14 +16,42 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn(),
 }));
 
+type CookieStore = Awaited<ReturnType<typeof cookies>>;
+
+const cookieSet = vi.fn();
+
 function mockSessionCookie(token: string | null) {
   vi.mocked(cookies).mockResolvedValue({
     get: (name: string) =>
-      token && name === "cleartrace_session" ? { value: token } : undefined,
-    set: vi.fn(),
+      token && name === "cleartrace_session" ? { name, value: token } : undefined,
+    set: cookieSet,
     delete: vi.fn(),
-  } as Awaited<ReturnType<typeof cookies>>);
+  } as unknown as CookieStore);
 }
+
+/** Runs `fn` with env var `key` set to `value`, restoring (or deleting) it afterwards. */
+async function withEnv<T>(key: string, value: string, fn: () => Promise<T>): Promise<T> {
+  const prev = process.env[key];
+  process.env[key] = value;
+  try {
+    return await fn();
+  } finally {
+    if (prev === undefined) delete process.env[key];
+    else process.env[key] = prev;
+  }
+}
+
+function jsonPost(url: string, body: unknown, headers: Record<string, string> = {}) {
+  return new Request(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify(body),
+  });
+}
+
+const ctx = (id: string) => ({ params: Promise.resolve({ id }) });
+const MISSING_ID = "00000000-0000-0000-0000-000000000000";
+const WORKER_SECRET = "test-worker-secret-0123456789abcdef-0123456789";
 
 describe("API routes", () => {
   let fixture: Awaited<ReturnType<typeof seedTestUser>>;
@@ -32,84 +61,78 @@ describe("API routes", () => {
   });
 
   beforeEach(() => {
+    cookieSet.mockClear();
     mockSessionCookie(null);
   });
 
   it("GET /api/health returns ok without auth", async () => {
     const res = await healthGet();
     expect(res.status).toBe(200);
-    const body = await readJson<{ status: string }>(res);
+    const body = await readJson<{ status: string; ts: string }>(res);
     expect(body.status).toBe("ok");
+    expect(Number.isNaN(Date.parse(body.ts))).toBe(false);
   });
 
-  it("POST /api/auth/login rejects bad credentials", async () => {
+  it("POST /api/auth/login rejects bad credentials and sets no session", async () => {
     const res = await loginPost(
-      new Request("http://localhost/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-forwarded-for": `test-login-bad-${fixture.userId}`,
-        },
-        body: JSON.stringify({ email: fixture.email, password: "wrong" }),
-      }),
+      jsonPost(
+        "http://localhost/api/auth/login",
+        { email: fixture.email, password: "wrong" },
+        { "x-forwarded-for": `test-login-bad-${fixture.userId}` },
+      ),
     );
     expect(res.status).toBe(401);
+    expect(cookieSet).not.toHaveBeenCalled();
   });
 
-  it("POST /api/auth/login accepts valid credentials", async () => {
+  it("POST /api/auth/login accepts valid credentials and sets the session cookie", async () => {
     const res = await loginPost(
-      new Request("http://localhost/api/auth/login", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-forwarded-for": `test-login-ok-${fixture.userId}`,
-        },
-        body: JSON.stringify({ email: fixture.email, password: fixture.password }),
-      }),
+      jsonPost(
+        "http://localhost/api/auth/login",
+        { email: fixture.email, password: fixture.password },
+        { "x-forwarded-for": `test-login-ok-${fixture.userId}` },
+      ),
     );
     expect(res.status).toBe(200);
-    const body = await readJson<{ user: { email: string } }>(res);
+    const body = await readJson<{ user: { email: string; organizationId: string } }>(res);
     expect(body.user.email).toBe(fixture.email);
+    expect(body.user.organizationId).toBe(fixture.orgId);
+    expect(cookieSet).toHaveBeenCalled();
+    expect(cookieSet.mock.calls[0]?.[0]).toBe("cleartrace_session");
   });
 
   it("GET /api/cases requires authentication", async () => {
-    mockSessionCookie(null);
-    const res = await casesGet();
+    const res = await casesGet(new Request("http://localhost/api/cases"));
     expect(res.status).toBe(401);
   });
 
-  it("GET /api/cases lists cases for authenticated user", async () => {
-    mockSessionCookie(fixture.token);
-    const res = await casesGet();
-    expect(res.status).toBe(200);
-    const body = await readJson<{ cases: unknown[] }>(res);
-    expect(Array.isArray(body.cases)).toBe(true);
-  });
-
-  it("POST /api/cases creates a privacy case", async () => {
+  it("POST /api/cases creates a case that GET /api/cases then lists", async () => {
     mockSessionCookie(fixture.token);
     const res = await casesPost(
-      new Request("http://localhost/api/cases", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: "API test case",
-          caseType: "people_search",
-          targetRelationship: "self",
-          scanScopes: ["people_search"],
-        }),
+      jsonPost("http://localhost/api/cases", {
+        title: "API test case",
+        caseType: "people_search",
+        targetRelationship: "self",
+        scanScopes: ["people_search"],
       }),
     );
     expect(res.status).toBe(201);
-    const body = await readJson<{ caseId: string }>(res);
-    expect(body.caseId).toBeTruthy();
+    const { caseId } = await readJson<{ caseId: string }>(res);
+    expect(caseId).toMatch(/^[0-9a-f-]{36}$/);
+
+    const listRes = await casesGet(new Request("http://localhost/api/cases"));
+    expect(listRes.status).toBe(200);
+    const body = await readJson<{ cases: Array<{ id: string; title: string; scanScopes: string[] }> }>(
+      listRes,
+    );
+    const created = body.cases.find((c) => c.id === caseId);
+    expect(created?.title).toBe("API test case");
+    expect(created?.scanScopes).toEqual(["people_search"]);
   });
 
   it("POST /api/cases/:id/run-next-step returns 404 for unknown case", async () => {
     mockSessionCookie(fixture.token);
-    const res = await runNextStepPost(new Request("http://localhost"), {
-      params: Promise.resolve({ id: "00000000-0000-0000-0000-000000000000" }),
-    });
+    const res = await runNextStepPost(new Request("http://localhost"), ctx(MISSING_ID));
     expect(res.status).toBe(404);
   });
 
@@ -118,36 +141,64 @@ describe("API routes", () => {
     const res = await connectorsGet();
     expect(res.status).toBe(200);
     const body = await readJson<{ health: { connectedCount: number } }>(res);
-    expect(typeof body.health.connectedCount).toBe("number");
+    expect(body.health.connectedCount).toBeGreaterThanOrEqual(0);
   });
 
-  it("POST /api/worker/run rejects missing bearer when secret is set", async () => {
-    const prev = process.env.WORKER_SECRET;
-    process.env.WORKER_SECRET = "test-worker-secret";
-    try {
-      const res = await workerPost(new Request("http://localhost/api/worker/run", { method: "POST" }));
-      expect(res.status).toBe(401);
-    } finally {
-      process.env.WORKER_SECRET = prev;
-    }
-  });
+  describe("job endpoints", () => {
+    it("POST /api/worker/run rejects a missing bearer when a secret is set", async () => {
+      await withEnv("WORKER_SECRET", WORKER_SECRET, async () => {
+        const res = await workerPost(new Request("http://localhost/api/worker/run", { method: "POST" }));
+        expect(res.status).toBe(401);
+      });
+    });
 
-  it("POST /api/worker/run accepts bearer when secret is set", async () => {
-    const prev = process.env.WORKER_SECRET;
-    process.env.WORKER_SECRET = "test-worker-secret";
-    try {
-      const res = await workerPost(
-        new Request("http://localhost/api/worker/run", {
-          method: "POST",
-          headers: { authorization: "Bearer test-worker-secret" },
-        }),
-      );
-      expect(res.status).toBe(200);
-      const body = await readJson<{ verifications: { processed: number } }>(res);
-      expect(typeof body.verifications.processed).toBe("number");
-    } finally {
-      process.env.WORKER_SECRET = prev;
-    }
+    it("POST /api/worker/run rejects a wrong bearer", async () => {
+      await withEnv("WORKER_SECRET", WORKER_SECRET, async () => {
+        const res = await workerPost(
+          new Request("http://localhost/api/worker/run", {
+            method: "POST",
+            headers: { authorization: `Bearer ${WORKER_SECRET}x` },
+          }),
+        );
+        expect(res.status).toBe(401);
+      });
+    });
+
+    it("POST /api/worker/run accepts the configured bearer", async () => {
+      await withEnv("WORKER_SECRET", WORKER_SECRET, async () => {
+        const res = await workerPost(
+          new Request("http://localhost/api/worker/run", {
+            method: "POST",
+            headers: { authorization: `Bearer ${WORKER_SECRET}` },
+          }),
+        );
+        expect(res.status).toBe(200);
+        const body = await readJson<{ verifications: { processed: number } }>(res);
+        expect(body.verifications.processed).toBeGreaterThanOrEqual(0);
+      });
+    });
+
+    it("POST /api/cron/digest rejects a missing bearer", async () => {
+      await withEnv("WORKER_SECRET", WORKER_SECRET, async () => {
+        const res = await digestPost(new Request("http://localhost/api/cron/digest", { method: "POST" }));
+        expect(res.status).toBe(401);
+      });
+    });
+
+    it("POST /api/cron/digest runs with worker auth", async () => {
+      await withEnv("WORKER_SECRET", WORKER_SECRET, async () => {
+        const res = await digestPost(
+          new Request("http://localhost/api/cron/digest", {
+            method: "POST",
+            headers: { authorization: `Bearer ${WORKER_SECRET}` },
+          }),
+        );
+        expect(res.status).toBe(200);
+        const body = await readJson<{ orgsChecked: number; skipped: number }>(res);
+        expect(body.orgsChecked).toBeGreaterThanOrEqual(1);
+        expect(body.skipped).toBeGreaterThanOrEqual(0);
+      });
+    });
   });
 
   describe("v1.0 workflows", () => {
@@ -159,139 +210,150 @@ describe("API routes", () => {
 
     it("GET /api/cases/:id/opt-out-dispatch lists empty then queues from sweep", async () => {
       mockSessionCookie(fixture.token);
-      const listRes = await optOutGet(new Request("http://localhost"), {
-        params: Promise.resolve({ id: caseFixture.caseId }),
-      });
+      const listRes = await optOutGet(new Request("http://localhost"), ctx(caseFixture.caseId));
       expect(listRes.status).toBe(200);
+      const before = await readJson<{ dispatches: unknown[] }>(listRes);
+      expect(before.dispatches).toHaveLength(0);
 
       const queueRes = await optOutPost(
-        new Request("http://localhost", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "queue" }),
-        }),
-        { params: Promise.resolve({ id: caseFixture.caseId }) },
+        jsonPost("http://localhost", { action: "queue" }),
+        ctx(caseFixture.caseId),
       );
       expect(queueRes.status).toBe(201);
       const queued = await readJson<{ created: number; dispatchIds: string[] }>(queueRes);
       expect(queued.created).toBe(1);
       expect(queued.dispatchIds).toHaveLength(1);
 
-      const listAfter = await optOutGet(new Request("http://localhost"), {
-        params: Promise.resolve({ id: caseFixture.caseId }),
-      });
-      const listed = await readJson<{ dispatches: Array<{ id: string; brokerName: string }> }>(
-        listAfter,
-      );
+      const listAfter = await optOutGet(new Request("http://localhost"), ctx(caseFixture.caseId));
+      const listed = await readJson<{
+        dispatches: Array<{ id: string; brokerName: string; status: string }>;
+      }>(listAfter);
+      expect(listed.dispatches).toHaveLength(1);
+      expect(listed.dispatches[0]?.id).toBe(queued.dispatchIds[0]);
       expect(listed.dispatches[0]?.brokerName).toBe("Spokeo");
+      expect(listed.dispatches[0]?.status).toBe("pending_approval");
     });
 
-    it("POST opt-out approve → submit lifecycle", async () => {
+    it("POST opt-out enforces approve → submit → complete ordering", async () => {
       mockSessionCookie(fixture.token);
-      const listRes = await optOutGet(new Request("http://localhost"), {
-        params: Promise.resolve({ id: caseFixture.caseId }),
-      });
+      const listRes = await optOutGet(new Request("http://localhost"), ctx(caseFixture.caseId));
       const listed = await readJson<{ dispatches: Array<{ id: string; status: string }> }>(listRes);
       const dispatchId = listed.dispatches[0]?.id;
       expect(dispatchId).toBeTruthy();
 
-      const approveRes = await optOutPost(
-        new Request("http://localhost", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "approve", dispatchId }),
-        }),
-        { params: Promise.resolve({ id: caseFixture.caseId }) },
-      );
-      expect(approveRes.status).toBe(200);
+      const post = (action: string) =>
+        optOutPost(jsonPost("http://localhost", { action, dispatchId }), ctx(caseFixture.caseId));
 
-      const submitRes = await optOutPost(
-        new Request("http://localhost", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "submit", dispatchId }),
-        }),
-        { params: Promise.resolve({ id: caseFixture.caseId }) },
-      );
-      expect(submitRes.status).toBe(200);
+      // Submitting before approval is refused.
+      expect((await post("submit")).status).toBe(400);
 
-      const completeRes = await optOutPost(
-        new Request("http://localhost", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "complete", dispatchId }),
-        }),
-        { params: Promise.resolve({ id: caseFixture.caseId }) },
+      expect((await post("approve")).status).toBe(200);
+      // Completing before submission is refused.
+      expect((await post("complete")).status).toBe(400);
+      expect((await post("submit")).status).toBe(200);
+      expect((await post("complete")).status).toBe(200);
+
+      const after = await readJson<{ dispatches: Array<{ id: string; status: string }> }>(
+        await optOutGet(new Request("http://localhost"), ctx(caseFixture.caseId)),
       );
-      expect(completeRes.status).toBe(200);
+      expect(after.dispatches.find((d) => d.id === dispatchId)?.status).toBe("completed");
     });
 
-    it("POST /api/cases/:id/deindex creates google+bing drafts", async () => {
+    it("POST /api/cases/:id/deindex creates google+bing drafts and tracks outcome", async () => {
       mockSessionCookie(fixture.token);
       const res = await deindexPost(
-        new Request("http://localhost", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ engines: ["google", "bing"] }),
-        }),
-        { params: Promise.resolve({ id: caseFixture.caseId }) },
+        jsonPost("http://localhost", { engines: ["google", "bing"] }),
+        ctx(caseFixture.caseId),
       );
       expect(res.status).toBe(201);
       const body = await readJson<{ created: number }>(res);
       expect(body.created).toBe(2);
 
-      const listRes = await deindexGet(new Request("http://localhost"), {
-        params: Promise.resolve({ id: caseFixture.caseId }),
-      });
+      const listRes = await deindexGet(new Request("http://localhost"), ctx(caseFixture.caseId));
+      expect(listRes.status).toBe(200);
       const listed = await readJson<{
-        requests: Array<{ id: string; searchEngine: string; toolUrl: string }>;
+        requests: Array<{ id: string; searchEngine: string; toolUrl: string; status: string }>;
       }>(listRes);
-      const engines = listed.requests.map((r) => r.searchEngine);
-      expect(engines).toContain("google");
-      expect(engines).toContain("bing");
-      expect(listed.requests[0]?.toolUrl).toMatch(/^https:\/\//);
+      expect(listed.requests).toHaveLength(2);
+      expect(listed.requests.map((r) => r.searchEngine).sort()).toEqual(["bing", "google"]);
+      for (const r of listed.requests) expect(r.toolUrl).toMatch(/^https:\/\//);
 
-      const requestId = listed.requests[0]?.id;
-      expect(requestId).toBeTruthy();
+      const requestId = listed.requests[0]!.id;
+
+      // Resolving before submission is refused.
+      const early = await deindexPost(
+        jsonPost("http://localhost", { action: "resolve", requestId }),
+        ctx(caseFixture.caseId),
+      );
+      expect(early.status).toBe(400);
 
       const submitRes = await deindexPost(
-        new Request("http://localhost", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "submit", requestId }),
-        }),
-        { params: Promise.resolve({ id: caseFixture.caseId }) },
+        jsonPost("http://localhost", { action: "submit", requestId }),
+        ctx(caseFixture.caseId),
       );
       expect(submitRes.status).toBe(200);
 
+      // The API action names stay "resolve"/"reject"; the stored status is "resolved"/"rejected".
       const resolveRes = await deindexPost(
-        new Request("http://localhost", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ action: "resolve", requestId }),
-        }),
-        { params: Promise.resolve({ id: caseFixture.caseId }) },
+        jsonPost("http://localhost", { action: "resolve", requestId }),
+        ctx(caseFixture.caseId),
       );
       expect(resolveRes.status).toBe(200);
+
+      const after = await readJson<{ requests: Array<{ id: string; status: string }> }>(
+        await deindexGet(new Request("http://localhost"), ctx(caseFixture.caseId)),
+      );
+      expect(after.requests.find((r) => r.id === requestId)?.status).toBe("resolved");
     });
 
-    it("POST /api/cron/digest runs with worker auth", async () => {
-      const prev = process.env.WORKER_SECRET;
-      process.env.WORKER_SECRET = "test-worker-secret";
-      try {
-        const res = await digestPost(
-          new Request("http://localhost/api/cron/digest", {
-            method: "POST",
-            headers: { authorization: "Bearer test-worker-secret" },
-          }),
-        );
+    describe("cross-tenant isolation (IDOR)", () => {
+      let other: Awaited<ReturnType<typeof seedTestUser>>;
+
+      beforeAll(async () => {
+        other = await seedTestUser();
+      });
+
+      it("another org cannot read the case", async () => {
+        mockSessionCookie(other.token);
+        const res = await caseGet(new Request("http://localhost"), ctx(caseFixture.caseId));
+        expect(res.status).toBe(404);
+      });
+
+      it("another org does not see the case in its list", async () => {
+        mockSessionCookie(other.token);
+        const res = await casesGet(new Request("http://localhost/api/cases"));
         expect(res.status).toBe(200);
-        const body = await readJson<{ orgsChecked: number; skipped: number }>(res);
-        expect(typeof body.orgsChecked).toBe("number");
-        expect(typeof body.skipped).toBe("number");
-      } finally {
-        process.env.WORKER_SECRET = prev;
-      }
+        const body = await readJson<{ cases: Array<{ id: string }> }>(res);
+        expect(body.cases.some((c) => c.id === caseFixture.caseId)).toBe(false);
+      });
+
+      it("another org cannot list or mutate opt-out dispatches", async () => {
+        mockSessionCookie(other.token);
+        const listRes = await optOutGet(new Request("http://localhost"), ctx(caseFixture.caseId));
+        expect(listRes.status).toBe(404);
+        const queueRes = await optOutPost(
+          jsonPost("http://localhost", { action: "queue" }),
+          ctx(caseFixture.caseId),
+        );
+        expect(queueRes.status).toBe(404);
+      });
+
+      it("another org cannot list or create deindex requests", async () => {
+        mockSessionCookie(other.token);
+        const listRes = await deindexGet(new Request("http://localhost"), ctx(caseFixture.caseId));
+        expect(listRes.status).toBe(404);
+        const createRes = await deindexPost(
+          jsonPost("http://localhost", { engines: ["google"] }),
+          ctx(caseFixture.caseId),
+        );
+        expect(createRes.status).toBe(404);
+      });
+
+      it("another org cannot run workflow steps on the case", async () => {
+        mockSessionCookie(other.token);
+        const res = await runNextStepPost(new Request("http://localhost"), ctx(caseFixture.caseId));
+        expect(res.status).toBe(404);
+      });
     });
   });
 });

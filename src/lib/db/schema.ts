@@ -1,4 +1,4 @@
-import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
+import { sqliteTable, text, integer, real, unique } from "drizzle-orm/sqlite-core";
 import { sql } from "drizzle-orm";
 
 export const users = sqliteTable("users", {
@@ -7,6 +7,8 @@ export const users = sqliteTable("users", {
   name: text("name").notNull(),
   passwordHash: text("password_hash").notNull(),
   role: text("role").notNull().default("user"),
+  /** Bumped to revoke every outstanding session JWT for this user (logout / revokeUserSessions). */
+  sessionVersion: integer("session_version").notNull().default(0),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -28,6 +30,8 @@ export const organizations = sqliteTable("organizations", {
   slaResponseDays: integer("sla_response_days").notNull().default(14),
   slaRemovalDays: integer("sla_removal_days").notNull().default(45),
   slaFollowUpDays: integer("sla_follow_up_days").notNull().default(14),
+  /** Set when the weekly digest was last sent; used for idempotency (see reports/digest.ts). */
+  lastDigestSentAt: text("last_digest_sent_at"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -53,7 +57,7 @@ export const connectorConfigs = sqliteTable("connector_configs", {
   updatedAt: text("updated_at")
     .notNull()
     .default(sql`(datetime('now'))`),
-});
+}, (t) => [unique().on(t.organizationId, t.connectorType)]);
 
 export const memberships = sqliteTable("memberships", {
   id: text("id").primaryKey(),
@@ -455,6 +459,8 @@ export const auditEvents = sqliteTable("audit_events", {
   detailJson: text("detail_json"),
   prevHash: text("prev_hash"),
   eventHash: text("event_hash").notNull(),
+  /** Hash-chain partition: "case:<id>" or "org:<id>" (or "global"). Survives case-row deletion. */
+  chainKey: text("chain_key"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),

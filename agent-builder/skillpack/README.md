@@ -76,7 +76,7 @@ agent-builder/skillpack/
 
 ## Reference app
 
-This pack lives inside the [Clear-Trace](https://github.com/Alfredapp-hash/Clear-Trace) monorepo. `scripts/sync-skills.js` copies `agent-builder/skillpack/skills/` → `skills/` on `npm run dev` / `npm run build`.
+This pack lives inside the [Clear-Trace](https://github.com/Alfredapp-hash/Clear-Trace) monorepo. `scripts/sync-skills.mjs` copies `agent-builder/skillpack/skills/` → `skills/` on `npm run dev` / `npm run build`.
 
 See `src/lib/skills/catalog.ts` for which skills are fully implemented in-app vs template-only.
 

@@ -10,6 +10,7 @@ export const PLAIN_STATUS: Record<string, string> = {
   sent: "Request sent — schedule verification",
   follow_up_eligible: "No response yet — follow-up may be appropriate",
   removed_confirmed: "Verified removed — case success",
+  partially_resolved: "Some exposures removed — others still in progress",
   reopened: "Information reappeared — case reopened",
   paused: "Case paused",
   archived: "Case archived",

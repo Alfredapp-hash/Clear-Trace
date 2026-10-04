@@ -1,4 +1,4 @@
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, ne } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import {
@@ -27,6 +27,7 @@ import { buildRuthlessDiscoveryQueries } from "@/lib/ruthless/constellation";
 import { RUTHLESS_POLICY } from "@/lib/ruthless/config";
 import { isRuthlessModeForCase } from "@/lib/ruthless/resolve";
 import { runLiveSearch } from "./serp-adapter";
+import type { ConnectorType } from "@/lib/connectors/types";
 import { brokerSiteQueries, matchBrokerByHost } from "@/lib/brokers/universe";
 import { safeFetchPublicPage } from "@/lib/tools/safe-fetch";
 import { recordScopeUsage } from "@/lib/shield/scope-ledger";
@@ -36,6 +37,17 @@ const DEMO_SOURCES = [
   { type: "search_engine", domain: "search.example", title: "Search Result Listing" },
   { type: "data_broker", domain: "databroker.example", title: "Data Broker Listing" },
 ];
+
+/** Case statuses from which a discovery run moves the case to candidate_review. */
+const DISCOVERY_ENTRY_STATUSES = new Set(["consent_verified", "candidate_review", "discovery_running"]);
+
+/** Case statuses from which confirming a candidate moves the case to confirmed_exposure. */
+const CONFIRM_ENTRY_STATUSES = new Set([
+  "consent_verified",
+  "discovery_running",
+  "candidate_review",
+  "confirmed_exposure",
+]);
 
 function inferSourceType(url: string, fallback: string): string {
   try {
@@ -126,145 +138,173 @@ export async function runDiscovery(
     createdAt: now,
   });
 
-  await db
-    .update(privacyCases)
-    .set({ status: "discovery_running", updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
+  const previousStatus = privacyCase.status;
+  let candidates: string[] = [];
+  let uniqueQueries: string[] = [];
+  let duplicates: string[] = [];
+  try {
+    await db
+      .update(privacyCases)
+      .set({ status: "discovery_running", updatedAt: now })
+      .where(eq(privacyCases.id, caseId));
 
-  const ruthless =
-    options?.ruthless ??
-    (await isRuthlessModeForCase(caseId, session.organizationId));
+    const ruthless =
+      options?.ruthless ??
+      (await isRuthlessModeForCase(caseId, session.organizationId));
 
-  const name = decryptedClaims.find((c) => c.claimType === "full_name")?.value;
-  const city = decryptedClaims.find((c) => c.claimType === "city_state")?.value;
-  const queries = [
-    ...(ruthless
+    const name = decryptedClaims.find((c) => c.claimType === "full_name")?.value;
+    const city = decryptedClaims.find((c) => c.claimType === "city_state")?.value;
+    const baseQueries = ruthless
       ? buildRuthlessDiscoveryQueries(decryptedClaims)
-      : buildConstellationQueries(decryptedClaims)),
-    ...(name ? brokerSiteQueries(name, city) : []),
-  ];
-  const uniqueQueries = [...new Set(queries)];
+      : buildConstellationQueries(decryptedClaims);
+    // Broker site: queries go right after the top core identity queries so the
+    // SERP query limit (maxQueries) does not silently truncate them away.
+    const queries = [
+      ...baseQueries.slice(0, 3),
+      ...(name ? brokerSiteQueries(name, city) : []),
+      ...baseQueries.slice(3),
+    ];
+    uniqueQueries = [...new Set(queries)];
 
-  await recordScopeUsage({
-    caseId,
-    organizationId: session.organizationId,
-    userId: session.userId,
-    action: "discovery_search",
-    claimTypes: decryptedClaims.map((c) => c.claimType),
-    detail: { mode, queryCount: uniqueQueries.length },
-  });
-
-  for (const q of uniqueQueries) {
-    await db.insert(searchQueries).values({
-      id: uuid(),
-      scanRunId,
+    await recordScopeUsage({
       caseId,
-      queryText: q,
-      sourceType: "approved_public_search",
-      createdAt: now,
+      organizationId: session.organizationId,
+      userId: session.userId,
+      action: "discovery_search",
+      claimTypes: decryptedClaims.map((c) => c.claimType),
+      detail: { mode, queryCount: uniqueQueries.length },
     });
-  }
 
-  const sensitiveTerms = decryptedClaims.map((c) => c.value);
-  const rawUrls: string[] = [];
-  const serpEntries: Array<{ url: string; title: string; snippet: string }> = [];
-
-  if (mode === "live" && activeConnector) {
-    const serpResults = await runLiveSearch(
-      session.organizationId,
-      activeConnector as "serpapi" | "bing_search" | "google_cse",
-      uniqueQueries,
-      {
-        maxQueries: ruthless
-          ? RUTHLESS_POLICY.serpQueryLimit
-          : RUTHLESS_POLICY.standardSerpQueryLimit,
-      },
-    );
-    for (const r of serpResults) {
-      rawUrls.push(r.link);
-      serpEntries.push({ url: r.link, title: r.title, snippet: r.snippet });
+    for (const q of uniqueQueries) {
+      await db.insert(searchQueries).values({
+        id: uuid(),
+        scanRunId,
+        caseId,
+        queryText: q,
+        sourceType: "approved_public_search",
+        createdAt: now,
+      });
     }
-  } else {
-    for (const source of DEMO_SOURCES) {
-      const slug = name?.toLowerCase().replace(/\s+/g, "-") ?? "subject";
-      rawUrls.push(
-        `https://${source.domain}/profile/${slug}`,
-        `https://${source.domain}/listing/${slug}-contact`,
+
+    const sensitiveTerms = decryptedClaims.map((c) => c.value);
+    const rawUrls: string[] = [];
+    const serpEntries: Array<{ url: string; title: string; snippet: string }> = [];
+
+    if (mode === "live" && activeConnector) {
+      const serpResults = await runLiveSearch(
+        session.organizationId,
+        activeConnector as ConnectorType,
+        uniqueQueries,
+        {
+          maxQueries: ruthless
+            ? RUTHLESS_POLICY.serpQueryLimit
+            : RUTHLESS_POLICY.standardSerpQueryLimit,
+        },
       );
-    }
-  }
-
-  const { unique, duplicates } = deduplicateUrls(rawUrls);
-  const candidates: string[] = [];
-
-  for (const url of unique) {
-    const canonical = canonicalizeUrl(url);
-    const serp = serpEntries.find((e) => canonicalizeUrl(e.url) === canonical);
-    let pageText = serp?.snippet ?? "";
-    let title = serp?.title ?? "Exposure candidate";
-
-    if (mode === "live") {
-      try {
-        const fetched = await safeFetchPublicPage(canonical);
-        pageText = extractVisibleText(fetched.body).slice(0, 2000) || pageText;
-      } catch {
-        // keep SERP snippet
+      for (const r of serpResults) {
+        rawUrls.push(r.link);
+        serpEntries.push({ url: r.link, title: r.title, snippet: r.snippet });
       }
     } else {
-      const source = DEMO_SOURCES.find((s) => url.includes(s.domain))!;
-      title = source.title;
-      pageText = `Public profile for ${name ?? "subject"}. Location: ${city ?? "unknown"}. Contact information may be visible on this page.`;
+      for (const source of DEMO_SOURCES) {
+        const slug = name?.toLowerCase().replace(/\s+/g, "-") ?? "subject";
+        rawUrls.push(
+          `https://${source.domain}/profile/${slug}`,
+          `https://${source.domain}/listing/${slug}-contact`,
+        );
+      }
     }
 
-    const sourceType = inferSourceType(canonical, mode === "live" ? "search_engine" : "people_search");
-    const excerpt = redactExcerpt(pageText, sensitiveTerms);
-    const evidenceId = uuid();
+    const deduped = deduplicateUrls(rawUrls);
+    const unique = deduped.unique;
+    duplicates = deduped.duplicates;
+    candidates = [];
 
-    await db.insert(contentEvidence).values({
-      id: evidenceId,
-      caseId,
-      sourceUrl: canonical,
-      redactedExcerpt: excerpt,
-      contentHash: hashContent(pageText),
-      capturedAt: now,
-      metadataJson: JSON.stringify({ sourceType, mode, connector: activeConnector }),
-      createdAt: now,
-    });
+    for (const url of unique) {
+      const canonical = canonicalizeUrl(url);
+      const serp = serpEntries.find((e) => canonicalizeUrl(e.url) === canonical);
+      let pageText = serp?.snippet ?? "";
+      let title = serp?.title ?? "Exposure candidate";
 
-    const { score, corroborating, conflicting } = scoreCandidate(pageText, decryptedClaims);
+      if (mode === "live") {
+        try {
+          const fetched = await safeFetchPublicPage(canonical);
+          pageText = extractVisibleText(fetched.body).slice(0, 2000) || pageText;
+        } catch {
+          // keep SERP snippet
+        }
+      } else {
+        const source = DEMO_SOURCES.find((s) => url.includes(s.domain))!;
+        title = source.title;
+        pageText = `Public profile for ${name ?? "subject"}. Location: ${city ?? "unknown"}. Contact information may be visible on this page.`;
+      }
 
-    const candidateId = uuid();
-    await db.insert(exposureCandidates).values({
-      id: candidateId,
-      caseId,
-      scanRunId,
-      canonicalUrl: canonical,
-      sourceType,
-      title,
-      matchStatus: score >= 0.7 ? "probable_match" : score >= 0.4 ? "possible_match" : "unreviewed",
-      confidenceScore: score,
-      corroboratingFactors: JSON.stringify(corroborating),
-      conflictingFactors: JSON.stringify(conflicting),
-      evidenceId,
-      createdAt: now,
-    });
-    candidates.push(candidateId);
+      const sourceType = inferSourceType(canonical, mode === "live" ? "search_engine" : "people_search");
+      const excerpt = redactExcerpt(pageText, sensitiveTerms);
+      const evidenceId = uuid();
+
+      await db.insert(contentEvidence).values({
+        id: evidenceId,
+        caseId,
+        sourceUrl: canonical,
+        redactedExcerpt: excerpt,
+        contentHash: hashContent(pageText),
+        capturedAt: now,
+        metadataJson: JSON.stringify({ sourceType, mode, connector: activeConnector }),
+        createdAt: now,
+      });
+
+      const { score, corroborating, conflicting } = scoreCandidate(pageText, decryptedClaims);
+
+      const candidateId = uuid();
+      await db.insert(exposureCandidates).values({
+        id: candidateId,
+        caseId,
+        scanRunId,
+        canonicalUrl: canonical,
+        sourceType,
+        title,
+        matchStatus: score >= 0.7 ? "probable_match" : score >= 0.4 ? "possible_match" : "unreviewed",
+        confidenceScore: score,
+        corroboratingFactors: JSON.stringify(corroborating),
+        conflictingFactors: JSON.stringify(conflicting),
+        evidenceId,
+        createdAt: now,
+      });
+      candidates.push(candidateId);
+    }
+
+    await db
+      .update(scanRuns)
+      .set({
+        status: "completed",
+        queryCount: uniqueQueries.length,
+        candidateCount: candidates.length,
+        completedAt: new Date().toISOString(),
+      })
+      .where(eq(scanRuns.id, scanRunId));
+
+    // Only early-stage cases move to candidate_review; a case that already has
+    // confirmed exposures keeps its status (re-running discovery must not regress it).
+    await db
+      .update(privacyCases)
+      .set({
+        status: DISCOVERY_ENTRY_STATUSES.has(previousStatus) ? "candidate_review" : previousStatus,
+        updatedAt: new Date().toISOString(),
+      })
+      .where(eq(privacyCases.id, caseId));
+  } catch (error) {
+    // Never leave the scan run stuck in "running" or the case in "discovery_running".
+    await db
+      .update(scanRuns)
+      .set({ status: "failed", completedAt: new Date().toISOString() })
+      .where(eq(scanRuns.id, scanRunId));
+    await db
+      .update(privacyCases)
+      .set({ status: previousStatus, updatedAt: new Date().toISOString() })
+      .where(eq(privacyCases.id, caseId));
+    throw error;
   }
-
-  await db
-    .update(scanRuns)
-    .set({
-      status: "completed",
-      queryCount: uniqueQueries.length,
-      candidateCount: candidates.length,
-      completedAt: new Date().toISOString(),
-    })
-    .where(eq(scanRuns.id, scanRunId));
-
-  await db
-    .update(privacyCases)
-    .set({ status: "candidate_review", updatedAt: new Date().toISOString() })
-    .where(eq(privacyCases.id, caseId));
 
   await logAuditEvent({
     caseId,
@@ -326,6 +366,17 @@ export async function reviewCandidate(
     return { status: "rejected" };
   }
 
+  // Idempotent confirm: a candidate maps to at most one verified exposure.
+  const existingExposure = await db.query.verifiedExposures.findFirst({
+    where: and(
+      eq(verifiedExposures.caseId, caseId),
+      eq(verifiedExposures.candidateId, candidateId),
+    ),
+  });
+  if (existingExposure) {
+    return { status: "confirmed", exposureId: existingExposure.id, alreadyConfirmed: true };
+  }
+
   let evidenceExcerpt = "";
   if (candidate.evidenceId) {
     const evidence = await db.query.contentEvidence.findFirst({
@@ -343,34 +394,59 @@ export async function reviewCandidate(
     sensitivity,
   });
 
+  // Atomic claim + insert in one synchronous transaction so two concurrent
+  // confirms cannot both insert an exposure (and the loser sees the winner's row).
   const exposureId = uuid();
-  await db.insert(verifiedExposures).values({
-    id: exposureId,
-    caseId,
-    candidateId,
-    canonicalUrl: candidate.canonicalUrl,
-    exposureClass: candidate.sourceType,
-    sensitivity,
-    status: "confirmed_exposure",
-    exposureCategories: JSON.stringify(classification.categories),
-    sourceClass: classification.sourceClass,
-    riskLevel: classification.riskLevel,
-    recommendedRemedyFamily: classification.recommendedRemedyFamily,
-    informationSummary: classification.informationSummary,
-    evidenceId: candidate.evidenceId,
-    confirmedAt: now,
-    createdAt: now,
+  const claimed = db.transaction((tx) => {
+    const claim = tx
+      .update(exposureCandidates)
+      .set({ matchStatus: "confirmed_match", reviewedAt: now })
+      .where(
+        and(
+          eq(exposureCandidates.id, candidateId),
+          ne(exposureCandidates.matchStatus, "confirmed_match"),
+        ),
+      )
+      .run();
+    if (claim.changes !== 1) return false;
+    tx.insert(verifiedExposures)
+      .values({
+        id: exposureId,
+        caseId,
+        candidateId,
+        canonicalUrl: candidate.canonicalUrl,
+        exposureClass: candidate.sourceType,
+        sensitivity,
+        status: "confirmed_exposure",
+        exposureCategories: JSON.stringify(classification.categories),
+        sourceClass: classification.sourceClass,
+        riskLevel: classification.riskLevel,
+        recommendedRemedyFamily: classification.recommendedRemedyFamily,
+        informationSummary: classification.informationSummary,
+        evidenceId: candidate.evidenceId,
+        confirmedAt: now,
+        createdAt: now,
+      })
+      .run();
+    return true;
   });
+  if (!claimed) {
+    const winner = await db.query.verifiedExposures.findFirst({
+      where: and(
+        eq(verifiedExposures.caseId, caseId),
+        eq(verifiedExposures.candidateId, candidateId),
+      ),
+    });
+    return { status: "confirmed", exposureId: winner?.id ?? null, alreadyConfirmed: true };
+  }
 
-  await db
-    .update(exposureCandidates)
-    .set({ matchStatus: "confirmed_match", reviewedAt: now })
-    .where(eq(exposureCandidates.id, candidateId));
-
-  await db
-    .update(privacyCases)
-    .set({ status: "confirmed_exposure", updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
+  // Advance early-stage cases only; never regress a case that is further along.
+  if (CONFIRM_ENTRY_STATUSES.has(privacyCase.status)) {
+    await db
+      .update(privacyCases)
+      .set({ status: "confirmed_exposure", updatedAt: now })
+      .where(eq(privacyCases.id, caseId));
+  }
 
   await logAuditEvent({
     caseId,
@@ -381,7 +457,7 @@ export async function reviewCandidate(
     detail: { candidateId, exposureId },
   });
 
-  return { status: "confirmed", exposureId };
+  return { status: "confirmed", exposureId, alreadyConfirmed: false };
 }
 
 export async function getDiscoveryData(caseId: string) {

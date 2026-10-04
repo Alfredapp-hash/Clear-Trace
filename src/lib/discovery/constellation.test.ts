@@ -12,4 +12,28 @@ describe("constellation queries", () => {
     expect(queries.some((q) => q.includes("Jane Doe"))).toBe(true);
     expect(queries.some((q) => q.includes("site:"))).toBe(true);
   });
+
+  it("uses every claim of a type, not just the last one", () => {
+    const queries = buildConstellationQueries([
+      { claimType: "full_name", value: "Jane Doe" },
+      { claimType: "email", value: "jane@one.example" },
+      { claimType: "email", value: "jane@two.example" },
+      { claimType: "city_state", value: "Portland OR" },
+      { claimType: "city_state", value: "Austin TX" },
+    ]);
+    expect(queries.some((q) => q.includes("jane@one.example"))).toBe(true);
+    expect(queries.some((q) => q.includes("jane@two.example"))).toBe(true);
+    expect(queries.some((q) => q.includes("Portland OR"))).toBe(true);
+    expect(queries.some((q) => q.includes("Austin TX"))).toBe(true);
+  });
+
+  it("never emits undefined queries when the name is missing", () => {
+    const queries = buildConstellationQueries([
+      { claimType: "zip_code", value: "97201" },
+      { claimType: "linkedin_url", value: "https://linkedin.com/in/x" },
+      { claimType: "email", value: "x@example.com" },
+    ]);
+    expect(queries.length).toBeGreaterThan(0);
+    expect(queries.some((q) => q.includes("undefined"))).toBe(false);
+  });
 });

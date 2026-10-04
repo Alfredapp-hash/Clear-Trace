@@ -57,4 +57,14 @@ describe("broker sweep", () => {
     expect(result.matchCount).toBeGreaterThan(0);
     expect(result.matches[0]?.optOutUrl || result.matches[0]?.domain).toBeTruthy();
   });
+
+  it("unseen brokers are to_check with no match confidence", async () => {
+    const result = await runBrokerSweep(session, caseId);
+    // case has no exposures/candidates → nothing was actually seen
+    expect(result.seenCount).toBe(0);
+    for (const m of result.matches) {
+      expect(m.status).toBe("to_check");
+      expect(m.matchConfidence).toBe(0);
+    }
+  });
 });

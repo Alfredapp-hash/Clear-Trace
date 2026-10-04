@@ -1,4 +1,4 @@
-import { getSession } from "@/lib/auth/session";
+import { requireOrgAdminSession } from "@/lib/auth/org-role";
 import { requireBillingFeature } from "@/lib/billing/service";
 import { ensureDatabase } from "@/lib/db/init";
 import {
@@ -11,8 +11,9 @@ import { jsonError, jsonOk } from "@/lib/api";
 
 export async function GET() {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const guard = await requireOrgAdminSession();
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   try {
     await requireBillingFeature(session.organizationId, "enterprise_webhooks");
@@ -28,8 +29,9 @@ export async function GET() {
 
 export async function POST(request: Request) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const guard = await requireOrgAdminSession();
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const body = await request.json().catch(() => ({}));
   const { name, url, secret, events } = body as {
@@ -64,8 +66,9 @@ export async function POST(request: Request) {
 
 export async function PATCH(request: Request) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const guard = await requireOrgAdminSession();
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const body = await request.json().catch(() => ({}));
   const { id, name, url, secret, events, enabled } = body as {
@@ -94,7 +97,7 @@ export async function PATCH(request: Request) {
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("Enterprise webhooks require Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "WEBHOOK_NOT_FOUND") return jsonError(msg, 404);
+    if (msg === "WEBHOOK_NOT_FOUND") return jsonError("Webhook not found", 404);
     if (msg === "INVALID_URL") return jsonError("Webhook URL must be http(s)", 400);
     throw error;
   }
@@ -102,8 +105,9 @@ export async function PATCH(request: Request) {
 
 export async function DELETE(request: Request) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) return jsonError("Not authenticated", 401);
+  const guard = await requireOrgAdminSession();
+  if (guard.error) return guard.error;
+  const { session } = guard;
 
   const { searchParams } = new URL(request.url);
   const id = searchParams.get("id");
@@ -118,7 +122,7 @@ export async function DELETE(request: Request) {
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("Enterprise webhooks require Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "WEBHOOK_NOT_FOUND") return jsonError(msg, 404);
+    if (msg === "WEBHOOK_NOT_FOUND") return jsonError("Webhook not found", 404);
     throw error;
   }
 }

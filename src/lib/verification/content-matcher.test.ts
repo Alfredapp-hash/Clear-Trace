@@ -39,14 +39,32 @@ describe("content matcher", () => {
     expect(result.confidenceScore).toBeGreaterThan(0.8);
   });
 
-  it("matches information summary terms", () => {
+  // Sprint 1 (Lane C): the old test asserted that category LABELS from the
+  // exposure's informationSummary ("phone number, home address") counted as a
+  // match. That made removals impossible to confirm, so labels are now ignored.
+  it("ignores category labels — matches claim values only", () => {
     const result = matchContentAgainstClaims(
-      "Listing includes phone number and home address",
-      [],
-      "phone number, home address",
+      "This people-search listing includes phone number, home address and email address fields",
+      [
+        {
+          claimType: "full_name",
+          encryptedValue: encryptValue("Jane Doe"),
+          scanEnabled: true,
+        },
+      ],
     );
-    expect(result.relevantContentPresent).toBe(true);
-    expect(result.matchedSignals.some((s) => s.includes("phone number"))).toBe(true);
+    expect(result.relevantContentPresent).toBe(false);
+    expect(result.matchedSignals).toHaveLength(0);
+  });
+
+  it("flags absence as inconclusive when no claim values can be evaluated", () => {
+    const result = matchContentAgainstClaims(
+      "A long generic page body that says nothing about anybody in particular at all.",
+      [],
+    );
+    expect(result.relevantContentPresent).toBe(false);
+    expect(result.evaluatedClaimCount).toBe(0);
+    expect(result.conflictingSignals.length).toBeGreaterThan(0);
   });
 
   it("skips disabled claims", () => {

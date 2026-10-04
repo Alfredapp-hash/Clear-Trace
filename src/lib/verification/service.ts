@@ -1,4 +1,4 @@
-import { and, eq, lte } from "drizzle-orm";
+import { and, desc, eq, lte } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import {
@@ -10,19 +10,97 @@ import {
   followUpRules,
   contentEvidence,
 } from "@/lib/db/schema";
+import type { VerifiedExposure } from "@/lib/db/schema";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { hashContent } from "@/lib/tools/text-extractor";
 import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
-import { performLiveExposureCheck } from "./live-check";
+import { performLiveExposureCheck, type LiveCheckResult } from "./live-check";
+import {
+  SIMULATED_SEARCH_STATUS,
+  checkModeOf,
+  isSimulateAllowed,
+  isSimulatedCheck,
+  isLiveRemovalConfirmation,
+  type VerificationMode,
+} from "./check-mode";
 
-function nextCheckDate(schedule: string): string {
-  const d = new Date();
+export { isSimulateAllowed, isDemoCase } from "./check-mode";
+
+/** Case statuses that must never be changed by automated verification/monitoring. */
+const FROZEN_CASE_STATUSES = new Set(["paused", "archived", "closed"]);
+
+/** Exposure statuses that are excluded when deriving the case status. */
+const EXCLUDED_EXPOSURE_STATUSES = new Set(["rejected", "dismissed", "false_positive"]);
+
+/**
+ * Case statuses that are "before" verification. scheduleMonitoring only moves a case
+ * to verification_due from one of these, so it never resets a later status
+ * (removed_confirmed, partially_resolved, follow_up_eligible, reopened, escalated …).
+ */
+const PRE_VERIFICATION_STATUSES = new Set([
+  "confirmed_exposure",
+  "controller_resolution",
+  "remedy_selected",
+  "draft_ready",
+  "user_review",
+  "approved_to_send",
+  "sent",
+  "awaiting_response",
+]);
+
+function nextCheckDate(schedule: string, from = new Date()): string {
+  const d = new Date(from);
   if (schedule === "daily") d.setDate(d.getDate() + 1);
   else if (schedule === "weekly") d.setDate(d.getDate() + 7);
   else if (schedule === "monthly") d.setMonth(d.getMonth() + 1);
   else d.setDate(d.getDate() + 7);
   return d.toISOString();
+}
+
+/**
+ * Derive the case status from ALL of its exposures (pure; exported for tests).
+ * - any reappearance            → reopened
+ * - every exposure removed      → removed_confirmed
+ * - some (not all) removed      → partially_resolved
+ * - none removed, some visible  → follow_up_eligible
+ * - otherwise                   → current status unchanged
+ * Frozen statuses (paused/archived/closed) are never changed.
+ */
+export function deriveCaseStatusFromExposures(
+  exposureStatuses: string[],
+  currentStatus: string,
+): string {
+  if (FROZEN_CASE_STATUSES.has(currentStatus)) return currentStatus;
+  const relevant = exposureStatuses.filter((s) => !EXCLUDED_EXPOSURE_STATUSES.has(s));
+  if (relevant.length === 0) return currentStatus;
+  if (relevant.includes("reappearance")) return "reopened";
+  const removed = relevant.filter((s) => s === "removed_confirmed").length;
+  if (removed === relevant.length) return "removed_confirmed";
+  if (removed > 0) return "partially_resolved";
+  if (relevant.includes("still_exposed")) return "follow_up_eligible";
+  return currentStatus;
+}
+
+async function recomputeCaseStatus(caseId: string, now: string): Promise<string | null> {
+  const privacyCase = await db.query.privacyCases.findFirst({
+    where: eq(privacyCases.id, caseId),
+  });
+  if (!privacyCase) return null;
+  const exposures = await db.query.verifiedExposures.findMany({
+    where: eq(verifiedExposures.caseId, caseId),
+  });
+  const next = deriveCaseStatusFromExposures(
+    exposures.map((e) => e.status),
+    privacyCase.status,
+  );
+  if (next !== privacyCase.status) {
+    await db
+      .update(privacyCases)
+      .set({ status: next, updatedAt: now })
+      .where(eq(privacyCases.id, caseId));
+  }
+  return next;
 }
 
 export async function scheduleMonitoring(
@@ -42,34 +120,169 @@ export async function scheduleMonitoring(
   });
   if (!exposure) throw new Error("EXPOSURE_NOT_FOUND");
 
-  const ruleId = uuid();
   const nextCheckAt = nextCheckDate(schedule);
+  const now = new Date().toISOString();
 
-  await db.insert(monitoringRules).values({
-    id: ruleId,
-    caseId,
-    exposureId,
-    schedule,
-    nextCheckAt,
-    enabled: true,
-    createdAt: new Date().toISOString(),
+  // Idempotent: one enabled rule per exposure — update it rather than duplicating.
+  const existing = await db.query.monitoringRules.findFirst({
+    where: and(
+      eq(monitoringRules.caseId, caseId),
+      eq(monitoringRules.exposureId, exposureId),
+      eq(monitoringRules.enabled, true),
+    ),
   });
 
-  await db
-    .update(privacyCases)
-    .set({ status: "verification_due", updatedAt: new Date().toISOString() })
-    .where(eq(privacyCases.id, caseId));
+  let ruleId: string;
+  let created = false;
+  if (existing) {
+    ruleId = existing.id;
+    await db
+      .update(monitoringRules)
+      .set({ schedule, nextCheckAt })
+      .where(eq(monitoringRules.id, existing.id));
+  } else {
+    ruleId = uuid();
+    created = true;
+    await db.insert(monitoringRules).values({
+      id: ruleId,
+      caseId,
+      exposureId,
+      schedule,
+      nextCheckAt,
+      enabled: true,
+      createdAt: now,
+    });
+  }
+
+  if (PRE_VERIFICATION_STATUSES.has(privacyCase.status)) {
+    await db
+      .update(privacyCases)
+      .set({ status: "verification_due", updatedAt: now })
+      .where(eq(privacyCases.id, caseId));
+  }
 
   await logAuditEvent({
     caseId,
     organizationId: session.organizationId,
     userId: session.userId,
     eventType: "monitoring_scheduled",
-    summary: `Verification scheduled: ${schedule}`,
-    detail: { exposureId, ruleId, nextCheckAt },
+    summary: created
+      ? `Verification scheduled: ${schedule}`
+      : `Verification schedule updated: ${schedule}`,
+    detail: { exposureId, ruleId, nextCheckAt, created },
   });
 
   return { ruleId, nextCheckAt };
+}
+
+interface RecordedLiveCheck {
+  checkId: string;
+  checkStatus: string;
+  isReappearance: boolean;
+  caseStatus: string | null;
+}
+
+/**
+ * Persist a live check and apply its (conclusive-only) effect on the exposure and case.
+ * Inconclusive outcomes never set removed_confirmed and never trigger reappearance.
+ */
+async function recordLiveCheck(input: {
+  caseId: string;
+  exposure: VerifiedExposure;
+  live: LiveCheckResult;
+  checkType: "verification" | "scheduled_verification";
+}): Promise<RecordedLiveCheck> {
+  const { caseId, exposure, live } = input;
+  const now = new Date().toISOString();
+
+  const wasRemoved = exposure.status === "removed_confirmed";
+  let checkStatus: string;
+  let exposureStatus: string | null = null;
+  let searchStatus: string;
+  let isReappearance = false;
+
+  switch (live.outcome) {
+    case "present":
+      searchStatus = "source_still_visible";
+      if (wasRemoved) {
+        isReappearance = true;
+        checkStatus = "reappearance_detected";
+        exposureStatus = "reappearance";
+      } else {
+        checkStatus = "still_exposed";
+        exposureStatus = "still_exposed";
+      }
+      break;
+    case "absent":
+    case "gone":
+      searchStatus = "source_not_visible";
+      checkStatus = "removed_confirmed";
+      exposureStatus = "removed_confirmed";
+      break;
+    default:
+      searchStatus = "inconclusive";
+      checkStatus = "inconclusive";
+      exposureStatus = null; // leave exposure untouched
+  }
+
+  const sourceStatus =
+    live.outcome === "present"
+      ? "information_still_visible"
+      : live.outcome === "gone"
+        ? "page_gone"
+        : live.outcome === "absent"
+          ? "information_absent"
+          : "unknown";
+
+  const evidenceId = uuid();
+  await db.insert(contentEvidence).values({
+    id: evidenceId,
+    caseId,
+    sourceUrl: exposure.canonicalUrl,
+    redactedExcerpt: live.redactedExcerpt,
+    contentHash: hashContent(live.redactedExcerpt),
+    capturedAt: now,
+    metadataJson: JSON.stringify({
+      checkType: input.checkType,
+      mode: "live",
+      fetchMode: live.mode,
+      outcome: live.outcome,
+      statusCode: live.statusCode,
+      matchedSignals: live.matchedSignals,
+      conflictingSignals: live.conflictingSignals,
+    }),
+    createdAt: now,
+  });
+
+  const checkId = uuid();
+  const followUpEligible = live.outcome === "present";
+  await db.insert(verificationChecks).values({
+    id: checkId,
+    caseId,
+    exposureId: exposure.id,
+    status: checkStatus,
+    sourceStatus,
+    searchStatus,
+    relevantContentPresent: live.relevantContentPresent,
+    redirectChain: JSON.stringify(live.redirectChain),
+    confidenceScore: live.confidenceScore,
+    evidenceId,
+    followUpEligible,
+    checkedAt: now,
+    createdAt: now,
+  });
+
+  if (exposureStatus && exposureStatus !== exposure.status) {
+    await db
+      .update(verifiedExposures)
+      .set({ status: exposureStatus })
+      .where(eq(verifiedExposures.id, exposure.id));
+  }
+
+  const caseStatus =
+    exposureStatus != null ? await recomputeCaseStatus(caseId, now) : null;
+
+  return { checkId, checkStatus, isReappearance, caseStatus };
 }
 
 export async function runVerification(
@@ -77,7 +290,7 @@ export async function runVerification(
   caseId: string,
   exposureId: string,
   simulateRemoved = false,
-  mode: "live" | "simulate" = "simulate",
+  mode: VerificationMode = "live",
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
@@ -90,44 +303,61 @@ export async function runVerification(
   });
   if (!exposure) throw new Error("EXPOSURE_NOT_FOUND");
 
+  if (mode === "simulate") {
+    if (!(await isSimulateAllowed(caseId))) throw new Error("SIMULATE_NOT_ALLOWED");
+    return recordSimulatedCheck(session, caseId, exposure, simulateRemoved);
+  }
+
+  const live = await performLiveExposureCheck(caseId, exposureId);
+  const recorded = await recordLiveCheck({
+    caseId,
+    exposure,
+    live,
+    checkType: "verification",
+  });
+
+  await logAuditEvent({
+    caseId,
+    organizationId: session.organizationId,
+    userId: session.userId,
+    eventType: recorded.isReappearance ? "reappearance_detected" : "verification_completed",
+    summary: recorded.isReappearance
+      ? "Reappearance detected — case reopened"
+      : `Verification (live): ${recorded.checkStatus}`,
+    detail: {
+      exposureId,
+      checkId: recorded.checkId,
+      outcome: live.outcome,
+      statusCode: live.statusCode,
+      caseStatus: recorded.caseStatus,
+    },
+  });
+
+  return {
+    checkId: recorded.checkId,
+    verificationStatus: recorded.checkStatus,
+    followUpEligible: live.outcome === "present",
+    mode: "live" as const,
+    outcome: live.outcome,
+    caseStatus: recorded.caseStatus ?? privacyCase.status,
+  };
+}
+
+/**
+ * Simulated checks are recorded for demo/dev walkthroughs only. They are tagged
+ * (searchStatus "simulated", status "simulated_*") and NEVER change exposure or
+ * case status, so they cannot count toward removal, certificates or reports.
+ */
+async function recordSimulatedCheck(
+  session: SessionPayload,
+  caseId: string,
+  exposure: VerifiedExposure,
+  simulateRemoved: boolean,
+) {
   const now = new Date().toISOString();
-  let relevantContentPresent = !simulateRemoved;
-  let confidenceScore = 0.9;
-  let excerpt = relevantContentPresent
-    ? "Simulated check: relevant personal information still appears on the public page."
-    : "Simulated check: the specific information is no longer visible on the public page.";
-  let redirectChain = [exposure.canonicalUrl];
-  let searchStatus = relevantContentPresent ? "may_still_appear" : "not_checked";
-  let checkMode: "live" | "simulate" | "fallback" = mode;
-
-  if (mode === "live") {
-    const live = await performLiveExposureCheck(caseId, exposureId);
-    checkMode = live.mode;
-    relevantContentPresent = live.relevantContentPresent;
-    confidenceScore = live.confidenceScore;
-    excerpt = live.redactedExcerpt;
-    redirectChain = live.redirectChain;
-    searchStatus =
-      live.mode === "live"
-        ? relevantContentPresent
-          ? "source_still_visible"
-          : "source_not_visible"
-        : "inconclusive";
-  }
-
-  const sourceStatus = relevantContentPresent
-    ? "information_still_visible"
-    : "information_absent";
-  const wasRemoved = exposure.status === "removed_confirmed";
-  const isReappearance = wasRemoved && relevantContentPresent;
-
-  let verificationStatus = relevantContentPresent
-    ? "still_exposed"
-    : "removed_confirmed";
-  if (isReappearance) verificationStatus = "reappearance_detected";
-  if (checkMode === "fallback" && mode === "live") {
-    verificationStatus = "inconclusive";
-  }
+  const excerpt = simulateRemoved
+    ? "SIMULATED check (not a real verification): information shown as no longer visible."
+    : "SIMULATED check (not a real verification): information shown as still visible.";
 
   const evidenceId = uuid();
   await db.insert(contentEvidence).values({
@@ -137,67 +367,50 @@ export async function runVerification(
     redactedExcerpt: excerpt,
     contentHash: hashContent(excerpt),
     capturedAt: now,
-    metadataJson: JSON.stringify({ checkType: "verification", mode: checkMode }),
+    metadataJson: JSON.stringify({ checkType: "verification", mode: "simulate" }),
     createdAt: now,
   });
 
   const checkId = uuid();
+  const status = simulateRemoved ? "simulated_removed" : "simulated_present";
   await db.insert(verificationChecks).values({
     id: checkId,
     caseId,
-    exposureId,
-    status: verificationStatus,
-    sourceStatus,
-    searchStatus,
-    relevantContentPresent,
-    redirectChain: JSON.stringify(redirectChain),
-    confidenceScore,
+    exposureId: exposure.id,
+    status,
+    sourceStatus: "simulated",
+    searchStatus: SIMULATED_SEARCH_STATUS,
+    relevantContentPresent: !simulateRemoved,
+    redirectChain: JSON.stringify([exposure.canonicalUrl]),
+    confidenceScore: null,
     evidenceId,
-    followUpEligible: relevantContentPresent && verificationStatus !== "inconclusive",
+    followUpEligible: false,
     checkedAt: now,
     createdAt: now,
   });
-
-  let newCaseStatus = verificationStatus === "inconclusive"
-    ? privacyCase.status
-    : relevantContentPresent
-      ? "follow_up_eligible"
-      : "removed_confirmed";
-  if (isReappearance) newCaseStatus = "reopened";
-
-  await db
-    .update(verifiedExposures)
-    .set({
-      status: isReappearance ? "reappearance" : verificationStatus,
-    })
-    .where(eq(verifiedExposures.id, exposureId));
-
-  await db
-    .update(privacyCases)
-    .set({ status: newCaseStatus, updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
 
   await logAuditEvent({
     caseId,
     organizationId: session.organizationId,
     userId: session.userId,
-    eventType: isReappearance ? "reappearance_detected" : "verification_completed",
-    summary: isReappearance
-      ? "Reappearance detected — case reopened"
-      : `Verification: ${verificationStatus}`,
-    detail: { exposureId, checkId, relevantContentPresent },
+    eventType: "verification_simulated",
+    summary: `Simulated verification recorded (${status}) — does not affect removal status`,
+    detail: { exposureId: exposure.id, checkId },
   });
 
   return {
     checkId,
-    verificationStatus,
-    followUpEligible: relevantContentPresent && verificationStatus !== "inconclusive",
-    mode: checkMode,
+    verificationStatus: status,
+    followUpEligible: false,
+    mode: "simulate" as const,
+    outcome: "simulated" as const,
+    caseStatus: null,
   };
 }
 
 export async function runDueVerifications() {
-  const now = new Date().toISOString();
+  const nowDate = new Date();
+  const now = nowDate.toISOString();
   const dueRules = await db.query.monitoringRules.findMany({
     where: and(
       eq(monitoringRules.enabled, true),
@@ -205,94 +418,82 @@ export async function runDueVerifications() {
     ),
   });
 
-  const results = [];
+  const results: Array<{
+    ruleId: string;
+    checkId?: string;
+    checkStatus?: string;
+    isReappearance?: boolean;
+    skipped?: string;
+    error?: string;
+  }> = [];
+
   for (const rule of dueRules) {
-    const exposure = await db.query.verifiedExposures.findFirst({
-      where: eq(verifiedExposures.id, rule.exposureId),
-    });
-    if (!exposure) continue;
-
-    const live = await performLiveExposureCheck(rule.caseId, rule.exposureId);
-    const wasRemoved = exposure.status === "removed_confirmed";
-    const relevantContentPresent = live.relevantContentPresent;
-    const isReappearance = wasRemoved && relevantContentPresent;
-
-    const checkStatus = live.mode === "fallback"
-      ? "inconclusive"
-      : isReappearance
-        ? "reappearance_detected"
-        : relevantContentPresent
-          ? "still_exposed"
-          : "removed_confirmed";
-
-    const evidenceId = uuid();
-    await db.insert(contentEvidence).values({
-      id: evidenceId,
-      caseId: rule.caseId,
-      sourceUrl: exposure.canonicalUrl,
-      redactedExcerpt: live.redactedExcerpt,
-      contentHash: hashContent(live.redactedExcerpt),
-      capturedAt: now,
-      metadataJson: JSON.stringify({
-        checkType: "scheduled_verification",
-        mode: live.mode,
-        matchedSignals: live.matchedSignals,
-      }),
-      createdAt: now,
-    });
-
-    const checkId = uuid();
-    await db.insert(verificationChecks).values({
-      id: checkId,
-      caseId: rule.caseId,
-      exposureId: rule.exposureId,
-      status: checkStatus,
-      sourceStatus: relevantContentPresent ? "information_still_visible" : "information_absent",
-      searchStatus: live.mode === "live" ? "source_checked" : "inconclusive",
-      relevantContentPresent,
-      redirectChain: JSON.stringify(live.redirectChain),
-      confidenceScore: live.confidenceScore,
-      evidenceId,
-      followUpEligible: relevantContentPresent && checkStatus !== "inconclusive",
-      checkedAt: now,
-      createdAt: now,
-    });
-
-    if (isReappearance) {
-      await db
-        .update(verifiedExposures)
-        .set({ status: "reappearance" })
-        .where(eq(verifiedExposures.id, rule.exposureId));
-      await db
-        .update(privacyCases)
-        .set({ status: "reopened", updatedAt: now })
-        .where(eq(privacyCases.id, rule.caseId));
-    } else if (!relevantContentPresent) {
-      await db
-        .update(verifiedExposures)
-        .set({ status: "removed_confirmed" })
-        .where(eq(verifiedExposures.id, rule.exposureId));
-      await db
-        .update(privacyCases)
-        .set({ status: "removed_confirmed", updatedAt: now })
-        .where(eq(privacyCases.id, rule.caseId));
-    }
-
-    await db
+    // Atomic claim: advance nextCheckAt only if nobody else did first.
+    const claim = db
       .update(monitoringRules)
-      .set({ nextCheckAt: nextCheckDate(rule.schedule) })
-      .where(eq(monitoringRules.id, rule.id));
+      .set({ nextCheckAt: nextCheckDate(rule.schedule, nowDate) })
+      .where(
+        and(
+          eq(monitoringRules.id, rule.id),
+          eq(monitoringRules.enabled, true),
+          eq(monitoringRules.nextCheckAt, rule.nextCheckAt),
+        ),
+      )
+      .run();
+    if (claim.changes !== 1) continue; // claimed by a concurrent worker
 
-    await logAuditEvent({
-      caseId: rule.caseId,
-      eventType: isReappearance ? "reappearance_detected" : "scheduled_verification",
-      summary: isReappearance
-        ? "Scheduled check detected exposure reappearance — case reopened"
-        : "Scheduled verification check completed",
-      detail: { ruleId: rule.id, checkId, checkStatus },
-    });
+    try {
+      const privacyCase = await db.query.privacyCases.findFirst({
+        where: eq(privacyCases.id, rule.caseId),
+      });
+      if (!privacyCase || FROZEN_CASE_STATUSES.has(privacyCase.status)) {
+        results.push({ ruleId: rule.id, skipped: privacyCase?.status ?? "case_missing" });
+        continue;
+      }
 
-    results.push({ ruleId: rule.id, checkId, checkStatus, isReappearance });
+      const exposure = await db.query.verifiedExposures.findFirst({
+        where: and(
+          eq(verifiedExposures.id, rule.exposureId),
+          eq(verifiedExposures.caseId, rule.caseId),
+        ),
+      });
+      if (!exposure) {
+        results.push({ ruleId: rule.id, skipped: "exposure_missing" });
+        continue;
+      }
+
+      const live = await performLiveExposureCheck(rule.caseId, rule.exposureId);
+      const recorded = await recordLiveCheck({
+        caseId: rule.caseId,
+        exposure,
+        live,
+        checkType: "scheduled_verification",
+      });
+
+      await logAuditEvent({
+        caseId: rule.caseId,
+        eventType: recorded.isReappearance ? "reappearance_detected" : "scheduled_verification",
+        summary: recorded.isReappearance
+          ? "Scheduled check detected exposure reappearance — case reopened"
+          : `Scheduled verification check completed: ${recorded.checkStatus}`,
+        detail: {
+          ruleId: rule.id,
+          checkId: recorded.checkId,
+          checkStatus: recorded.checkStatus,
+          outcome: live.outcome,
+        },
+      });
+
+      results.push({
+        ruleId: rule.id,
+        checkId: recorded.checkId,
+        checkStatus: recorded.checkStatus,
+        isReappearance: recorded.isReappearance,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "SCHEDULED_CHECK_FAILED";
+      results.push({ ruleId: rule.id, error: message });
+    }
   }
 
   return results;
@@ -326,11 +527,14 @@ export async function evaluateFollowUp(
     stopConditions.push("max_follow_ups_reached");
   }
 
-  const latestCheck = await db.query.verificationChecks.findFirst({
+  // Latest NON-simulated check for this exposure (newest first).
+  const checks = await db.query.verificationChecks.findMany({
     where: eq(verificationChecks.exposureId, remediation.exposureId),
+    orderBy: [desc(verificationChecks.checkedAt), desc(verificationChecks.createdAt)],
   });
+  const latestCheck = checks.find((c) => !isSimulatedCheck(c));
 
-  if (latestCheck && !latestCheck.relevantContentPresent) {
+  if (latestCheck && isLiveRemovalConfirmation(latestCheck)) {
     stopConditions.push("content_removed");
   }
 
@@ -359,12 +563,22 @@ export async function evaluateFollowUp(
   };
 }
 
+/**
+ * NOTE: callers (route handlers) must authorize access to `caseId` first.
+ * Each check carries an additive `mode` field ("live" | "simulate" | "legacy").
+ */
 export async function getVerificationData(caseId: string) {
   const checks = await db.query.verificationChecks.findMany({
     where: eq(verificationChecks.caseId, caseId),
+    orderBy: [desc(verificationChecks.checkedAt)],
   });
   const rules = await db.query.monitoringRules.findMany({
     where: eq(monitoringRules.caseId, caseId),
   });
-  return { checks, rules };
+  const simulateAllowed = await isSimulateAllowed(caseId);
+  return {
+    checks: checks.map((c) => ({ ...c, mode: checkModeOf(c) })),
+    rules,
+    simulateAllowed,
+  };
 }

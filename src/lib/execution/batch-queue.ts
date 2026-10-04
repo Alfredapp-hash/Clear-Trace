@@ -74,6 +74,13 @@ export async function processBatch(
   caseId: string,
   batchId: string,
 ) {
+  const privacyCase = await getCaseForUser(caseId, session);
+  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  const owned = await db.query.remediationBatches.findFirst({
+    where: and(eq(remediationBatches.id, batchId), eq(remediationBatches.caseId, caseId)),
+  });
+  if (!owned) throw new Error("BATCH_NOT_FOUND");
+
   const items = await db.query.remediationBatchItems.findMany({
     where: eq(remediationBatchItems.batchId, batchId),
   });
