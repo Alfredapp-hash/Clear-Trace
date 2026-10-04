@@ -152,3 +152,26 @@ Goal: let users do all LLM work on a **local** model so PII never leaves their m
 - P2 One remaining Turbopack "whole project traced" warning via `skills/registry.ts` (harmless: excludes keep data/src out).
 - Next sprint candidate: **Apple Foundation Models provider** (Swift localhost bridge speaking the Ollama `/api/chat` shape) for Mac users.
 - Known limit of Local-only AI: discovery search (name) and HIBP (email) still use external services by design; the UI says so.
+
+---
+
+## Sprint 2 — ship-ready v1.2 (2026-10-04)
+
+- **CI fixed.**
+  - `package-lock.json` was out of sync, so `npm ci` failed.
+  - Skill-pack tests failed on clean checkouts: `skills/` is generated and gitignored, so a `pretest` sync now creates it.
+  - Actions are bumped to v5.
+- **E2E fixed.** `playwright.config.ts` deleted the e2e DB in every Playwright worker, while the dev server was already using it. Pages then lost the session and bounced between `/login` and `/`. The reset now runs once, in the main process only.
+- **New e2e coverage** (`e2e/v1-2-core.spec.ts`), all running in a real browser:
+  - The core workflow, with live verify inconclusive on unreachable hosts and simulation never setting `removed_confirmed`.
+  - Logout revokes a copied cookie.
+  - A second account gets 404 on another account's case.
+  - The e2e job now **blocks** CI.
+- **Docker Compose smoke job in CI** (clean runner). It checks that:
+  - compose refuses missing secrets;
+  - health reports the DB;
+  - unauthenticated API calls get 401;
+  - a session survives a container restart (the volume persists);
+  - cron auth works;
+  - the image ships no database.
+- **Backlog (P2):** the guide panel and the workflow panel both have a "Resolve controller" button, and they do different things. Rename or unify them.

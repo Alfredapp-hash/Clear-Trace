@@ -2,7 +2,7 @@
 
 All notable changes to the ClearTrace application are documented here.
 
-## [1.2.0] — Unreleased — Sprint 1
+## [1.2.0] — 2026-10-04
 
 ### Security
 - **IDOR fixes** — case-scoped routes (discovery, breach scan, remediation, verification, batch) check case ownership / org scope and return 404 across tenants; integration tests assert cross-tenant access is refused
