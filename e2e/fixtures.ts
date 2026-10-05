@@ -53,3 +53,22 @@ export const test = base.extend<{ consoleAllowlist: ConsoleAllowlist }>({
 });
 
 export { expect };
+
+/**
+ * Same-origin GET from inside the page, so the browser's own cookie rules apply. Use this for
+ * authenticated API checks: Playwright's APIRequestContext does not send the production
+ * `Secure` session cookie over plain http://127.0.0.1, while real browsers do.
+ */
+export async function browserGet(page: Page, path: string): Promise<{ status: number; body: unknown }> {
+  return page.evaluate(async (p) => {
+    const res = await fetch(p, { credentials: "same-origin" });
+    const text = await res.text();
+    let body: unknown = null;
+    try {
+      body = JSON.parse(text);
+    } catch {
+      body = text;
+    }
+    return { status: res.status, body };
+  }, path);
+}

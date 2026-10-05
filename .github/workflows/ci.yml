@@ -78,6 +78,14 @@ jobs:
             echo "sharp/@img leaked into .next/standalone" >&2
             exit 1
           fi
+      - name: Browser bundles carry no zod or broker catalog
+        # zod's eval probe trips the production CSP; the catalog is 500+ server-only entries.
+        run: |
+          set -euo pipefail
+          if grep -rlE 'return Function\(""\)|"relistIntervalDays"' .next/static; then
+            echo "zod or the broker catalog leaked into a client bundle (see files above)" >&2
+            exit 1
+          fi
 
   e2e:
     name: Playwright e2e

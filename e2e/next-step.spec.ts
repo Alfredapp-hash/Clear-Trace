@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import type { Page } from "@playwright/test";
-import { test, expect } from "./fixtures";
+import { test, expect, browserGet } from "./fixtures";
 
 async function registerAndCreateCase(page: Page, label: string) {
   const suffix = randomUUID().slice(0, 8);
@@ -139,9 +139,8 @@ test("'Finish setup' on a draft case resumes that case instead of creating a sec
   });
   expect(status).toBe(201);
   const countCases = async () => {
-    const res = await page.request.get("/api/cases");
-    const body = await res.json();
-    return (body.cases as unknown[]).length;
+    const { body } = await browserGet(page, "/api/cases");
+    return ((body as { cases: unknown[] }).cases).length;
   };
   const before = await countCases();
 

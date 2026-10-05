@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 import { type ReactNode } from "react";
 
 /**
@@ -34,14 +34,15 @@ export function AppShell({
   orgName: string;
 }) {
   const pathname = usePathname() ?? "";
-  const router = useRouter();
   const displayName = userName.trim();
   const displayOrg = orgName.trim();
 
   async function logout() {
     await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-    router.refresh();
+    // Full navigation, not router.push: drops the client router cache (signed-in RSC payloads
+    // must not survive Back) and stops in-flight prefetches of now-protected pages.
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- intentional hard reload on sign-out
+    window.location.assign("/login");
   }
 
   const initials = displayName
