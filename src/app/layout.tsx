@@ -24,7 +24,8 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
-    apple: [{ url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
+    // Full-bleed: iOS rounds the corners itself.
+    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

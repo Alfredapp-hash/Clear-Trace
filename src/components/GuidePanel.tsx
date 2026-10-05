@@ -180,7 +180,11 @@ export function GuidePanel({
               Agent handoff
             </SectionTitle>
 
-            <div className="mt-3 flex flex-wrap gap-1">
+            {/* Selectors, not actions: they switch which step's handoff pack is shown. */}
+            <p className="mt-3 text-[11px] font-medium uppercase tracking-wide text-slate-600">
+              Handoff pack for step
+            </p>
+            <div role="tablist" aria-label="Handoff pack for step" className="mt-1.5 flex flex-wrap gap-1">
               {guide.workflowSteps
                 .filter((s) => s.status === "current" || s.status === "upcoming")
                 .slice(0, 4)
@@ -188,8 +192,9 @@ export function GuidePanel({
                   <button
                     key={s.skillId}
                     type="button"
+                    role="tab"
                     onClick={() => selectSkill(s.skillId)}
-                    aria-pressed={selectedSkill === s.skillId}
+                    aria-selected={selectedSkill === s.skillId}
                     className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
                       selectedSkill === s.skillId
                         ? "bg-teal-500/20 text-teal-300"
@@ -201,13 +206,18 @@ export function GuidePanel({
                 ))}
             </div>
 
-            <div className="mt-4 flex flex-wrap gap-1 border-b border-white/[0.06] pb-3">
+            <div
+              role="tablist"
+              aria-label="Agent tool"
+              className="mt-4 flex flex-wrap gap-1 border-b border-white/[0.06] pb-3"
+            >
               {guide.agentPacks.map((pack, i) => (
                 <button
                   key={pack.variant}
                   type="button"
+                  role="tab"
                   onClick={() => setAgentTab(i)}
-                  aria-pressed={agentTab === i}
+                  aria-selected={agentTab === i}
                   className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                     agentTab === i
                       ? "bg-white/10 text-white"

@@ -33,8 +33,9 @@ test("core workflow: discovery → draft → verification never reports a false 
 
   await page.getByRole("button", { name: "Run demo discovery" }).click();
   await page.getByRole("button", { name: "Confirm", exact: true }).first().click();
-  // The guide panel has a same-named shortcut; use the workflow panel's button.
-  await page.getByRole("button", { name: "Resolve controller" }).last().click();
+  // The guide panel's step selector is a tab, so the workflow action is the only such button.
+  await expect(page.getByRole("tab", { name: "Resolve controller" })).toBeVisible();
+  await page.getByRole("button", { name: "Resolve controller" }).click();
   await page.getByRole("button", { name: "Use this template" }).click();
   await expect(page.getByRole("button", { name: "Record as sent" })).toBeVisible();
 
