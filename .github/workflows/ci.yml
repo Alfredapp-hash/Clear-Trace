@@ -12,28 +12,70 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+# Every third-party action is pinned to a full commit SHA (tag in the trailing comment).
+# Dependabot (github-actions ecosystem) keeps the SHAs and comments current.
+
 jobs:
   check:
-    name: Lint, typecheck, test, build
+    name: Audit, lint, typecheck, test (coverage), build
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Audit production dependencies (blocks on high/critical)
+        run: npm audit --omit=dev --audit-level=high
       - name: Lint
         run: npm run lint
       - name: Typecheck
         run: npx tsc --noEmit
-      - name: Unit + integration tests
-        run: npm test
+      - name: Unit + integration tests with coverage gate
+        run: npm run test:coverage
+      - name: Coverage summary
+        if: always() && hashFiles('coverage/coverage-summary.json') != ''
+        run: |
+          node -e '
+            const s = require("./coverage/coverage-summary.json");
+            const root = process.cwd() + "/";
+            const groups = { "src/lib": {}, "src/app/api": {}, "total": {} };
+            const keys = ["statements", "branches", "functions", "lines"];
+            for (const g of Object.keys(groups)) for (const k of keys) groups[g][k] = [0, 0];
+            for (const [file, m] of Object.entries(s)) {
+              if (file === "total") continue;
+              const rel = file.replace(root, "");
+              for (const g of ["src/lib", "src/app/api"]) {
+                if (!rel.startsWith(g + "/")) continue;
+                for (const k of keys) { groups[g][k][0] += m[k].covered; groups[g][k][1] += m[k].total; }
+              }
+            }
+            for (const k of keys) groups.total[k] = [s.total[k].covered, s.total[k].total];
+            const pct = ([c, t]) => (t ? ((100 * c) / t).toFixed(1) : "100.0") + "%";
+            const rows = Object.entries(groups).map(([g, m]) => `| ${g} | ${keys.map((k) => pct(m[k])).join(" | ")} |`);
+            console.log(["### Coverage", "", "| Scope | Statements | Branches | Functions | Lines |", "|---|---|---|---|---|", ...rows].join("\n"));
+          ' >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        if: always()
+        with:
+          name: coverage-summary
+          path: coverage/coverage-summary.json
+          retention-days: 14
+          if-no-files-found: ignore
       - name: Build
         run: npm run build
+      - name: Standalone output ships no sharp / libvips
+        run: |
+          set -euo pipefail
+          test -d .next/standalone
+          if [ -e .next/standalone/node_modules/@img ] || [ -e .next/standalone/node_modules/sharp ]; then
+            echo "sharp/@img leaked into .next/standalone" >&2
+            exit 1
+          fi
 
   e2e:
     name: Playwright e2e
@@ -43,15 +85,17 @@ jobs:
     env:
       NEXT_TELEMETRY_DISABLED: "1"
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: 22
           cache: npm
       - run: npm ci
       - run: npx playwright install --with-deps chromium
+      # playwright.config.ts starts the server with REGISTRATION_MODE=open (the suite
+      # registers several accounts).
       - run: npm run test:e2e
-      - uses: actions/upload-artifact@v5
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
         if: always()
         with:
           name: playwright-report
@@ -65,7 +109,7 @@ jobs:
     needs: check
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: Generate throwaway secrets
         run: |
           {
@@ -78,30 +122,56 @@ jobs:
           if env -i PATH="$PATH" HOME="$HOME" docker compose --env-file /dev/null config >/dev/null 2>&1; then
             echo "compose accepted missing secrets" >&2; exit 1
           fi
+      - name: Images are pinned by digest
+        run: |
+          set -uo pipefail
+          if grep -E '^(FROM |# syntax=)' Dockerfile | grep -v '@sha256:'; then
+            echo "Dockerfile has an image without a digest" >&2; exit 1
+          fi
+          if grep -E '^\s*image:' docker-compose.yml | grep -v '@sha256:'; then
+            echo "docker-compose.yml has an image without a digest" >&2; exit 1
+          fi
       - name: Build and start (waits for healthcheck)
         run: docker compose up -d --build --wait --wait-timeout 180
-      - name: Health, auth and persistence
+      - name: Published on loopback only
         run: |
           set -euo pipefail
-          B=http://localhost:3000
+          docker compose port cleartrace 3000 | tee /dev/stderr | grep -qx '127.0.0.1:3000'
+      # Runs with the shipped defaults (REGISTRATION_MODE=first_user): the smoke only needs
+      # one account, and it asserts that a fresh install allows exactly one self-registration.
+      - name: Health, auth, registration lock and persistence
+        run: |
+          set -euo pipefail
+          B=http://127.0.0.1:3000
           curl -fsS $B/api/health | tee /dev/stderr | grep -q '"db":"ok"'
           test "$(curl -s -o /dev/null -w '%{http_code}' $B/api/cases)" = "401"
           curl -fsS -c jar -H 'content-type: application/json' \
             -d '{"name":"CI","email":"ci@test.local","password":"ci-pass-123456"}' $B/api/auth/register >/dev/null
           curl -fsS -b jar $B/api/auth/me | grep -q ci@test.local
+          second=$(curl -s -o /dev/null -w '%{http_code}' -H 'content-type: application/json' \
+            -d '{"name":"CI2","email":"ci2@test.local","password":"ci-pass-123456"}' $B/api/auth/register)
+          test "$second" = "403"
           docker compose restart cleartrace
           docker compose up -d --wait --wait-timeout 120
           curl -fsS -b jar $B/api/auth/me | grep -q ci@test.local
+      - name: Image optimizer is disabled
+        run: |
+          set -euo pipefail
+          code=$(curl -s -o /dev/null -w '%{http_code}' 'http://127.0.0.1:3000/_next/image?url=/icon-192.png&w=64&q=75')
+          echo "/_next/image -> $code"
+          case "$code" in 400|404) ;; *) exit 1 ;; esac
       - name: Cron endpoints reject missing secret, accept worker secret
         run: |
           set -euo pipefail
           source .env
-          test "$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3000/api/cron/verify)" = "401"
-          curl -fsS -H "Authorization: Bearer $WORKER_SECRET" http://localhost:3000/api/cron/verify >/dev/null
-      - name: Image contains no database
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:3000/api/cron/verify)" = "401"
+          curl -fsS -H "Authorization: Bearer $WORKER_SECRET" http://127.0.0.1:3000/api/cron/verify >/dev/null
+          curl -fsS --max-time 900 -X POST -H "Authorization: Bearer $WORKER_SECRET" http://127.0.0.1:3000/api/worker/run >/dev/null
+      - name: Image contains no database and no sharp
         run: |
           IMAGE=$(docker compose images cleartrace --format json | jq -r '.[0].Repository + ":" + .[0].Tag')
           test -z "$(docker run --rm --entrypoint ls "$IMAGE" -A /app/data)"
+          docker run --rm --entrypoint sh "$IMAGE" -c 'test ! -e /app/node_modules/@img && test ! -e /app/node_modules/sharp'
       - name: Logs
         if: always()
         run: docker compose logs --no-color --tail 200

@@ -36,6 +36,9 @@ next-env.d.ts
 /test-results/
 /playwright-report/
 
+# test coverage (npm run test:coverage)
+/coverage/
+
 # agent builder
 /agent-builder/dist/
 /agent-builder/mcp-server/node_modules/

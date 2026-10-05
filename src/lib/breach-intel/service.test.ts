@@ -1,5 +1,6 @@
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
+import { v4 as uuid } from "uuid";
 
 vi.mock("@/lib/connectors/service", () => ({
   resolveBreachIntelConnector: vi.fn(async () => null),
@@ -7,10 +8,22 @@ vi.mock("@/lib/connectors/service", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { breachFindings, exposureCandidates } from "@/lib/db/schema";
+import { authorizationRecords, breachFindings, exposureCandidates } from "@/lib/db/schema";
 import type { SessionPayload } from "@/lib/auth/session";
 import { runBreachScan } from "./service";
 import { seedWorkflowCase, seedWorkflowUser } from "@/lib/verification/test-fixtures";
+
+/** A verified authorization: the scan sends the subject's emails to HIBP only with consent. */
+async function consent(caseId: string) {
+  await db.insert(authorizationRecords).values({
+    id: uuid(),
+    caseId,
+    authorityBasis: "self",
+    userAttestation: true,
+    status: "verified",
+    attestedAt: new Date().toISOString(),
+  });
+}
 
 describe("breach scan — no synthetic data in real cases", () => {
   let session: SessionPayload;
@@ -30,6 +43,7 @@ describe("breach scan — no synthetic data in real cases", () => {
       claims: emailClaims,
       scanScopes: ["people_search", "breach_intel"],
     });
+    await consent(caseId);
     await expect(runBreachScan(session, caseId)).rejects.toThrow("CONNECTOR_REQUIRED:hibp");
     const findings = await db.query.breachFindings.findMany({
       where: eq(breachFindings.caseId, caseId),
@@ -47,6 +61,7 @@ describe("breach scan — no synthetic data in real cases", () => {
       claims: emailClaims,
       scanScopes: ["breach_intel"],
     });
+    await consent(caseId);
     await expect(runBreachScan(session, caseId)).rejects.toThrow("CONNECTOR_REQUIRED:hibp");
   });
 
@@ -56,6 +71,7 @@ describe("breach scan — no synthetic data in real cases", () => {
       claims: emailClaims,
       scanScopes: ["breach_intel"],
     });
+    await consent(caseId);
     const result = await runBreachScan(session, caseId);
     expect(result.mode).toBe("demo");
     expect(result.findingCount).toBeGreaterThan(0);

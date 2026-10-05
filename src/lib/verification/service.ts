@@ -9,12 +9,16 @@ import {
   remediationCases,
   followUpRules,
   contentEvidence,
+  outboundMessages,
+  messageDrafts,
+  slaDeadlines,
 } from "@/lib/db/schema";
 import type { VerifiedExposure } from "@/lib/db/schema";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { hashContent } from "@/lib/tools/text-extractor";
 import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
+import { FROZEN_CASE_STATUSES, deriveCaseStatusFromExposures } from "@/lib/cases/derive-status";
 import { performLiveExposureCheck, type LiveCheckResult } from "./live-check";
 import {
   SIMULATED_SEARCH_STATUS,
@@ -26,12 +30,6 @@ import {
 } from "./check-mode";
 
 export { isSimulateAllowed, isDemoCase } from "./check-mode";
-
-/** Case statuses that must never be changed by automated verification/monitoring. */
-const FROZEN_CASE_STATUSES = new Set(["paused", "archived", "closed"]);
-
-/** Exposure statuses that are excluded when deriving the case status. */
-const EXCLUDED_EXPOSURE_STATUSES = new Set(["rejected", "dismissed", "false_positive"]);
 
 /**
  * Case statuses that are "before" verification. scheduleMonitoring only moves a case
@@ -58,31 +56,10 @@ function nextCheckDate(schedule: string, from = new Date()): string {
   return d.toISOString();
 }
 
-/**
- * Derive the case status from ALL of its exposures (pure; exported for tests).
- * - any reappearance            → reopened
- * - every exposure removed      → removed_confirmed
- * - some (not all) removed      → partially_resolved
- * - none removed, some visible  → follow_up_eligible
- * - otherwise                   → current status unchanged
- * Frozen statuses (paused/archived/closed) are never changed.
- */
-export function deriveCaseStatusFromExposures(
-  exposureStatuses: string[],
-  currentStatus: string,
-): string {
-  if (FROZEN_CASE_STATUSES.has(currentStatus)) return currentStatus;
-  const relevant = exposureStatuses.filter((s) => !EXCLUDED_EXPOSURE_STATUSES.has(s));
-  if (relevant.length === 0) return currentStatus;
-  if (relevant.includes("reappearance")) return "reopened";
-  const removed = relevant.filter((s) => s === "removed_confirmed").length;
-  if (removed === relevant.length) return "removed_confirmed";
-  if (removed > 0) return "partially_resolved";
-  if (relevant.includes("still_exposed")) return "follow_up_eligible";
-  return currentStatus;
-}
+/** Pure derivation lives in cases/derive-status (shared with the schema migration). */
+export { deriveCaseStatusFromExposures };
 
-async function recomputeCaseStatus(caseId: string, now: string): Promise<string | null> {
+export async function recomputeCaseStatus(caseId: string, now: string): Promise<string | null> {
   const privacyCase = await db.query.privacyCases.findFirst({
     where: eq(privacyCases.id, caseId),
   });
@@ -95,10 +72,19 @@ async function recomputeCaseStatus(caseId: string, now: string): Promise<string 
     privacyCase.status,
   );
   if (next !== privacyCase.status) {
-    await db
+    // Conditional on the status read above: a pause/archive that landed meanwhile wins.
+    const res = db
       .update(privacyCases)
       .set({ status: next, updatedAt: now })
-      .where(eq(privacyCases.id, caseId));
+      .where(and(eq(privacyCases.id, caseId), eq(privacyCases.status, privacyCase.status)))
+      .run();
+    if (res.changes !== 1) {
+      const current = await db.query.privacyCases.findFirst({
+        where: eq(privacyCases.id, caseId),
+        columns: { status: true },
+      });
+      return current?.status ?? null;
+    }
   }
   return next;
 }
@@ -499,11 +485,40 @@ export async function runDueVerifications() {
   return results;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface FollowUpEvaluation {
+  followUpAllowed: boolean;
+  /**
+   * Why a follow-up is blocked: do_not_contact, max_follow_ups_reached, content_removed,
+   * no_prior_request (nothing was ever sent for this remediation), waiting_period
+   * (sent too recently; see nextEligibleDate).
+   */
+  stopConditions: string[];
+  /** Earliest time a follow-up may be sent, or null when nothing was ever sent. */
+  nextEligibleDate: string | null;
+  /** When the latest request for this remediation was sent, or null. */
+  lastSentAt: string | null;
+}
+
+/**
+ * Decide whether a follow-up may be drafted for one remediation.
+ *
+ * A follow-up needs a prior request: the latest outbound_messages row for the
+ * remediation's drafts. nextEligibleDate = lastSentAt + firstFollowUpDays (no
+ * follow-ups yet) or + secondFollowUpDays, unless a pending SLA follow_up deadline
+ * anchored at/after that send exists, which then wins.
+ *
+ * `options.now` exists for tests; `options.audit: false` skips the audit event (for
+ * read-only payload builders that evaluate every remediation on each GET).
+ */
 export async function evaluateFollowUp(
   session: SessionPayload,
   caseId: string,
   remediationCaseId: string,
-) {
+  options: { now?: Date; audit?: boolean } = {},
+): Promise<FollowUpEvaluation> {
+  const nowDate = options.now ?? new Date();
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
 
@@ -538,28 +553,68 @@ export async function evaluateFollowUp(
     stopConditions.push("content_removed");
   }
 
-  const allowed = stopConditions.length === 0;
-  const nextEligible = new Date();
-  nextEligible.setDate(
-    nextEligible.getDate() +
-      (remediation.followUpCount === 0
-        ? (rules?.firstFollowUpDays ?? 14)
-        : (rules?.secondFollowUpDays ?? 30)),
-  );
+  // Latest request actually sent for this remediation (any of its drafts).
+  const [lastSent] = await db
+    .select({ sentAt: outboundMessages.sentAt })
+    .from(outboundMessages)
+    .innerJoin(messageDrafts, eq(outboundMessages.draftId, messageDrafts.id))
+    .where(
+      and(
+        eq(messageDrafts.remediationCaseId, remediationCaseId),
+        eq(outboundMessages.caseId, caseId),
+      ),
+    )
+    .orderBy(desc(outboundMessages.sentAt))
+    .limit(1);
+  const lastSentAt = lastSent?.sentAt ?? null;
 
-  await logAuditEvent({
-    caseId,
-    organizationId: session.organizationId,
-    userId: session.userId,
-    eventType: "follow_up_evaluated",
-    summary: allowed ? "Follow-up eligible" : "Follow-up blocked",
-    detail: { allowed, stopConditions },
-  });
+  let nextEligibleDate: string | null = null;
+  if (!lastSentAt) {
+    stopConditions.push("no_prior_request");
+  } else {
+    const waitDays =
+      remediation.followUpCount === 0
+        ? (rules?.firstFollowUpDays ?? 14)
+        : (rules?.secondFollowUpDays ?? 30);
+    let eligibleAt = new Date(new Date(lastSentAt).getTime() + waitDays * DAY_MS);
+
+    // A pending SLA follow_up deadline for this send (anchored at/after it) wins.
+    const slaRows = await db.query.slaDeadlines.findMany({
+      where: and(
+        eq(slaDeadlines.remediationCaseId, remediationCaseId),
+        eq(slaDeadlines.deadlineType, "follow_up"),
+        eq(slaDeadlines.status, "pending"),
+      ),
+      orderBy: [desc(slaDeadlines.anchorAt)],
+    });
+    const lastSentMs = new Date(lastSentAt).getTime();
+    const sla = slaRows.find((r) => new Date(r.anchorAt).getTime() >= lastSentMs);
+    if (sla && !Number.isNaN(new Date(sla.dueAt).getTime())) {
+      eligibleAt = new Date(sla.dueAt);
+    }
+
+    nextEligibleDate = eligibleAt.toISOString();
+    if (nowDate.getTime() < eligibleAt.getTime()) stopConditions.push("waiting_period");
+  }
+
+  const allowed = stopConditions.length === 0;
+
+  if (options.audit !== false) {
+    await logAuditEvent({
+      caseId,
+      organizationId: session.organizationId,
+      userId: session.userId,
+      eventType: "follow_up_evaluated",
+      summary: allowed ? "Follow-up eligible" : "Follow-up blocked",
+      detail: { remediationCaseId, allowed, stopConditions, nextEligibleDate },
+    });
+  }
 
   return {
     followUpAllowed: allowed,
     stopConditions,
-    nextEligibleDate: nextEligible.toISOString(),
+    nextEligibleDate,
+    lastSentAt,
   };
 }
 

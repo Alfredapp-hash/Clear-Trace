@@ -47,3 +47,11 @@ describe("workflow guide operational skills", () => {
     });
   }
 });
+describe("intake guide", () => {
+  it("resumes setup for this case instead of linking to a bare /cases/new", () => {
+    const guide = buildStepGuide("intake-and-consent", { ...fixture, caseStatus: "draft" });
+    const hrefs = guide?.inAppActions.map((a) => a.location) ?? [];
+    expect(hrefs).toContain("/cases/new?caseId=case-1");
+    expect(hrefs).not.toContain("/cases/new");
+  });
+});

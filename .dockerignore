@@ -10,6 +10,7 @@ skills
 npm-debug.log*
 test-results
 playwright-report
+coverage
 agent-builder/dist
 agent-builder/mcp-server/node_modules
 *.tsbuildinfo

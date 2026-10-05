@@ -9,7 +9,7 @@ import {
 import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import { listCasesForUser } from "@/lib/cases/service";
-import { plainStatus } from "@/lib/ux/plain-status";
+import { caseTypeLabel, formatDate, plainStatus } from "@/lib/ux/plain-status";
 import { redirect } from "next/navigation";
 
 export default async function CasesPage() {
@@ -24,7 +24,7 @@ export default async function CasesPage() {
       <PageHeader
         eyebrow="Workflows"
         title="Privacy cases"
-        description="Authorized remediation workflows with evidence, drafts, and verification."
+        description="Each case finds where your information appears, asks sites to remove it, and checks that it is gone."
         action={
           <ButtonLink href="/cases/new" size="lg">New case</ButtonLink>
         }
@@ -33,7 +33,7 @@ export default async function CasesPage() {
       {cases.length === 0 ? (
         <EmptyState
           title="No cases yet"
-          description="Create your first privacy case to begin intake, discovery, and removal workflows."
+          description="Create your first case to search for your information and start removing it."
           action={
             <ButtonLink href="/cases/new" size="lg">Create first case</ButtonLink>
           }
@@ -45,11 +45,10 @@ export default async function CasesPage() {
               <ListRow href={`/cases/${c.id}`} className="!items-start !py-4">
                 <div className="min-w-0 flex-1">
                   <h2 className="text-lg font-medium tracking-tight text-white">{c.title}</h2>
-                  <p className="mt-1 text-sm text-slate-500">
-                    {c.caseType.replaceAll("_", " ")} · Created{" "}
-                    {new Date(c.createdAt).toLocaleDateString()}
+                  <p className="mt-1 text-sm text-[var(--muted)]">
+                    {caseTypeLabel(c.caseType)} · Created {formatDate(c.createdAt)}
                   </p>
-                  <p className="mt-2 text-xs text-slate-600">{plainStatus(c.status)}</p>
+                  <p className="mt-2 text-xs text-[var(--muted)]">{plainStatus(c.status)}</p>
                 </div>
                 <StatusBadge status={c.status} />
               </ListRow>

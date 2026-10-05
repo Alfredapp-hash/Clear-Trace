@@ -2,17 +2,31 @@
 # Required: create a .env next to this file with SESSION_SECRET, ENCRYPTION_KEY
 # and WORKER_SECRET (generate each with `openssl rand -base64 48`).
 # `docker compose up` refuses to start while any of them is unset.
+#
+# Network: the app is published on 127.0.0.1:3000 only (this machine). To reach it from
+# your LAN or through a reverse proxy on another host, change the port mapping to
+# "3000:3000" (or "<lan-ip>:3000:3000") deliberately, and set NEXT_PUBLIC_APP_URL,
+# FORCE_HTTPS and TRUST_PROXY to match.
+#
+# Registration: REGISTRATION_MODE defaults to first_user (self-signup closes once the
+# first account exists). Set REGISTRATION_MODE=open to allow anyone who can reach the
+# app to sign up.
 
 services:
   cleartrace:
     build: .
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       SESSION_SECRET: ${SESSION_SECRET:?set SESSION_SECRET (openssl rand -base64 48)}
       ENCRYPTION_KEY: ${ENCRYPTION_KEY:?set ENCRYPTION_KEY (openssl rand -base64 48)}
       WORKER_SECRET: ${WORKER_SECRET:?set WORKER_SECRET (openssl rand -base64 48)}
       CRON_SECRET: ${CRON_SECRET:-}
+      REGISTRATION_MODE: ${REGISTRATION_MODE:-first_user}
+      # Inline worker fallback: 1 = always, 0 = never, empty = only when WORKER_SECRET is unset.
+      INLINE_WORKER: ${INLINE_WORKER:-}
+      # DEVELOPER_MODE=1 shows Settings -> Developer to every user (see README).
+      DEVELOPER_MODE: ${DEVELOPER_MODE:-}
       DATABASE_URL: /app/data/cleartrace.db
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       # Set FORCE_HTTPS=1 only when served behind TLS (adds upgrade-insecure-requests + HSTS).
@@ -27,10 +41,12 @@ services:
       - cleartrace-data:/app/data
     restart: unless-stopped
 
-  # Scheduler: worker hourly, verification hourly, digest weekly (Mon 09:00 UTC).
-  # Redirects count as failures (no -L; only 2xx is success).
+  # Scheduler: background jobs hourly (/api/worker/run runs due verifications and
+  # retention), digest weekly (Mon 09:00 UTC). /api/cron/verify stays available for an
+  # external cron but is not called here: it would re-run the same verification pass.
+  # Each call is capped at 15 minutes; redirects count as failures (no -L; only 2xx is success).
   worker-cron:
-    image: curlimages/curl:8.12.1
+    image: curlimages/curl:8.12.1@sha256:94e9e444bcba979c2ea12e27ae39bee4cd10bc7041a472c4727a558e213744e6
     depends_on:
       cleartrace:
         condition: service_healthy
@@ -40,7 +56,7 @@ services:
     command:
       - |
         call() {
-          code=$$(curl -fsS -o /dev/null -w '%{http_code}' -X POST \
+          code=$$(curl -fsS --max-time 900 -o /dev/null -w '%{http_code}' -X POST \
             -H "Authorization: Bearer $$WORKER_SECRET" \
             "http://cleartrace:3000$$1") || code="$${code:-000}"
           case "$$code" in
@@ -51,7 +67,6 @@ services:
         last_digest=""
         while true; do
           call /api/worker/run
-          call /api/cron/verify
           week=$$(date -u +%G-%V)
           if [ "$$(date -u +%u)" = "1" ] && [ "$$(date -u +%H)" -ge 9 ] && [ "$$last_digest" != "$$week" ]; then
             call /api/cron/digest

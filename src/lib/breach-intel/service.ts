@@ -13,6 +13,7 @@ import { logAuditEvent } from "@/lib/audit/logger";
 import { requireBillingFeature } from "@/lib/billing/service";
 import { getOrgConnector, resolveBreachIntelConnector } from "@/lib/connectors/service";
 import { getCaseForUser } from "@/lib/cases/service";
+import { assertDiscoveryAllowed } from "@/lib/discovery/service";
 import type { SessionPayload } from "@/lib/auth/session";
 import { DEMO_HIBP_BREACHES, queryHibpBreaches, type HibpBreach } from "./hibp-client";
 import { breachResponsePlaybook } from "./playbook";
@@ -81,6 +82,9 @@ export async function runBreachScan(
 
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  // The scan sends the subject's email addresses to a third party (HIBP): same gate as
+  // discovery — never on a paused/archived case or without a verified authorization.
+  await assertDiscoveryAllowed(privacyCase);
 
   const scanScopes = JSON.parse(privacyCase.scanScopes) as string[];
   if (!scanScopes.includes("breach_intel")) {

@@ -48,10 +48,14 @@ import { logAuditEvent } from "@/lib/audit/logger";
 import { seedTestCase, seedTestUser, type TestUserFixture } from "@/lib/test/api-helpers";
 import {
   CASE_ERASURE_TABLES,
+  archiveCase,
   deleteCase,
   deleteCaseData,
   deleteFamilyMemberSafely,
+  pauseCase,
   purgeExpiredArchivedCases,
+  reopenCase,
+  resumeCase,
 } from "./lifecycle";
 
 const CASE_TITLE = "Jane Q. Sensitive-Title";
@@ -404,5 +408,72 @@ describe("case erasure", () => {
     };
     expect(row.family_member_id).toBeNull();
     deleteCaseData(caseId);
+  });
+});
+
+describe("pause / archive / resume / reopen", () => {
+  beforeAll(() => {
+    ensureDatabase();
+  });
+
+  async function caseIn(status: string) {
+    const fixture = await seedTestUser();
+    const { caseId } = await seedTestCase(fixture);
+    await db.update(privacyCases).set({ status }).where(eq(privacyCases.id, caseId));
+    return { session: fixture.session, caseId };
+  }
+
+  const row = (caseId: string) => db.query.privacyCases.findFirst({ where: eq(privacyCases.id, caseId) });
+
+  it("pause stores the current status and resume restores it exactly", async () => {
+    const { session, caseId } = await caseIn("candidate_review");
+    await pauseCase(session, caseId);
+    expect(await row(caseId)).toMatchObject({ status: "paused", statusBeforePause: "candidate_review" });
+    await expect(resumeCase(session, caseId)).resolves.toEqual({ status: "candidate_review" });
+    expect(await row(caseId)).toMatchObject({ status: "candidate_review", statusBeforePause: null });
+  });
+
+  it("archive stores the status too; resume from archived restores it", async () => {
+    const { session, caseId } = await caseIn("verification_due");
+    await archiveCase(session, caseId);
+    expect((await row(caseId))?.statusBeforePause).toBe("verification_due");
+    await expect(resumeCase(session, caseId)).resolves.toEqual({ status: "verification_due" });
+  });
+
+  it("pausing a draft case is allowed and resume returns it to draft", async () => {
+    const { session, caseId } = await caseIn("draft");
+    await expect(pauseCase(session, caseId)).resolves.toEqual({ status: "paused" });
+    await expect(resumeCase(session, caseId)).resolves.toEqual({ status: "draft" });
+  });
+
+  it("resume only works on paused or archived cases", async () => {
+    const { session, caseId } = await caseIn("sent");
+    await expect(resumeCase(session, caseId)).rejects.toThrow("INVALID_TRANSITION");
+  });
+
+  it("legacy paused case (no marker) resumes to a status its records support, not a fake consent", async () => {
+    const { session, caseId } = await caseIn("paused");
+    // Strip the exposure/candidate so only the bare case remains (no authorization record).
+    sqlite.prepare("DELETE FROM verified_exposures WHERE case_id = ?").run(caseId);
+    sqlite.prepare("DELETE FROM exposure_candidates WHERE case_id = ?").run(caseId);
+    await expect(resumeCase(session, caseId)).resolves.toEqual({ status: "draft" });
+  });
+
+  it("reopen is limited to finished / monitoring statuses", async () => {
+    const early = await caseIn("candidate_review");
+    await expect(reopenCase(early.session, early.caseId, "x")).rejects.toThrow("INVALID_TRANSITION");
+    expect((await row(early.caseId))?.status).toBe("candidate_review");
+
+    const done = await caseIn("removed_confirmed");
+    await expect(reopenCase(done.session, done.caseId, "x")).resolves.toEqual({ status: "reopened" });
+  });
+
+  it("purge still sees an archived case after the marker is stored", async () => {
+    const { session, caseId } = await caseIn("sent");
+    await archiveCase(session, caseId);
+    const old = new Date(Date.now() - 400 * 24 * 60 * 60 * 1000).toISOString();
+    sqlite.prepare("UPDATE privacy_cases SET updated_at = ? WHERE id = ?").run(old, caseId);
+    const result = await purgeExpiredArchivedCases();
+    expect(result.purgedCaseIds).toContain(caseId);
   });
 });

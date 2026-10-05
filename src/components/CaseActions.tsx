@@ -5,7 +5,7 @@ import { useState } from "react";
 import { Button } from "./ui";
 import { callApi } from "@/lib/ui/call-api";
 
-type LifecycleAction = "pause" | "archive" | "reopen" | "delete";
+type LifecycleAction = "pause" | "archive" | "resume" | "delete";
 
 const INACTIVE_STATUSES = new Set(["paused", "archived"]);
 
@@ -24,11 +24,8 @@ export function CaseActions({ caseId, status }: { caseId: string; status: string
     try {
       const res = await callApi(`/api/cases/${caseId}/lifecycle`, {
         method: "POST",
-        body:
-          action === "reopen"
-            ? { action, reason: `Resumed from ${status.replaceAll("_", " ")}` }
-            : { action },
-        errorMessage: `Could not ${action === "reopen" ? "resume" : action} case`,
+        body: { action },
+        errorMessage: `Could not ${action} case`,
       });
       if (!res.ok) {
         setError(res.error);
@@ -45,8 +42,8 @@ export function CaseActions({ caseId, status }: { caseId: string; status: string
     <div className="flex flex-col items-end gap-2">
       <div className="flex flex-wrap gap-2 rounded-xl border border-white/[0.06] bg-white/[0.02] p-1.5">
         {inactive ? (
-          <Button size="sm" disabled={!!loading} onClick={() => runAction("reopen")}>
-            {loading === "reopen" ? "Resuming…" : "Resume"}
+          <Button size="sm" disabled={!!loading} onClick={() => runAction("resume")}>
+            {loading === "resume" ? "Resuming…" : "Resume"}
           </Button>
         ) : (
           <>

@@ -1,13 +1,14 @@
 import { AppShell } from "@/components/AppShell";
 import { Badge, Card, PageHeader, SectionTitle } from "@/components/ui";
-import { getSession } from "@/lib/auth/session";
+import { canAccessDeveloperTools, getSession } from "@/lib/auth/session";
 import {
   getSkillsByCategory,
   getWorkflowSkills,
   loadSkillRegistry,
   validateSkillRegistry,
 } from "@/lib/skills/registry";
-import { redirect } from "next/navigation";
+import Link from "next/link";
+import { notFound, redirect } from "next/navigation";
 
 function riskTone(level: string) {
   if (level === "low") return "success" as const;
@@ -22,12 +23,14 @@ const CATEGORY_LABELS: Record<string, string> = {
   onboarding: "Onboarding",
 };
 
-function SkillCard({ skill }: { skill: ReturnType<typeof loadSkillRegistry>[number] }) {
+type Skill = ReturnType<typeof loadSkillRegistry>[number];
+
+function SkillCard({ skill, nameOf }: { skill: Skill; nameOf: (id: string) => string }) {
   return (
     <Card key={skill.id} variant={skill.category === "workflow" ? "accent" : "default"}>
       <div className="mb-2 flex flex-wrap items-center gap-2">
         {skill.workflowOrder != null && (
-          <span className="font-mono text-[10px] text-slate-500">
+          <span className="font-mono text-[10px] text-muted">
             #{String(skill.workflowOrder).padStart(2, "0")}
           </span>
         )}
@@ -35,7 +38,7 @@ function SkillCard({ skill }: { skill: ReturnType<typeof loadSkillRegistry>[numb
         <Badge tone={riskTone(skill.riskLevel)}>{skill.riskLevel}</Badge>
       </div>
       <p className="text-sm leading-relaxed text-slate-400">{skill.summary}</p>
-      <p className="mt-2 font-mono text-xs text-slate-600">
+      <p className="mt-2 font-mono text-xs text-muted">
         {skill.id} · v{skill.version} · {skill.phase}
       </p>
       <div className="mt-4 flex flex-wrap gap-2 text-xs">
@@ -45,8 +48,8 @@ function SkillCard({ skill }: { skill: ReturnType<typeof loadSkillRegistry>[numb
         {skill.requiresHumanApproval && <Badge tone="warning">human approval</Badge>}
       </div>
       {skill.nextSkills.length > 0 && (
-        <p className="mt-3 text-xs text-slate-500">
-          Next: {skill.nextSkills.map((s) => s.replaceAll("_", " ")).join(" → ")}
+        <p className="mt-3 text-xs text-muted">
+          Next: {skill.nextSkills.map(nameOf).join(" → ")}
         </p>
       )}
       {skill.optionalConnectors.length > 0 && (
@@ -55,7 +58,7 @@ function SkillCard({ skill }: { skill: ReturnType<typeof loadSkillRegistry>[numb
         </p>
       )}
       <div className="mt-4">
-        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">
+        <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-muted">
           Allowed tools
         </p>
         <div className="flex flex-wrap gap-1">
@@ -68,7 +71,7 @@ function SkillCard({ skill }: { skill: ReturnType<typeof loadSkillRegistry>[numb
             </span>
           ))}
           {skill.allowedTools.length > 6 && (
-            <span className="text-[10px] text-slate-500">
+            <span className="text-[10px] text-muted">
               +{skill.allowedTools.length - 6}
             </span>
           )}
@@ -80,21 +83,31 @@ function SkillCard({ skill }: { skill: ReturnType<typeof loadSkillRegistry>[numb
 
 export default async function SkillsPage() {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirect("/login?from=/skills");
+  // Developer page (Settings → Developer): hidden from standard users.
+  if (!(await canAccessDeveloperTools(session))) notFound();
 
   const validation = validateSkillRegistry();
   const workflow = getWorkflowSkills();
   const operational = getSkillsByCategory("operational");
   const security = getSkillsByCategory("security");
   const onboarding = getSkillsByCategory("onboarding");
-  const total = loadSkillRegistry().length;
+  const registry = loadSkillRegistry();
+  const total = registry.length;
+  const names = new Map(registry.map((skill) => [skill.id, skill.name]));
+  const nameOf = (id: string) => names.get(id) ?? id;
 
   return (
     <AppShell userName={session.name} orgName={session.organizationName}>
       <PageHeader
-        eyebrow="Hermes skill pack"
+        eyebrow="Settings → Developer · Autopilot skill pack"
         title="Skill registry"
-        description={`${total} portable Markdown skills — workflow graph, operational helpers, and security auditor. Markdown defines policy; typed tools execute bounded actions.`}
+        description={`${total} portable Markdown skills that Autopilot ("Do the next step for me") can run — the workflow graph, operational helpers and the security auditor. Markdown defines policy; typed tools execute bounded actions.`}
+        action={
+          <Link href="/settings#developer" className="text-sm font-medium text-teal-400 hover:text-teal-300">
+            ← Back to settings
+          </Link>
+        }
       />
 
       {!validation.valid && (
@@ -116,12 +129,12 @@ export default async function SkillsPage() {
       </div>
 
       <section className="mb-10">
-        <SectionTitle subtitle="Primary case pipeline — Hermes routes by case status">
+        <SectionTitle subtitle="Primary case pipeline — Autopilot picks the step from the case status">
           {CATEGORY_LABELS.workflow}
         </SectionTitle>
         <div className="mt-4 grid gap-4 md:grid-cols-2">
           {workflow.map((skill) => (
-            <SkillCard key={skill.id} skill={skill} />
+            <SkillCard key={skill.id} skill={skill} nameOf={nameOf} />
           ))}
         </div>
       </section>
@@ -132,7 +145,7 @@ export default async function SkillsPage() {
         </SectionTitle>
         <div className="mt-4 grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {operational.map((skill) => (
-            <SkillCard key={skill.id} skill={skill} />
+            <SkillCard key={skill.id} skill={skill} nameOf={nameOf} />
           ))}
         </div>
       </section>
@@ -142,7 +155,7 @@ export default async function SkillsPage() {
           <SectionTitle>{CATEGORY_LABELS.security}</SectionTitle>
           <div className="mt-4 space-y-4">
             {security.map((skill) => (
-              <SkillCard key={skill.id} skill={skill} />
+              <SkillCard key={skill.id} skill={skill} nameOf={nameOf} />
             ))}
           </div>
         </section>
@@ -150,7 +163,7 @@ export default async function SkillsPage() {
           <SectionTitle>{CATEGORY_LABELS.onboarding}</SectionTitle>
           <div className="mt-4 space-y-4">
             {onboarding.map((skill) => (
-              <SkillCard key={skill.id} skill={skill} />
+              <SkillCard key={skill.id} skill={skill} nameOf={nameOf} />
             ))}
           </div>
         </section>

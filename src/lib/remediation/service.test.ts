@@ -1,5 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { eq } from "drizzle-orm";
+import { v4 as uuid } from "uuid";
 
 vi.mock("@/lib/connectors/email-send", () => ({
   sendRemovalEmail: vi.fn(),
@@ -27,11 +28,23 @@ import {
   approveAndRecordSent,
   createAllDraftVariants,
   caseStatusAfterDraftCreated,
+  createFollowUpDraft,
   createRemovalDraft,
+  getRemediationData,
+  pushDraftToGmail,
   resolveControllerForExposure,
   sendDraftViaConnector,
+  updateDraft,
 } from "./service";
 import { seedWorkflowCase, seedWorkflowUser } from "@/lib/verification/test-fixtures";
+import { purgeExpiredArchivedCases } from "@/lib/cases/lifecycle";
+import {
+  addLiveCheck,
+  caseStatusOf,
+  daysAgo,
+  seedSentScenario,
+  setCaseStatus,
+} from "./follow-up-scenario.fixture";
 
 const mockedSend = vi.mocked(sendRemovalEmail);
 const mockedPolish = vi.mocked(optionalPolishDraft);
@@ -213,11 +226,246 @@ describe("remediation service guards", () => {
       expect(await draftWithCaseStatus("remedy_selected")).toBe("draft_ready");
     });
 
-    it.each(["sent", "verification_due", "partially_resolved", "removed_confirmed", "paused"])(
+    it.each(["sent", "verification_due", "partially_resolved", "removed_confirmed"])(
       "does not regress a %s case",
       async (status) => {
         expect(await draftWithCaseStatus(status)).toBe(status);
       },
     );
+
+    it.each(["paused", "archived"])("refuses to draft on a %s case", async (status) => {
+      await expect(draftWithCaseStatus(status)).rejects.toThrow("CASE_BLOCKED");
+    });
+  });
+
+  describe("paused / archived cases are blocked before any side effect", () => {
+    it.each(["paused", "archived"])("record_sent / send / follow-up on %s", async (status) => {
+      const { caseId, draftId, remediationId } = await seedDraft(session);
+      await setCaseStatus(caseId, status);
+
+      await expect(approveAndRecordSent(session, caseId, draftId, "manual_copy")).rejects.toThrow(
+        "CASE_BLOCKED",
+      );
+      await expect(sendDraftViaConnector(session, caseId, draftId)).rejects.toThrow("CASE_BLOCKED");
+      await expect(createFollowUpDraft(session, caseId, remediationId)).rejects.toThrow(
+        "CASE_BLOCKED",
+      );
+      await expect(createAllDraftVariants(session, caseId, remediationId)).rejects.toThrow(
+        "CASE_BLOCKED",
+      );
+
+      expect(mockedSend).not.toHaveBeenCalled();
+      expect(await caseStatusOf(caseId)).toBe(status);
+      const draft = await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) });
+      expect(draft?.status).toBe("awaiting_user_approval");
+      const outbound = await db.query.outboundMessages.findMany({
+        where: eq(outboundMessages.caseId, caseId),
+      });
+      expect(outbound).toHaveLength(0);
+    });
+
+    it.each(["paused", "archived"])(
+      "draft edits, Gmail drafts and controller lookups on %s",
+      async (status) => {
+        const { caseId, draftId, exposureId } = await seedDraft(session);
+        const before = await db.query.messageDrafts.findFirst({
+          where: eq(messageDrafts.id, draftId),
+        });
+        await setCaseStatus(caseId, status);
+
+        await expect(updateDraft(session, caseId, draftId, "New subject", "New body")).rejects.toThrow(
+          "CASE_BLOCKED",
+        );
+        await expect(pushDraftToGmail(session, caseId, draftId)).rejects.toThrow("CASE_BLOCKED");
+        await expect(resolveControllerForExposure(session, caseId, exposureId)).rejects.toThrow(
+          "CASE_BLOCKED",
+        );
+
+        const after = await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) });
+        expect(after?.subject).toBe(before?.subject);
+        expect(after?.currentVersion).toBe(before?.currentVersion);
+        expect(await caseStatusOf(caseId)).toBe(status);
+      },
+    );
+
+    it("an archived case with an old updatedAt is still purged after a blocked send", async () => {
+      const { caseId, draftId } = await seedDraft(session);
+      await setCaseStatus(caseId, "archived", daysAgo(400));
+
+      await expect(approveAndRecordSent(session, caseId, draftId, "manual_copy")).rejects.toThrow(
+        "CASE_BLOCKED",
+      );
+      await expect(sendDraftViaConnector(session, caseId, draftId)).rejects.toThrow("CASE_BLOCKED");
+
+      const result = await purgeExpiredArchivedCases();
+      expect(result.purgedCaseIds).toContain(caseId);
+      expect(await caseStatusOf(caseId)).toBeUndefined();
+    });
+  });
+
+  describe("record_sent case status", () => {
+    it("moves draft_ready → sent", async () => {
+      const { caseId, draftId } = await seedDraft(session);
+      expect(await caseStatusOf(caseId)).toBe("draft_ready");
+      await approveAndRecordSent(session, caseId, draftId, "manual_copy");
+      expect(await caseStatusOf(caseId)).toBe("sent");
+    });
+
+    it.each(["partially_resolved", "removed_confirmed", "follow_up_eligible", "reopened"])(
+      "keeps %s",
+      async (status) => {
+        const { caseId, draftId } = await seedDraft(session);
+        await setCaseStatus(caseId, status);
+        await approveAndRecordSent(session, caseId, draftId, "manual_copy");
+        expect(await caseStatusOf(caseId)).toBe(status);
+        const outbound = await db.query.outboundMessages.findMany({
+          where: eq(outboundMessages.draftId, draftId),
+        });
+        expect(outbound).toHaveLength(1);
+      },
+    );
+  });
+
+  describe("follow-ups", () => {
+    async function followUpScenario(status: string) {
+      const scenario = await seedSentScenario(session, {
+        urls: [`https://www.spokeo.com/Follow-Up-${uuid().slice(0, 6)}`],
+        status,
+        sentDaysAgo: 20,
+      });
+      await addLiveCheck(scenario.caseId, scenario.exposureIds[0]!, "still_exposed");
+      return { ...scenario, remediationId: scenario.remediationIds[0]! };
+    }
+
+    async function followUpCount(remediationId: string) {
+      const row = await db.query.remediationCases.findFirst({
+        where: eq(remediationCases.id, remediationId),
+      });
+      return row?.followUpCount;
+    }
+
+    async function insertFollowUpDraft(caseId: string, remediationId: string) {
+      const id = uuid();
+      const now = new Date().toISOString();
+      await db.insert(messageDrafts).values({
+        id,
+        caseId,
+        remediationCaseId: remediationId,
+        subject: "Follow-up",
+        recipient: "privacy@spokeo.com",
+        body: "Following up on my earlier request.",
+        status: "awaiting_user_approval",
+        templateId: "follow-up-first",
+        remedyType: "follow_up_first",
+        isFollowUp: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      return id;
+    }
+
+    it("createFollowUpDraft on follow_up_eligible gives draft_ready", async () => {
+      const { caseId, remediationId } = await followUpScenario("follow_up_eligible");
+      const draft = await createFollowUpDraft(session, caseId, remediationId);
+      expect(draft.templateId).toBe("follow-up-first");
+      expect(await caseStatusOf(caseId)).toBe("draft_ready");
+    });
+
+    it("createFollowUpDraft never resets a partially_resolved case", async () => {
+      const { caseId, remediationId } = await followUpScenario("partially_resolved");
+      await createFollowUpDraft(session, caseId, remediationId);
+      expect(await caseStatusOf(caseId)).toBe("partially_resolved");
+    });
+
+    it("creating and abandoning a follow-up draft leaves followUpCount unchanged", async () => {
+      const { caseId, remediationId } = await followUpScenario("follow_up_eligible");
+      await createFollowUpDraft(session, caseId, remediationId);
+      expect(await followUpCount(remediationId)).toBe(0);
+      // A second follow-up is refused while the first is unsent.
+      await expect(createFollowUpDraft(session, caseId, remediationId)).rejects.toThrow(
+        /FOLLOW_UP_BLOCKED.*follow_up_draft_pending/,
+      );
+      expect(await followUpCount(remediationId)).toBe(0);
+    });
+
+    it("sending a follow-up counts it once", async () => {
+      const { caseId, remediationId } = await followUpScenario("follow_up_eligible");
+      const draft = await createFollowUpDraft(session, caseId, remediationId);
+      await approveAndRecordSent(session, caseId, draft.draftId, "manual_copy");
+      await approveAndRecordSent(session, caseId, draft.draftId, "manual_copy");
+      expect(await followUpCount(remediationId)).toBe(1);
+      expect(await caseStatusOf(caseId)).toBe("sent");
+    });
+
+    it("concurrent follow-up sends never push the count past max", async () => {
+      const { caseId, remediationId } = await followUpScenario("follow_up_eligible");
+      const drafts = await Promise.all(
+        [1, 2, 3].map(() => insertFollowUpDraft(caseId, remediationId)),
+      );
+      await Promise.all([
+        approveAndRecordSent(session, caseId, drafts[0]!, "manual_copy"),
+        approveAndRecordSent(session, caseId, drafts[1]!, "manual_copy"),
+        sendDraftViaConnector(session, caseId, drafts[2]!),
+      ]);
+      expect(await followUpCount(remediationId)).toBe(2);
+    });
+
+    it("an initial (non follow-up) send does not touch followUpCount", async () => {
+      const { caseId, draftId, remediationId } = await seedDraft(session);
+      await approveAndRecordSent(session, caseId, draftId, "manual_copy");
+      expect(await followUpCount(remediationId)).toBe(0);
+    });
+
+    it("FOLLOW_UP_BLOCKED carries reasons and nextEligibleDate", async () => {
+      const { caseId, remediationId } = await followUpScenario("follow_up_eligible");
+      await db
+        .update(remediationCases)
+        .set({ doNotContact: true })
+        .where(eq(remediationCases.id, remediationId));
+      const error = await createFollowUpDraft(session, caseId, remediationId).catch((e) => e);
+      expect(error).toBeInstanceOf(Error);
+      const msg = (error as Error).message;
+      expect(msg.startsWith("FOLLOW_UP_BLOCKED:")).toBe(true);
+      const detail = JSON.parse(msg.slice("FOLLOW_UP_BLOCKED:".length)) as {
+        reasons: string[];
+        nextEligibleDate?: string;
+      };
+      expect(detail.reasons).toContain("do_not_contact");
+    });
+  });
+
+  describe("getRemediationData payload", () => {
+    it("drops outbound messages and adds followUp per remediation", async () => {
+      const scenario = await seedSentScenario(session, {
+        urls: ["https://www.spokeo.com/Payload-A", "https://www.spokeo.com/Payload-B"],
+        status: "partially_resolved",
+        sentDaysAgo: 20,
+      });
+      const [exposureA, exposureB] = scenario.exposureIds;
+      const [remediationA, remediationB] = scenario.remediationIds;
+      await addLiveCheck(scenario.caseId, exposureA!, "removed");
+      await addLiveCheck(scenario.caseId, exposureB!, "still_exposed");
+
+      const data = await getRemediationData(scenario.caseId, session);
+      expect(data).not.toHaveProperty("messages");
+      const a = data.remediations.find((r) => r.id === remediationA);
+      const b = data.remediations.find((r) => r.id === remediationB);
+      expect(a?.followUp).toBeNull();
+      expect(b?.followUp).toMatchObject({ allowed: true, stopConditions: [] });
+
+      // Without a session the payload still has the key, but no evaluation.
+      const anonymous = await getRemediationData(scenario.caseId);
+      expect(anonymous.remediations.every((r) => r.followUp === null)).toBe(true);
+    });
+
+    it("ignores exposures whose latest live check is not still exposed", async () => {
+      const scenario = await seedSentScenario(session, {
+        urls: ["https://www.spokeo.com/Payload-C"],
+        status: "sent",
+        sentDaysAgo: 20,
+      });
+      const data = await getRemediationData(scenario.caseId, session);
+      expect(data.remediations[0]?.followUp).toBeNull();
+    });
   });
 });

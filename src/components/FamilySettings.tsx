@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import { Badge, Button, Card, Input, Label, SectionTitle } from "./ui";
 import { callApi, type ApiResult } from "@/lib/ui/call-api";
+import { humanize } from "@/lib/ux/plain-status";
 
-interface FamilyMember {
+export interface FamilyMember {
   id: string;
   displayName: string;
   relationship: string;
@@ -21,9 +22,20 @@ const RELATIONSHIPS = [
   { id: "other", label: "Other household member" },
 ];
 
-export function FamilySettings() {
-  const [members, setMembers] = useState<FamilyMember[]>([]);
-  const [seatLimit, setSeatLimit] = useState(0);
+/**
+ * When the server passes `initialMembers` / `initialSeatLimit` (the settings page does),
+ * nothing is fetched on mount; the list is re-fetched only after an add or remove.
+ */
+export function FamilySettings({
+  initialMembers,
+  initialSeatLimit,
+}: {
+  initialMembers?: FamilyMember[];
+  initialSeatLimit?: number;
+} = {}) {
+  const hasInitial = initialMembers !== undefined;
+  const [members, setMembers] = useState<FamilyMember[]>(initialMembers ?? []);
+  const [seatLimit, setSeatLimit] = useState(initialSeatLimit ?? 0);
   const [displayName, setDisplayName] = useState("");
   const [relationship, setRelationship] = useState("spouse");
   const [notes, setNotes] = useState("");
@@ -49,6 +61,7 @@ export function FamilySettings() {
   }
 
   useEffect(() => {
+    if (hasInitial) return;
     const controller = new AbortController();
     callApi<FamilyResponse>("/api/settings/family-members", {
       signal: controller.signal,
@@ -63,7 +76,7 @@ export function FamilySettings() {
       }
     });
     return () => controller.abort();
-  }, []);
+  }, [hasInitial]);
 
   async function addMember() {
     setLoading("add");
@@ -140,7 +153,7 @@ export function FamilySettings() {
             >
               <div>
                 <p className="font-medium text-slate-200">{m.displayName}</p>
-                <p className="text-xs text-slate-500">{m.relationship.replaceAll("_", " ")}</p>
+                <p className="text-xs text-slate-500">{RELATIONSHIPS.find((r) => r.id === m.relationship)?.label ?? humanize(m.relationship)}</p>
               </div>
               <Button
                 variant="ghost"

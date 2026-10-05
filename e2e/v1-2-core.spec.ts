@@ -31,20 +31,39 @@ test("core workflow: discovery → draft → verification never reports a false 
   // Identity claim is stored encrypted and only shown masked.
   await expect(page.getByText("Jordan Testcase")).toHaveCount(0);
 
-  await page.getByRole("button", { name: "Run demo discovery" }).click();
-  await page.getByRole("button", { name: "Confirm", exact: true }).first().click();
-  // The guide panel's step selector is a tab, so the workflow action is the only such button.
-  await expect(page.getByRole("tab", { name: "Resolve controller" })).toBeVisible();
-  await page.getByRole("button", { name: "Resolve controller" }).click();
-  await page.getByRole("button", { name: "Use this template" }).click();
-  await expect(page.getByRole("button", { name: "Record as sent" })).toBeVisible();
+  // One primary next action: on a fresh case the hero searches (sample mode without a key).
+  await page.getByTestId("next-step").getByRole("button", { name: "Search for my information" }).click();
+  await expect(page.getByRole("button", { name: /^This is me/ })).toHaveCount(6);
+  await page.getByRole("button", { name: /^This is me/ }).first().click();
 
+  // Confirming one match never hides the others: the hero keeps reviewing and the
+  // discovery phase stays open until every possible match has a decision.
+  const hero = page.getByTestId("next-step");
+  await expect(hero.getByRole("button", { name: "Review 5 possible matches" })).toBeVisible();
+  await expect(page.locator("#phase-discovery-toggle")).toHaveAttribute("aria-expanded", "true");
+  const notMe = page.getByRole("button", { name: /^Not me/ });
+  await expect(notMe).toHaveCount(5);
+  for (let left = 5; left > 0; left--) {
+    await notMe.first().click();
+    await expect(notMe).toHaveCount(left - 1);
+  }
+
+  // Every match decided: the case moves on to "find who to contact" for the confirmed page.
+  await expect(hero.getByRole("heading", { name: "Find who to contact" })).toBeVisible();
+  await hero.getByRole("button", { name: "Find who to contact" }).click();
+  await page.getByRole("button", { name: "Use this template" }).click();
+  await expect(page.getByRole("button", { name: "Mark as sent" })).toBeVisible();
+  await page.getByRole("button", { name: "Mark as sent" }).click();
+
+  // After sending, removal checks are the current phase.
+  const checks = page.locator("#phase-verification-body");
+  await expect(page.locator("#phase-verification-toggle")).toHaveAttribute("aria-expanded", "true");
   // Demo hosts don't resolve: a live check must be inconclusive, never "removed".
-  await page.getByRole("button", { name: "Live verify (SSRF-safe)" }).click();
-  await expect(page.getByText(/inconclusive/i).first()).toBeVisible();
+  await checks.getByRole("button", { name: "Check if it's gone" }).first().click();
+  await expect(page.getByText(/could not confirm either way/i).first()).toBeVisible();
 
   // Simulation is demo-only and must not change the real case status.
-  await page.getByRole("button", { name: "Demo: simulate removed" }).click();
+  await checks.getByRole("button", { name: "Demo: simulate removed" }).first().click();
   await expect(page.getByText(/simulated/i).first()).toBeVisible();
   const status = await page.request.get(page.url().replace("/cases/", "/api/cases/"));
   const body = await status.json();

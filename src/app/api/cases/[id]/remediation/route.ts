@@ -3,6 +3,7 @@ import { ensureDatabase } from "@/lib/db/init";
 import {
   approveAndRecordSent,
   createAllDraftVariants,
+  createFollowUpDraft,
   createRemovalDraft,
   getRemediationData,
   getTemplateOptionsForRemediation,
@@ -23,6 +24,7 @@ export async function GET(
   const { id } = await params;
   const access = await requireCaseAccess(request, id);
   if (access instanceof Response) return access;
+  const { session } = access;
   const url = new URL(request.url);
   const remediationCaseId = url.searchParams.get("remediationCaseId");
   const catalog = url.searchParams.get("catalog");
@@ -40,7 +42,9 @@ export async function GET(
     }
   }
 
-  return jsonOk(await getRemediationData(id));
+  // Includes a per-remediation `followUp` {allowed, stopConditions, nextEligibleDate};
+  // outbound message rows are not part of this payload.
+  return jsonOk(await getRemediationData(id, session));
 }
 
 export async function POST(
@@ -81,6 +85,9 @@ export async function POST(
         await createRemovalDraft(session, id, body.remediationCaseId, body.templateId),
         201,
       );
+    }
+    if (action === "create_follow_up_draft" && body.remediationCaseId) {
+      return jsonOk(await createFollowUpDraft(session, id, body.remediationCaseId), 201);
     }
     if (action === "create_all_variants" && body.remediationCaseId) {
       return jsonOk(await createAllDraftVariants(session, id, body.remediationCaseId), 201);

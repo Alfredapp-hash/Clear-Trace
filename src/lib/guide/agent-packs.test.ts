@@ -62,7 +62,8 @@ describe("agent packs", () => {
     expect(pack.systemPrompt).toContain("discover-public-exposure");
     expect(pack.systemPrompt).toContain("confidence_score");
     expect(pack.fullMarkdown).toContain("ChatGPT");
-    expect(pack.pasteBackInstructions).toContain("Hermes");
+    expect(pack.pasteBackInstructions).toContain("Do the next step for me");
+    expect(pack.pasteBackInstructions).not.toContain("Hermes");
   });
 
   it("includes cursor variant instructions", () => {

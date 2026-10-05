@@ -1,4 +1,9 @@
 import { decryptValue } from "@/lib/crypto/encryption";
+import {
+  createTextMatcher,
+  NAME_CLAIM_TYPES,
+  type MatchRange,
+} from "@/lib/tools/match-normalize";
 
 export interface MatchResult {
   relevantContentPresent: boolean;
@@ -7,10 +12,26 @@ export interface MatchResult {
   conflictingSignals: string[];
   /** Number of scan-enabled claims whose decrypted value was long enough to search for. */
   evaluatedClaimCount: number;
+  /** Claim types that matched (one entry per matched claim). */
+  matchedClaimTypes: string[];
+  /** Char ranges in `visibleText` where a name claim matched (for the no-results guard). */
+  nameHits: MatchRange[];
+}
+
+/** True when every matched claim is a name (full_name / alias) and at least one matched. */
+export function onlyNameMatched(result: Pick<MatchResult, "matchedClaimTypes">): boolean {
+  return (
+    result.matchedClaimTypes.length > 0 &&
+    result.matchedClaimTypes.every((t) => NAME_CLAIM_TYPES.has(t))
+  );
 }
 
 /**
  * Match visible page text against the case's identity claim VALUES only.
+ *
+ * Values are compared with the normalizers in match-normalize (diacritics, punctuation,
+ * phone formats, "Last, First M." names, street abbreviations). Any matched claim means
+ * present — a conservative rule that never hides a live listing.
  *
  * Category labels (e.g. an exposure's informationSummary "address, phone number")
  * are deliberately NOT matched: those words appear on almost every people-search
@@ -21,8 +42,10 @@ export function matchContentAgainstClaims(
   visibleText: string,
   claims: Array<{ claimType: string; encryptedValue: string; scanEnabled: boolean }>,
 ): MatchResult {
-  const lower = visibleText.toLowerCase();
+  const matcher = createTextMatcher(visibleText);
   const matchedSignals: string[] = [];
+  const matchedClaimTypes: string[] = [];
+  const nameHits: MatchRange[] = [];
   const conflictingSignals: string[] = [];
   let evaluatedClaimCount = 0;
 
@@ -34,12 +57,15 @@ export function matchContentAgainstClaims(
     } catch {
       continue;
     }
-    const normalized = value.trim().toLowerCase();
-    if (normalized.length < 3) continue;
+    if (value.trim().length < 3) continue;
     evaluatedClaimCount++;
 
-    if (lower.includes(normalized)) {
+    if (matcher.matches(claim.claimType, value)) {
       matchedSignals.push(`${claim.claimType} found in visible text`);
+      matchedClaimTypes.push(claim.claimType);
+      if (NAME_CLAIM_TYPES.has(claim.claimType)) {
+        nameHits.push(...matcher.nameHits(value));
+      }
     }
   }
 
@@ -61,5 +87,7 @@ export function matchContentAgainstClaims(
     matchedSignals,
     conflictingSignals,
     evaluatedClaimCount,
+    matchedClaimTypes,
+    nameHits,
   };
 }

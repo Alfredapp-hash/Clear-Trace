@@ -73,13 +73,13 @@ export const BUILDER_CHECKLIST: BuilderChecklistItem[] = [
     phase: "Validate",
     label: "Create a test case end-to-end",
     description:
-      "Register → New case → add email claim → run demo discovery → Guide panel handoff → Run next Hermes step.",
+      "Register → New case → add email claim → run demo discovery → Guide panel handoff → Do the next step for me (Autopilot).",
   },
   {
     id: "tests-green",
     phase: "Validate",
     label: "Run npm test && npm run build",
-    description: "The test suite covers API, Hermes, SSRF, SLA, broker sweep. Build must pass before shipping.",
+    description: "The test suite covers API, Autopilot (coordinator), outbound-request safety, SLA, broker sweep. Build must pass before shipping.",
   },
   {
     id: "deploy",

@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeAll, beforeEach, vi } from "vitest";
+import { describe, expect, it, beforeAll, afterAll, beforeEach, vi } from "vitest";
 import { cookies } from "next/headers";
 import { v4 as uuid } from "uuid";
 import { eq } from "drizzle-orm";
@@ -275,6 +275,19 @@ describe("authorization (Lane A)", () => {
   });
 
   describe("register hardening", () => {
+    // The shipped default is REGISTRATION_MODE=first_user, which closes sign-up once the
+    // shared test DB has any user. These cases exercise validation in open mode
+    // (src/lib/auth/registration.test.ts covers first_user / invite).
+    let previousMode: string | undefined;
+    beforeAll(() => {
+      previousMode = process.env.REGISTRATION_MODE;
+      process.env.REGISTRATION_MODE = "open";
+    });
+    afterAll(() => {
+      if (previousMode === undefined) delete process.env.REGISTRATION_MODE;
+      else process.env.REGISTRATION_MODE = previousMode;
+    });
+
     const post = (body: Record<string, unknown>) =>
       registerPost(
         new Request("http://localhost/api/auth/register", {

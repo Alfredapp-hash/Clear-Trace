@@ -1,4 +1,11 @@
+import type BetterSqlite3 from "better-sqlite3";
 import { sqlite } from "./index";
+import {
+  EXCLUDED_EXPOSURE_STATUSES,
+  deriveCaseStatusFromExposures,
+} from "@/lib/cases/derive-status";
+
+type Conn = BetterSqlite3.Database;
 
 const TABLES = [
   `CREATE TABLE IF NOT EXISTS users (
@@ -33,6 +40,7 @@ const TABLES = [
     case_type TEXT NOT NULL,
     target_relationship TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'draft',
+    status_before_pause TEXT,
     scan_scopes TEXT NOT NULL DEFAULT '[]',
     ruthless_mode INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -463,7 +471,7 @@ export function isIgnorableMigrationError(err: unknown): boolean {
   return err instanceof Error && /duplicate column/i.test(err.message);
 }
 
-function migrateColumns() {
+function migrateColumns(conn: Conn) {
   const migrations = [
     "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
     "ALTER TABLE organizations ADD COLUMN retention_days INTEGER NOT NULL DEFAULT 365",
@@ -494,10 +502,11 @@ function migrateColumns() {
     "ALTER TABLE organizations ADD COLUMN last_digest_sent_at TEXT",
     "ALTER TABLE audit_events ADD COLUMN chain_key TEXT",
     "ALTER TABLE users ADD COLUMN session_version INTEGER NOT NULL DEFAULT 0",
+    "ALTER TABLE privacy_cases ADD COLUMN status_before_pause TEXT",
   ];
   for (const sql of migrations) {
     try {
-      sqlite.exec(sql);
+      conn.exec(sql);
     } catch (err) {
       if (isIgnorableMigrationError(err)) continue;
       throw err;
@@ -509,6 +518,8 @@ function migrateColumns() {
  * Secondary indexes. Every FK column that erasure (lifecycle.deleteCaseData) and the
  * dashboards filter on is indexed, plus the hot audit / monitoring / rate-limit lookups.
  */
+export const VERIFIED_EXPOSURE_URL_INDEX = "idx_verified_exposures_case_url";
+
 export const INDEXES = [
   // audit log: per-case and per-org timelines, hash-chain tail lookup
   "CREATE INDEX IF NOT EXISTS idx_audit_events_case_created ON audit_events(case_id, created_at)",
@@ -564,23 +575,286 @@ export const INDEXES = [
   "CREATE INDEX IF NOT EXISTS idx_memberships_org ON memberships(organization_id)",
   "CREATE INDEX IF NOT EXISTS idx_memberships_user ON memberships(user_id)",
   "CREATE INDEX IF NOT EXISTS idx_rate_limit_events_key_created ON rate_limit_events(key, created_at)",
+  // worker prune: DELETE FROM rate_limit_events WHERE created_at < ?
+  "CREATE INDEX IF NOT EXISTS idx_rate_limit_events_created ON rate_limit_events(created_at)",
+  // Bearer auth: api_keys lookup by key_hash (also guarantees one row per key)
+  "CREATE UNIQUE INDEX IF NOT EXISTS idx_api_keys_key_hash ON api_keys(key_hash)",
+  // One exposure per URL per case. dedupeVerifiedExposures() must run before this.
+  `CREATE UNIQUE INDEX IF NOT EXISTS ${VERIFIED_EXPOSURE_URL_INDEX} ON verified_exposures(case_id, canonical_url)`,
   "CREATE INDEX IF NOT EXISTS idx_webhook_deliveries_webhook ON webhook_deliveries(webhook_id)",
 ];
 
-function createIndexes() {
+function createIndexes(conn: Conn) {
   for (const statement of INDEXES) {
-    sqlite.exec(statement);
+    conn.exec(statement);
   }
+}
+
+/** Every (table, column) with a foreign key to verified_exposures(id), read from the live schema. */
+export function exposureForeignKeys(conn: Conn): Array<{ table: string; column: string }> {
+  const tables = (
+    conn
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'")
+      .all() as { name: string }[]
+  ).map((r) => r.name);
+  const refs: Array<{ table: string; column: string }> = [];
+  for (const table of tables) {
+    const fks = conn
+      .prepare(`SELECT "table" AS parent, "from" AS col, "to" AS target FROM pragma_foreign_key_list(?)`)
+      .all(table) as { parent: string; col: string; target: string | null }[];
+    for (const fk of fks) {
+      if (fk.parent === "verified_exposures" && (fk.target === null || fk.target === "id")) {
+        refs.push({ table, column: fk.col });
+      }
+    }
+  }
+  return refs;
+}
+
+/** Open-ness rank for merging duplicate exposures: higher = more clearly still public. */
+const OPEN_STATUS_RANK: Record<string, number> = {
+  reappearance: 4,
+  still_exposed: 3,
+  confirmed_exposure: 2,
+};
+
+interface ExposureMember {
+  id: string;
+  status: string;
+  confirmedAt: string;
+}
+
+/**
+ * Status the surviving row of a duplicate group must carry (pure; exported for tests).
+ * Newest evidence about the URL wins: a removal is kept only when the newest conclusive live
+ * check across the group says removed and no member was confirmed (seen live) after it.
+ * Otherwise the most open non-removed status wins — and when another member had been removed,
+ * the page came back, so it is a reappearance. A page that is live again is never reported
+ * as removed, and a later removal is never lost.
+ */
+export function mergedExposureStatus(
+  members: ReadonlyArray<ExposureMember>,
+  latestConclusiveCheck: { status: string; checkedAt: string } | null,
+): string {
+  const relevant = members.filter((m) => !EXCLUDED_EXPOSURE_STATUSES.has(m.status));
+  if (relevant.length === 0) return members[0]?.status ?? "confirmed_exposure";
+
+  const latestConfirmation = relevant.reduce(
+    (max, m) => (m.confirmedAt > max ? m.confirmedAt : max),
+    "",
+  );
+  const newestSaysRemoved =
+    latestConclusiveCheck !== null &&
+    latestConclusiveCheck.status === "removed_confirmed" &&
+    latestConclusiveCheck.checkedAt >= latestConfirmation;
+  if (newestSaysRemoved) return "removed_confirmed";
+
+  const open = relevant.filter((m) => m.status !== "removed_confirmed");
+  if (open.length === 0) {
+    // Every member says removed: only a newer live sighting overrides that.
+    return latestConclusiveCheck && latestConclusiveCheck.status !== "removed_confirmed"
+      ? "reappearance"
+      : "removed_confirmed";
+  }
+  const best = open.reduce((top, m) =>
+    (OPEN_STATUS_RANK[m.status] ?? 1) > (OPEN_STATUS_RANK[top.status] ?? 1) ? m : top,
+  ).status;
+  // Removed earlier, then confirmed (seen live) again: the page came back.
+  const wasRemoved = relevant.length > open.length;
+  return wasRemoved ? "reappearance" : best;
+}
+
+/**
+ * After a keeper absorbed its duplicates' children it can hold several remediations to the
+ * same controller (same contact method + value). Keep one per controller — the one with the
+ * most recent outbound message, else the oldest — and move the others' drafts, follow-up
+ * rules and SLA deadlines onto it, so follow-ups are never drafted twice to one broker.
+ * Duplicate controller targets and remedy routes left without a remediation are removed.
+ */
+function mergeKeeperRemediations(conn: Conn, keeper: string): number {
+  const rows = conn
+    .prepare(
+      `SELECT rc.id AS id, rc.remedy_route_id AS routeId, rr.controller_target_id AS targetId,
+              lower(ct.contact_method) || '|' || lower(trim(ct.contact_value)) AS controllerKey,
+              rc.message_count AS messageCount, rc.follow_up_count AS followUpCount,
+              rc.do_not_contact AS doNotContact,
+              (SELECT MAX(om.sent_at) FROM outbound_messages om
+                 JOIN message_drafts md ON md.id = om.draft_id
+                WHERE md.remediation_case_id = rc.id) AS lastSentAt
+         FROM remediation_cases rc
+         JOIN remedy_routes rr ON rr.id = rc.remedy_route_id
+         JOIN controller_targets ct ON ct.id = rr.controller_target_id
+        WHERE rc.exposure_id = ?
+        ORDER BY rc.created_at ASC, rc.rowid ASC`,
+    )
+    .all(keeper) as Array<{
+    id: string;
+    routeId: string;
+    targetId: string;
+    controllerKey: string;
+    messageCount: number;
+    followUpCount: number;
+    doNotContact: number;
+    lastSentAt: string | null;
+  }>;
+
+  const byController = new Map<string, typeof rows>();
+  for (const row of rows) {
+    const list = byController.get(row.controllerKey) ?? [];
+    list.push(row);
+    byController.set(row.controllerKey, list);
+  }
+
+  const moveDrafts = conn.prepare("UPDATE message_drafts SET remediation_case_id = ? WHERE remediation_case_id = ?");
+  const moveRules = conn.prepare("UPDATE follow_up_rules SET remediation_case_id = ? WHERE remediation_case_id = ?");
+  const moveSla = conn.prepare("UPDATE sla_deadlines SET remediation_case_id = ? WHERE remediation_case_id = ?");
+  const dropRemediation = conn.prepare("DELETE FROM remediation_cases WHERE id = ?");
+  const dropRouteIfUnused = conn.prepare(
+    "DELETE FROM remedy_routes WHERE id = ? AND NOT EXISTS (SELECT 1 FROM remediation_cases WHERE remedy_route_id = ?)",
+  );
+  const dropTargetIfUnused = conn.prepare(
+    "DELETE FROM controller_targets WHERE id = ? AND NOT EXISTS (SELECT 1 FROM remedy_routes WHERE controller_target_id = ?)",
+  );
+  const updateKept = conn.prepare(
+    "UPDATE remediation_cases SET message_count = ?, follow_up_count = ?, do_not_contact = ? WHERE id = ?",
+  );
+  const dedupeFollowUpRules = conn.prepare(
+    `DELETE FROM follow_up_rules WHERE remediation_case_id = ?
+       AND rowid NOT IN (SELECT MIN(rowid) FROM follow_up_rules WHERE remediation_case_id = ?)`,
+  );
+
+  let merged = 0;
+  for (const group of byController.values()) {
+    if (group.length < 2) continue;
+    const kept = group.reduce((best, r) =>
+      (r.lastSentAt ?? "") > (best.lastSentAt ?? "") ? r : best,
+    );
+    for (const other of group) {
+      if (other.id === kept.id) continue;
+      moveDrafts.run(kept.id, other.id);
+      moveRules.run(kept.id, other.id);
+      moveSla.run(kept.id, other.id);
+      dropRemediation.run(other.id);
+      dropRouteIfUnused.run(other.routeId, other.routeId);
+      if (other.targetId !== kept.targetId) dropTargetIfUnused.run(other.targetId, other.targetId);
+      merged++;
+    }
+    updateKept.run(
+      group.reduce((n, r) => n + (r.messageCount ?? 0), 0),
+      Math.max(...group.map((r) => r.followUpCount ?? 0)),
+      group.some((r) => r.doNotContact) ? 1 : 0,
+      kept.id,
+    );
+    dedupeFollowUpRules.run(kept.id, kept.id);
+  }
+  return merged;
+}
+
+/** Re-derive one case's status from its exposures (sync; migration-time recomputeCaseStatus). */
+function recomputeCaseStatusSync(conn: Conn, caseId: string): void {
+  const row = conn.prepare("SELECT status FROM privacy_cases WHERE id = ?").get(caseId) as
+    | { status: string }
+    | undefined;
+  if (!row) return;
+  const statuses = (
+    conn.prepare("SELECT status FROM verified_exposures WHERE case_id = ?").all(caseId) as { status: string }[]
+  ).map((r) => r.status);
+  const next = deriveCaseStatusFromExposures(statuses, row.status);
+  if (next !== row.status) {
+    conn
+      .prepare("UPDATE privacy_cases SET status = ?, updated_at = ? WHERE id = ? AND status = ?")
+      .run(next, new Date().toISOString(), caseId, row.status);
+  }
+}
+
+/**
+ * Collapses verified_exposures rows that share (case_id, canonical_url) so the unique index
+ * can be created. For each group the oldest row is kept and every child row (any FK to
+ * verified_exposures.id) is repointed to it; the keeper's status is merged from the whole
+ * group's evidence (see mergedExposureStatus); duplicate remediations to one controller are
+ * merged; the duplicates are deleted and each affected case's status is re-derived — all in
+ * one transaction. A keeper ends up with at most one monitoring rule.
+ *
+ * Idempotent: once the unique index exists there can be no duplicates, so it returns at once.
+ */
+export function dedupeVerifiedExposures(conn: Conn): { groups: number; removed: number } {
+  const indexed = conn
+    .prepare("SELECT 1 FROM sqlite_master WHERE type = 'index' AND name = ?")
+    .get(VERIFIED_EXPOSURE_URL_INDEX);
+  if (indexed) return { groups: 0, removed: 0 };
+
+  const run = conn.transaction(() => {
+    const groups = conn
+      .prepare(
+        `SELECT case_id AS caseId, canonical_url AS url FROM verified_exposures
+          GROUP BY case_id, canonical_url HAVING COUNT(*) > 1`,
+      )
+      .all() as { caseId: string; url: string }[];
+    if (groups.length === 0) return { groups: 0, removed: 0 };
+
+    const members = conn.prepare(
+      `SELECT id, status, confirmed_at AS confirmedAt FROM verified_exposures
+        WHERE case_id = ? AND canonical_url = ?
+        ORDER BY created_at ASC, confirmed_at ASC, rowid ASC`,
+    );
+    // Newest conclusive live check across the group (simulated / inconclusive never count).
+    const latestCheck = conn.prepare(
+      `SELECT vc.status AS status, vc.checked_at AS checkedAt FROM verification_checks vc
+         JOIN verified_exposures ve ON ve.id = vc.exposure_id
+        WHERE ve.case_id = ? AND ve.canonical_url = ?
+          AND vc.status IN ('removed_confirmed', 'still_exposed', 'reappearance_detected')
+          AND vc.search_status IN ('source_not_visible', 'source_still_visible')
+        ORDER BY vc.checked_at DESC, vc.created_at DESC LIMIT 1`,
+    );
+    const repoints = exposureForeignKeys(conn).map((fk) =>
+      conn.prepare(`UPDATE "${fk.table}" SET "${fk.column}" = ? WHERE "${fk.column}" = ?`),
+    );
+    const setStatus = conn.prepare("UPDATE verified_exposures SET status = ? WHERE id = ?");
+    const remove = conn.prepare("DELETE FROM verified_exposures WHERE id = ?");
+    const dedupeRules = conn.prepare(
+      `DELETE FROM monitoring_rules WHERE exposure_id = ?
+         AND rowid NOT IN (SELECT MIN(rowid) FROM monitoring_rules WHERE exposure_id = ?)`,
+    );
+
+    let removed = 0;
+    const affectedCases = new Set<string>();
+    for (const group of groups) {
+      const rows = members.all(group.caseId, group.url) as ExposureMember[];
+      const check = (latestCheck.get(group.caseId, group.url) as
+        | { status: string; checkedAt: string }
+        | undefined) ?? null;
+      const status = mergedExposureStatus(rows, check);
+      const [keeper, ...duplicates] = rows.map((r) => r.id);
+      for (const duplicate of duplicates) {
+        for (const stmt of repoints) stmt.run(keeper, duplicate);
+        remove.run(duplicate);
+        removed++;
+      }
+      setStatus.run(status, keeper);
+      dedupeRules.run(keeper, keeper);
+      mergeKeeperRemediations(conn, keeper);
+      affectedCases.add(group.caseId);
+    }
+    for (const caseId of affectedCases) recomputeCaseStatusSync(conn, caseId);
+    return { groups: groups.length, removed };
+  });
+  return conn.inTransaction ? run() : run.immediate();
+}
+
+/** Creates/migrates the whole schema on `conn`. Safe to run repeatedly on an existing DB. */
+export function initializeSchema(conn: Conn = sqlite): void {
+  for (const statement of TABLES) {
+    conn.exec(statement);
+  }
+  migrateColumns(conn);
+  dedupeVerifiedExposures(conn);
+  createIndexes(conn);
 }
 
 let initialized = false;
 
 export function ensureDatabase(): void {
   if (initialized) return;
-  for (const statement of TABLES) {
-    sqlite.exec(statement);
-  }
-  migrateColumns();
-  createIndexes();
+  initializeSchema(sqlite);
   initialized = true;
 }

@@ -1,5 +1,13 @@
 import Link from "next/link";
 import { type ReactNode } from "react";
+import { BROKER_UNIVERSE } from "@/lib/brokers/universe";
+
+/** Derived from the broker universe so the claim never drifts from what is actually covered. */
+const AUTH_BULLETS = [
+  `${BROKER_UNIVERSE.length}+ data brokers covered`,
+  "Private by default — AI runs on your device",
+  "Removal certificates with tamper-evident audit trail",
+];
 
 export function AuthLayout({
   children,
@@ -23,7 +31,7 @@ export function AuthLayout({
             </span>
             <div>
               <p className="text-lg font-semibold tracking-tight text-white">ClearTrace</p>
-              <p className="text-xs text-slate-500">Privacy remediation command</p>
+              <p className="text-xs text-slate-400">Privacy remediation command</p>
             </div>
           </Link>
         </div>
@@ -31,24 +39,20 @@ export function AuthLayout({
           <p className="text-3xl font-semibold leading-tight tracking-tight text-white">
             Find exposure. Route removal. Prove it&apos;s gone.
           </p>
-          <p className="mt-4 text-sm leading-relaxed text-slate-400">
+          <p className="mt-4 text-sm leading-relaxed text-slate-300">
             Owner-controlled workflows with encrypted identity claims, policy-gated
             agents, and an auditable evidence chain. Your keys. Your approvals.
           </p>
-          <ul className="mt-8 space-y-3 text-sm text-slate-500">
-            {[
-              "BYOK connectors — SerpAPI, Gmail, OpenAI",
-              "20+ data-broker playbooks",
-              "Removal certificates with audit chain",
-            ].map((item) => (
+          <ul className="mt-8 space-y-3 text-sm text-slate-300">
+            {AUTH_BULLETS.map((item) => (
               <li key={item} className="flex items-center gap-2">
-                <span className="h-1 w-1 rounded-full bg-teal-400" />
+                <span aria-hidden="true" className="h-1 w-1 rounded-full bg-teal-400" />
                 {item}
               </li>
             ))}
           </ul>
         </div>
-        <p className="relative text-xs text-slate-600">
+        <p className="relative text-xs text-muted">
           Authorized use only. All activity is logged.
         </p>
       </aside>
@@ -63,7 +67,7 @@ export function AuthLayout({
           <div className="ct-glass-strong ct-shine rounded-2xl p-8">
             <div className="mb-8">
               <h1 className="text-2xl font-semibold tracking-tight text-white">{title}</h1>
-              <p className="mt-2 text-sm text-slate-400">{subtitle}</p>
+              <p className="mt-2 text-sm text-slate-300">{subtitle}</p>
             </div>
             {children}
             {footer && <div className="mt-6">{footer}</div>}

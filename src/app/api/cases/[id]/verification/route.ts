@@ -7,7 +7,7 @@ import {
   scheduleMonitoring,
 } from "@/lib/verification/service";
 import { requireCaseAccess } from "@/lib/auth/case-access";
-import { jsonError, jsonOk } from "@/lib/api";
+import { jsonError, jsonOk, workflowErrorResponse } from "@/lib/api";
 
 const VALID_SCHEDULES = new Set(["daily", "weekly", "monthly"]);
 
@@ -73,7 +73,9 @@ export async function POST(
     if (code === "SIMULATE_NOT_ALLOWED" || msg.startsWith("SIMULATE_NOT_ALLOWED")) {
       return jsonError(msg.startsWith("SIMULATE_NOT_ALLOWED") ? msg : "SIMULATE_NOT_ALLOWED", 403);
     }
-    if (msg.startsWith("FOLLOW_UP_BLOCKED")) return jsonError(msg, 409);
+    // CASE_BLOCKED (409) and FOLLOW_UP_BLOCKED (409 with reasons / nextEligibleDate) etc.
+    const workflow = workflowErrorResponse(msg);
+    if (workflow) return workflow;
     if (msg.includes("NOT_FOUND")) return jsonError("Not found", 404);
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);

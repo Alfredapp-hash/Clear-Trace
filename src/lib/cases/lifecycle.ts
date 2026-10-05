@@ -38,17 +38,135 @@ export async function updateCaseStatus(
   return { status };
 }
 
+/** Statuses in which the case is on hold: no workflow step may run until it is resumed. */
+export const INACTIVE_CASE_STATUSES: ReadonlySet<string> = new Set(["paused", "archived"]);
+
+/** The only statuses a case may be reopened from (the work was finished or is in monitoring). */
+export const REOPENABLE_STATUSES: ReadonlySet<string> = new Set([
+  "removed_confirmed",
+  "partially_resolved",
+  "closed",
+  "follow_up_eligible",
+]);
+
+/**
+ * Pause/archive: remember the status the case was in so `resume` can put it back.
+ * Moving between paused and archived keeps the original pre-pause status.
+ */
+async function suspendCase(
+  session: SessionPayload,
+  caseId: string,
+  status: "paused" | "archived",
+  eventType: string,
+  summary: string,
+) {
+  let privacyCase = await getCaseForUser(caseId, session);
+  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+
+  // Conditional on the status that was read (like advanceCaseStatus): a workflow step that
+  // moved the case meanwhile is re-read, so the remembered pre-pause status is never stale.
+  let statusBeforePause: string | null = null;
+  let applied = false;
+  for (let attempt = 0; attempt < 3 && !applied; attempt++) {
+    if (attempt > 0) {
+      privacyCase = await getCaseForUser(caseId, session);
+      if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+    }
+    if (privacyCase.status === status) return { status };
+    statusBeforePause = INACTIVE_CASE_STATUSES.has(privacyCase.status)
+      ? privacyCase.statusBeforePause
+      : privacyCase.status;
+    const res = db
+      .update(privacyCases)
+      .set({ status, statusBeforePause, updatedAt: new Date().toISOString() })
+      .where(and(eq(privacyCases.id, caseId), eq(privacyCases.status, privacyCase.status)))
+      .run();
+    applied = res.changes === 1;
+  }
+  if (!applied) throw new Error("CONFLICT");
+
+  await logAuditEvent({
+    caseId,
+    organizationId: session.organizationId,
+    userId: session.userId,
+    eventType,
+    summary,
+    detail: { previousStatus: privacyCase.status, newStatus: status, statusBeforePause },
+  });
+
+  return { status };
+}
+
 export async function pauseCase(session: SessionPayload, caseId: string) {
-  return updateCaseStatus(session, caseId, "paused", "case_paused", "Case paused by user");
+  return suspendCase(session, caseId, "paused", "case_paused", "Case paused by user");
 }
 
 export async function archiveCase(session: SessionPayload, caseId: string) {
-  return updateCaseStatus(session, caseId, "archived", "case_archived", "Case archived");
+  return suspendCase(session, caseId, "archived", "case_archived", "Case archived");
+}
+
+/** Statuses that only exist while a job is running; a case must never be resumed into one. */
+const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(["discovery_running"]);
+
+/**
+ * Fallback for cases paused before status_before_pause existed: derive the furthest status
+ * the case's own records support. Never claims consent without a verified authorization.
+ */
+function inferResumeStatus(caseId: string): string {
+  const has = (sql: string) => Boolean(sqlite.prepare(sql).get(caseId));
+  if (has("SELECT 1 FROM verified_exposures WHERE case_id = ? LIMIT 1")) return "confirmed_exposure";
+  if (has("SELECT 1 FROM exposure_candidates WHERE case_id = ? LIMIT 1")) return "candidate_review";
+  if (
+    has(
+      "SELECT 1 FROM authorization_records WHERE case_id = ? AND status = 'verified' ORDER BY created_at DESC LIMIT 1",
+    )
+  ) {
+    return "consent_verified";
+  }
+  return "draft";
+}
+
+/** Resume a paused or archived case to exactly the status it had before, and clear the marker. */
+export async function resumeCase(session: SessionPayload, caseId: string) {
+  const privacyCase = await getCaseForUser(caseId, session);
+  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  if (!INACTIVE_CASE_STATUSES.has(privacyCase.status)) throw new Error("INVALID_TRANSITION");
+
+  // discovery_running is transient: a run that ended while the case was on hold settles the
+  // marker itself, but never resume into it (no run is in flight to move the case on).
+  const remembered =
+    privacyCase.statusBeforePause && !TRANSIENT_STATUSES.has(privacyCase.statusBeforePause)
+      ? privacyCase.statusBeforePause
+      : null;
+  const restored = remembered ?? inferResumeStatus(caseId);
+  const now = new Date().toISOString();
+  const res = db
+    .update(privacyCases)
+    .set({ status: restored, statusBeforePause: null, updatedAt: now })
+    .where(and(eq(privacyCases.id, caseId), eq(privacyCases.status, privacyCase.status)))
+    .run();
+  if (res.changes !== 1) throw new Error("CONFLICT");
+
+  await logAuditEvent({
+    caseId,
+    organizationId: session.organizationId,
+    userId: session.userId,
+    eventType: "case_resumed",
+    summary: "Case resumed",
+    detail: {
+      previousStatus: privacyCase.status,
+      newStatus: restored,
+      inferred: remembered == null,
+    },
+  });
+
+  return { status: restored };
 }
 
 export async function reopenCase(session: SessionPayload, caseId: string, reason: string) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  if (!REOPENABLE_STATUSES.has(privacyCase.status)) throw new Error("INVALID_TRANSITION");
 
   const now = new Date().toISOString();
   await db

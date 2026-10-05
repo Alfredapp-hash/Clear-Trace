@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { Badge, Button } from "./ui";
 import { callApi } from "@/lib/ui/call-api";
+import { humanize } from "@/lib/ux/plain-status";
 
 interface TemplateOption {
   id: string;
@@ -94,7 +95,7 @@ export function DraftTemplatePicker({
             <p className="text-sm font-medium text-slate-200">{t.label}</p>
             <p className="mt-1 text-xs text-slate-500">{t.description}</p>
             <span className="mt-2 inline-block">
-              <Badge tone="info">{t.remedyType.replaceAll("_", " ")}</Badge>
+              <Badge tone="info">{humanize(t.remedyType)}</Badge>
             </span>
           </button>
         ))}

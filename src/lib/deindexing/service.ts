@@ -2,32 +2,101 @@ import { desc, eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import { deindexRequests, verifiedExposures } from "@/lib/db/schema";
+import type { VerifiedExposure } from "@/lib/db/schema";
+
+type DeindexRequest = typeof deindexRequests.$inferSelect;
 import { getCaseForUser } from "@/lib/cases/service";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { requireBillingFeature } from "@/lib/billing/service";
 import type { SessionPayload } from "@/lib/auth/session";
-import { buildDeindexDraft, DEINDEX_TOOLS, type SearchEngine } from "./playbook";
+import {
+  buildDeindexDraft,
+  DEINDEX_CHECKLIST,
+  DEINDEX_TOOLS,
+  reasonForTool,
+  resolveDeindexTool,
+  type DeindexSourceStatus,
+  type SearchEngine,
+} from "./playbook";
 
+/** Exposure statuses that never get a deindex draft. */
+const SKIPPED_EXPOSURE_STATUSES = new Set(["rejected", "dismissed", "false_positive"]);
+
+const RISK_RANK: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
+
+/** Order exposures by riskLevel desc, then createdAt asc (pure; exported for tests). */
+export function orderExposuresForDeindex<
+  T extends Pick<VerifiedExposure, "riskLevel" | "createdAt">,
+>(exposures: T[]): T[] {
+  return [...exposures].sort((a, b) => {
+    const risk = (RISK_RANK[b.riskLevel ?? ""] ?? 0) - (RISK_RANK[a.riskLevel ?? ""] ?? 0);
+    if (risk !== 0) return risk;
+    return (a.createdAt ?? "").localeCompare(b.createdAt ?? "");
+  });
+}
+
+function parseCategories(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((c): c is string => typeof c === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+function sourceStatusOf(exposure: Pick<VerifiedExposure, "status">): DeindexSourceStatus {
+  if (exposure.status === "removed_confirmed") return "removed";
+  if (["confirmed_exposure", "still_exposed", "reappearance"].includes(exposure.status)) {
+    return "live";
+  }
+  return "unknown";
+}
+
+export interface CreatedDeindexDraft {
+  id: string;
+  exposureId: string;
+  sourceUrl: string;
+  engine: SearchEngine;
+  toolId: string;
+  toolLabel: string;
+  toolUrl: string;
+  reason: string;
+}
+
+/**
+ * Create local deindex drafts for every (exposure, engine) pair that has none yet.
+ * Existing non-rejected pairs are filtered out FIRST, then exposures are ordered by
+ * risk (desc) and age (asc). Drafts are local and cheap, so there is no exposure cap;
+ * `limit` exists only so callers can page. `remaining` = pairs still left to draft.
+ */
 export async function createDeindexRequests(
   session: SessionPayload,
   caseId: string,
   engines: SearchEngine[] = ["google", "bing"],
-): Promise<{ created: number; requests: string[] }> {
+  options: { limit?: number } = {},
+): Promise<{
+  created: number;
+  remaining: number;
+  requests: string[];
+  drafts: CreatedDeindexDraft[];
+}> {
   await requireBillingFeature(session.organizationId, "deindex_workflow");
 
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
 
-  const exposures = await db.query.verifiedExposures.findMany({
-    where: eq(verifiedExposures.caseId, caseId),
-  });
+  const exposures = (
+    await db.query.verifiedExposures.findMany({
+      where: eq(verifiedExposures.caseId, caseId),
+    })
+  ).filter((e) => !SKIPPED_EXPOSURE_STATUSES.has(e.status));
   if (exposures.length === 0) throw new Error("NO_EXPOSURES");
 
-  const targetEngines = engines.length ? engines : (["google"] as SearchEngine[]);
-  const ids: string[] = [];
+  const targetEngines = engines.length ? [...new Set(engines)] : (["google"] as SearchEngine[]);
   const now = new Date().toISOString();
 
-  // Dedupe: skip (url, engine) pairs that already have a non-rejected request.
+  // 1) Filter out (url, engine) pairs that already have a non-rejected request.
   const existing = await db.query.deindexRequests.findMany({
     where: eq(deindexRequests.caseId, caseId),
   });
@@ -36,51 +105,99 @@ export async function createDeindexRequests(
       .filter((r) => r.status !== "rejected")
       .map((r) => `${r.sourceUrl}|${r.searchEngine}`),
   );
-
-  for (const exp of exposures.slice(0, 5)) {
+  const pending: Array<{ exposure: VerifiedExposure; engine: SearchEngine }> = [];
+  for (const exposure of orderExposuresForDeindex(exposures)) {
     for (const engine of targetEngines) {
-      const key = `${exp.canonicalUrl}|${engine}`;
+      const key = `${exposure.canonicalUrl}|${engine}`;
       if (existingKeys.has(key)) continue;
-      existingKeys.add(key);
-      const draft = buildDeindexDraft(exp.canonicalUrl, engine);
-      const id = uuid();
-      await db.insert(deindexRequests).values({
-        id,
-        caseId,
-        organizationId: session.organizationId,
-        exposureId: exp.id,
-        sourceUrl: exp.canonicalUrl,
-        searchEngine: engine,
-        toolUrl: draft.tool.toolUrl,
-        draftSubject: draft.subject,
-        draftBody: draft.body,
-        status: "draft",
-        createdAt: now,
-      });
-      ids.push(id);
+      existingKeys.add(key); // two exposures with the same URL get one draft
+      pending.push({ exposure, engine });
     }
   }
+
+  // 2) Create drafts in priority order.
+  const limit = options.limit ?? Number.POSITIVE_INFINITY;
+  const batch = pending.slice(0, limit);
+  const drafts: CreatedDeindexDraft[] = [];
+  for (const { exposure, engine } of batch) {
+    const draft = buildDeindexDraft({
+      sourceUrl: exposure.canonicalUrl,
+      engine,
+      exposureCategories: parseCategories(exposure.exposureCategories),
+      sourceStatus: sourceStatusOf(exposure),
+      caseType: privacyCase.caseType,
+    });
+    const id = uuid();
+    await db.insert(deindexRequests).values({
+      id,
+      caseId,
+      organizationId: session.organizationId,
+      exposureId: exposure.id,
+      sourceUrl: exposure.canonicalUrl,
+      searchEngine: engine,
+      toolUrl: draft.tool.toolUrl,
+      draftSubject: draft.subject,
+      draftBody: draft.body,
+      status: "draft",
+      createdAt: now,
+    });
+    drafts.push({
+      id,
+      exposureId: exposure.id,
+      sourceUrl: exposure.canonicalUrl,
+      engine,
+      toolId: draft.tool.id,
+      toolLabel: draft.tool.label,
+      toolUrl: draft.tool.toolUrl,
+      reason: draft.reason,
+    });
+  }
+  const remaining = pending.length - batch.length;
 
   await logAuditEvent({
     caseId,
     organizationId: session.organizationId,
     userId: session.userId,
     eventType: "deindex_requests_created",
-    summary: `Created ${ids.length} search deindex request draft(s)`,
+    summary: `Created ${drafts.length} search deindex request draft(s)`,
+    detail: { created: drafts.length, remaining, tools: [...new Set(drafts.map((d) => d.toolId))] },
   });
   // (audit logged even when 0 were created so repeated clicks are traceable)
 
-  return { created: ids.length, requests: ids };
+  return { created: drafts.length, remaining, requests: drafts.map((d) => d.id), drafts };
+}
+
+/**
+ * A stored deindex request with its tool derived at read time (there is no tool id
+ * column; the tool is matched from engine + toolUrl).
+ */
+export function withDeindexTool<T extends Pick<DeindexRequest, "searchEngine" | "toolUrl">>(
+  row: T,
+): T & { toolId: string; toolLabel: string; reason: string } {
+  const tool = resolveDeindexTool(row.searchEngine, row.toolUrl);
+  return { ...row, toolId: tool.id, toolLabel: tool.label, reason: reasonForTool(tool) };
+}
+
+/** Case-level checklist recommendations (e.g. Google "Results about you"). */
+export function getDeindexChecklist() {
+  return DEINDEX_CHECKLIST.map((tool) => ({
+    toolId: tool.id,
+    toolLabel: tool.label,
+    toolUrl: tool.toolUrl,
+    reason: reasonForTool(tool),
+    instructions: tool.instructions,
+  }));
 }
 
 export async function listDeindexRequests(caseId: string, session: SessionPayload) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
 
-  return db.query.deindexRequests.findMany({
+  const rows = await db.query.deindexRequests.findMany({
     where: eq(deindexRequests.caseId, caseId),
     orderBy: [desc(deindexRequests.createdAt)],
   });
+  return rows.map(withDeindexTool);
 }
 
 export async function recordDeindexSubmitted(

@@ -1,7 +1,7 @@
 import type { ConnectorType } from "@/lib/connectors/types";
 import type { SkillCatalogEntry, WorkflowSkillDef } from "./types";
 
-/** Hermes pipeline — matches real case status transitions (classify/route run inline). */
+/** Autopilot pipeline — matches real case status transitions (classify/route run inline). */
 export const WORKFLOW_SKILLS: WorkflowSkillDef[] = [
   {
     skillId: "intake-and-consent",
@@ -332,7 +332,15 @@ export function getWorkflowSkillIds(): string[] {
 
 /**
  * Maps case status → index in WORKFLOW_SKILLS (current recommended step).
- * Classify + route run inline; indices skip those as separate Hermes steps.
+ * Classify + route run inline; indices skip those as separate Autopilot steps.
+ *
+ * The order is also the "never backwards" order used by advanceCaseStatus
+ * (src/lib/cases/status-transitions.ts). An index of WORKFLOW_SKILLS.length means every
+ * workflow step is complete (removed_confirmed, closed); -1 means blocked.
+ *
+ * partially_resolved maps to verify-removal when only the status is known. With the case
+ * at hand, getRecommendedSkillForCase (coordinator/skill-runner.ts) recommends
+ * follow-up-policy instead when any remediation is eligible for a follow-up.
  */
 export const STATUS_INDEX: Record<string, number> = {
   draft: 0,
@@ -351,10 +359,19 @@ export const STATUS_INDEX: Record<string, number> = {
   verification_due: 8,
   reopened: 8,
   partially_resolved: 8,
-  removed_confirmed: 9,
   follow_up_eligible: 9,
   escalated: 9,
+  removed_confirmed: 10,
   closed: 10,
   paused: -1,
   archived: -1,
+};
+
+/**
+ * Skills recommended once the workflow itself is complete (status-only lookup).
+ * removed_confirmed: every exposure is verified removed, so the next useful action is the
+ * removal certificate — never another follow-up.
+ */
+export const COMPLETED_STATUS_SKILL: Record<string, string> = {
+  removed_confirmed: "generate-removal-certificate",
 };

@@ -2,6 +2,66 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.3.0] — 2026-10-05
+
+Sprint 3: truth, safety, clarity. ClearTrace no longer reports a removal, a case status or
+consent that it has not actually established; registration is closed by default; and the
+case page leads with one next action.
+
+### Security
+- **Dependencies patched** — `next` 16.3.8 (fixes the critical Next advisory set, incl. the proxy bypass GHSA-6gpp-xcg3-4w24 and the AVIF RCE GHSA-2xp9-vwfh-vxw4, and pulls patched `postcss` / `sharp`), `eslint-config-next` 16.3.8, `nodemailer` ^10.0.15 (GHSA-6vj9-mwq6-2f5v cross-tenant SMTP credential reuse, which affected SMTP sending). Transitive `js-yaml` and `baseline-browser-mapping` moved forward within range; `nanoid` was resolved by the `next` upgrade. `npm audit --omit=dev` went from 7 advisories (1 critical, 5 high) to 0
+- **Registration closed by default** — `REGISTRATION_MODE=first_user|invite|open` (default `first_user`): self-signup is allowed only until the first account exists, then returns `403 REGISTRATION_CLOSED`. `invite` is a locked mode (no invite flow yet). Public `GET /api/auth/registration-status`; login/register pages hide the register link when closed
+- **Loopback by default** — docker-compose publishes `127.0.0.1:3000`; exposing it to a LAN or reverse proxy is an explicit opt-in
+- **CSRF guard** — cookie-authenticated, state-changing `/api/*` requests must be same-origin (`Sec-Fetch-Site`, or Origin matching Host / `NEXT_PUBLIC_APP_URL`) and `application/json`; Bearer API keys, cron, worker and the Stripe webhook are exempt
+- **Login lockout** — per-email buckets keyed on a hash of the email (no raw addresses in `rate_limit_events`); with `TRUST_PROXY=1`, keyed on email + IP so one IP cannot lock out another
+- **Image optimizer off** — `images.unoptimized`; `/_next/image` returns 404 and `sharp` / `@img` are excluded from the standalone server. Production CSP `img-src` narrowed to `'self' data: blob:`
+- **Stripe webhook guard** — while an org is on an active/trialing subscription, `customer.subscription.updated/deleted` events for a different subscription are ignored unless they make that subscription active (a cancelled old subscription can no longer downgrade a paying org). Webhook returns 503 when Stripe itself is unconfigured
+
+### Changed — truthful status
+- **Verification** — HTML entities are fully decoded; visible text is no longer silently cut at 8,000 chars (truncated pages are *inconclusive*, never *absent*); names, phones and addresses are compared after normalization (`match-normalize.ts`). A name-only match on a page that reads as a no-results page is downgraded to *inconclusive*; that guard can never yield *absent*/*gone*, and inconclusive checks never record a reappearance or reopen a case
+- **Consent is real consent** — discovery and live-URL checks require a verified authorization record (`403 NOT_CONSENTED`), and refuse paused/archived cases before any fetch (`409 CASE_BLOCKED`)
+- **Case lifecycle** — pause/archive remember the previous status and the new `resume` action restores it; `reopen` is limited to removed / partially resolved / closed / follow-up-eligible cases. When a `removed_confirmed` case gains a newly confirmed exposure it becomes `partially_resolved`
+- **No duplicate exposures** — discovery and live-URL dedupe across runs (`{new, alreadyKnown, previouslyRejected}`); a one-time migration merges duplicate `verified_exposures` per (case, URL) and adds a unique index
+- **Remediation** — status changes go through `advanceCaseStatus` (never backwards, never over a paused/archived case); follow-up drafts no longer reset the case to `draft_ready`; the follow-up counter increments atomically at send time; follow-ups respect the waiting period (`409 FOLLOW_UP_BLOCKED` with reasons and `nextEligibleDate`) and are offered per exposure
+- **Autopilot** — recommends the removal certificate on `removed_confirmed` only when a live check confirms it, and follow-up-policy or verify-removal on `partially_resolved`; a discovery step on a case without a verified authorization reports `blocked` instead of failing. The guide's certificate checklist is done only when the certificate is actually issuable
+- **API errors** — workflow error bodies carry a machine-readable `code` (`CASE_BLOCKED`, `NOT_CONSENTED`, `INVALID_TRANSITION`, `FOLLOW_UP_BLOCKED` with `reasons` / `nextEligibleDate`) on the discovery, live-URL, lifecycle, remediation, verification, run-next-step and ruthless-sweep routes. New remediation action `create_follow_up_draft`
+- **Search deindexing** — drafts are created for every exposure not already drafted (no 5-exposure cap), and each names the right tool (Google personal-information removal, Results about you, doxxing route, Bing forms) with a reason
+
+### Fixed — review findings
+- **Pause/archive during a running job** — discovery, live-URL and case-status recomputation write the case status only if it is still the status they expect, so a pause or archive made while a search or page fetch is running is never undone; the run stops before its next fetch. A run that ends while the case is on hold corrects the remembered pre-pause status, and resume never restores the transient "searching" status. Pause/archive/resume are conditional updates (`409 CONFLICT` after repeated races)
+- **Duplicate-exposure migration** — the surviving row takes its status from the merged evidence (newest conclusive live check vs. confirmations; a page seen again after a removal is a reappearance), duplicate remediations to the same contact are merged (drafts, follow-up rules and deadlines moved onto one), and each affected case's status is re-derived
+- **Autopilot** — on any status from drafting onwards, a confirmed page with no contact or no written request is handled first (find who to contact, then write the request), so a new page on a removed case is never stuck behind verify / follow-up
+- **Rejected pages stay rejected** — discovery and "Add a page I found" use one fingerprint (full visible page text); older prefix hashes are recognised, and a failed page fetch (snippet only) never brings a rejected page back
+- **Breach scan consent** — the HIBP scan has the same gate as discovery: `403 NOT_CONSENTED` without a verified authorization, `409 CASE_BLOCKED` on paused/archived cases, before any lookup
+- **Next step** — confirming one match keeps the others in front of you (hero and open phase), sending one request no longer marks Removal requests done while others are unsent, and template variants of one request count once
+- **Finish setup** — the draft-case hero (and the intake guide) resume the intake wizard for that case (`/cases/new?caseId=…`) instead of creating a second case; "Authorization needed" links to recording consent. Recording an authorization only moves a draft case forward, never another status
+
+### Changed — clarity
+- **Case page** — one next-step card with a single verb-labelled primary button; phases 1–5 collapse to a summary when done and stay locked until reachable; `CaseWorkflow` split into per-phase components (`src/components/case/*`)
+- **Autopilot** — the automated runner is called Autopilot ("Do the next step for me") in the UI; raw skill ids and jargon are gone from the case page
+- **Plain language** — short status labels everywhere, demo results clearly marked as samples, "Broker says it's removed (self-reported)" instead of "Mark removal verified"
+- **Navigation** — primary nav is Dashboard, Cases, Settings, Billing; Skills and Sentinel live under Settings → Developer for org owners/admins or `DEVELOPER_MODE=1`. Skip-to-content link, visible focus rings, settings rendered on the server with anchored sections (Privacy & AI first shows Local-only AI)
+- **Settings** — household members, API keys and webhooks are loaded on the server, so Settings makes no data requests after hydration
+- **Error pages** — app-level `error`, `global-error` (shows the digest) and `not-found`
+
+### Background jobs
+- Background jobs no longer run on the dashboard render path. The compose `worker-cron` sidecar calls `/api/worker/run` once per hour (`curl --max-time 900`) and no longer also calls `/api/cron/verify` (still available for an external cron)
+- Without a worker sidecar (`WORKER_SECRET` unset) or with `INLINE_WORKER=1`, the dashboard schedules a throttled run with `after()`; the throttle is a true one-run-per-5-minutes window
+
+### Supply chain & CI
+- CI blocks on `npm audit --omit=dev --audit-level=high`, runs Vitest with a coverage gate (`@vitest/coverage-v8`, thresholds at the measured baseline for `src/lib` and `src/app/api`) and publishes a coverage summary, checks the standalone output ships no `sharp`/`@img`, and runs Playwright e2e as a blocking job (with `REGISTRATION_MODE=open`)
+- Docker smoke asserts loopback publishing, exactly one self-registration on a fresh install, digest-pinned images and a disabled image optimizer
+- Every GitHub Action is pinned to a commit SHA; `node:22-alpine`, `curlimages/curl` and the Dockerfile syntax frontend are pinned by `@sha256` digest; Dependabot covers npm, GitHub Actions, Docker and Compose
+- `db:push` removed; `drizzle-kit push` refuses to run unless `DRIZZLE_ALLOW_PUSH=1` and `DATABASE_URL` is not `./data/cleartrace.db`
+- New tests: route authorization matrix over every `src/app/api/**/route.ts` (unlisted routes fail), Stripe webhook suite (signed with `generateTestHeaderString`), render-path worker test (50 due rules + hanging fetch)
+
+### Upgrade notes
+- **Existing installs that relied on open sign-up** must set `REGISTRATION_MODE=open`, or add accounts before upgrading
+- **LAN / reverse-proxy installs** must change the compose port mapping from `127.0.0.1:3000:3000` to the address they need
+- `GET /api/cases/:id/remediation` no longer returns `messages`; each remediation has `followUp: {allowed, stopConditions, nextEligibleDate} | null` instead
+- New environment variables: `INLINE_WORKER` (`1` always / `0` never / empty = only without `WORKER_SECRET`) and `DEVELOPER_MODE`; both are passed through by docker-compose
+- The schema migration (status-before-pause column, exposure dedupe, new indexes) runs automatically and idempotently at startup; back up `data/` first
+
 ## [1.2.0] — 2026-10-04
 
 ### Security

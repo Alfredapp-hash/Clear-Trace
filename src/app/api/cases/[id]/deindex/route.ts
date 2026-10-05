@@ -4,6 +4,7 @@ import { requireBillingFeature } from "@/lib/billing/service";
 import { ensureDatabase } from "@/lib/db/init";
 import {
   createDeindexRequests,
+  getDeindexChecklist,
   listDeindexRequests,
   recordDeindexOutcome,
   recordDeindexSubmitted,
@@ -33,8 +34,10 @@ export async function GET(
   if (access instanceof Response) return access;
 
   try {
+    // Each request carries toolId, toolLabel, toolUrl and reason (derived at read time);
+    // checklist holds case-level recommendations such as Google "Results about you".
     const requests = await listDeindexRequests(id, access.session);
-    return jsonOk({ requests });
+    return jsonOk({ requests, checklist: getDeindexChecklist() });
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);
@@ -88,8 +91,9 @@ export async function POST(
       return jsonError("Unknown action. Use create, submit, resolve, or reject.", 400);
     }
 
+    // { created, remaining, requests: ids, drafts: [{ toolId, toolLabel, toolUrl, reason, … }] }
     const result = await createDeindexRequests(session, id, engines);
-    return jsonOk(result, 201);
+    return jsonOk({ ...result, checklist: getDeindexChecklist() }, 201);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);

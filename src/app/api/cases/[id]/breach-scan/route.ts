@@ -2,7 +2,7 @@ import { ensureDatabase } from "@/lib/db/init";
 import { getBreachScanData, runBreachScan } from "@/lib/breach-intel/service";
 import { requireCaseAccess } from "@/lib/auth/case-access";
 import { authRateKey } from "@/lib/auth/resolve-auth";
-import { jsonError, jsonOk } from "@/lib/api";
+import { jsonError, jsonOk, workflowErrorResponse } from "@/lib/api";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 
 export async function GET(
@@ -55,6 +55,8 @@ export async function POST(
     if (msg.startsWith("CONNECTOR_REQUIRED")) {
       return jsonError("Configure HIBP in Settings or use demo mode without a key", 400);
     }
+    const workflow = workflowErrorResponse(msg);
+    if (workflow) return workflow;
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);
   }

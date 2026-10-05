@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import {
@@ -12,17 +12,22 @@ import {
   outboundMessages,
   followUpRules,
   contentEvidence,
-  exposureCandidates,
 } from "@/lib/db/schema";
 import { logAuditEvent } from "@/lib/audit/logger";
 import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
+import { advanceCaseStatus, assertCaseNotBlocked } from "@/lib/cases/status-transitions";
+import { workflowErrorMessage } from "@/lib/api";
+import {
+  hasPendingFollowUpDraft,
+  listFollowUpEligibleRemediations,
+  type FollowUpEligibility,
+} from "./follow-up-eligibility";
 import { classifyExposure } from "./classifier";
 import { resolveControllerWithPolicy } from "./controller-resolver";
 import { optionalPolishDraft } from "@/lib/drafting/llm-polish";
 import { createGmailDraft } from "@/lib/execution/gmail";
 import { sendRemovalEmail } from "@/lib/connectors/email-send";
-import { recordScopeUsage } from "@/lib/shield/scope-ledger";
 import { routeRemedy } from "./remedy-router";
 import { buildDraft, buildAllDraftOptions } from "./draft-builder";
 import { getAllTemplates, listTemplateOptions } from "./templates";
@@ -56,6 +61,13 @@ const PRE_DRAFT_CASE_STATUSES: ReadonlySet<string> = new Set([
 export function caseStatusAfterDraftCreated(currentStatus: string): string {
   return PRE_DRAFT_CASE_STATUSES.has(currentStatus) ? "draft_ready" : currentStatus;
 }
+
+/**
+ * Statuses a follow-up draft moves back to draft_ready. Only a case whose sole open
+ * question is "no response yet" re-enters the draft stage; partially_resolved, reopened
+ * and the rest keep their exposure-derived status (recomputeCaseStatus owns those).
+ */
+const FOLLOW_UP_DRAFT_FROM: readonly string[] = ["follow_up_eligible"];
 
 /** Draft status that may be approved / sent (see messageDrafts.status default). */
 const DRAFT_AWAITING_APPROVAL = "awaiting_user_approval";
@@ -188,6 +200,8 @@ export async function resolveControllerForExposure(
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  // Paused / archived cases take no new work (and keep their retention clock).
+  assertCaseNotBlocked(privacyCase);
 
   const exposure = await db.query.verifiedExposures.findFirst({
     where: and(
@@ -378,6 +392,7 @@ export async function createRemovalDraft(
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  assertCaseNotBlocked(privacyCase);
 
   const remediation = await db.query.remediationCases.findFirst({
     where: and(
@@ -440,13 +455,11 @@ export async function createRemovalDraft(
     createdAt: now,
   });
 
-  const nextCaseStatus = caseStatusAfterDraftCreated(privacyCase.status);
-  if (nextCaseStatus !== privacyCase.status) {
-    await db
-      .update(privacyCases)
-      .set({ status: nextCaseStatus, updatedAt: now })
-      .where(eq(privacyCases.id, caseId));
-  }
+  // Only pre-draft statuses advance to draft_ready; later statuses are never regressed.
+  await advanceCaseStatus(caseId, "draft_ready", {
+    allowedFrom: [...PRE_DRAFT_CASE_STATUSES],
+    skipIfBlocked: true,
+  });
 
   await logAuditEvent({
     caseId,
@@ -471,11 +484,9 @@ export async function createFollowUpDraft(
   caseId: string,
   remediationCaseId: string,
 ) {
-  const { evaluateFollowUp } = await import("@/lib/verification/service");
-  const evaluation = await evaluateFollowUp(session, caseId, remediationCaseId);
-  if (!evaluation.followUpAllowed) {
-    throw new Error(`FOLLOW_UP_BLOCKED:${evaluation.stopConditions.join(",")}`);
-  }
+  const privacyCase = await getCaseForUser(caseId, session);
+  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  assertCaseNotBlocked(privacyCase);
 
   const remediation = await db.query.remediationCases.findFirst({
     where: and(
@@ -484,6 +495,21 @@ export async function createFollowUpDraft(
     ),
   });
   if (!remediation) throw new Error("REMEDIATION_NOT_FOUND");
+
+  const { evaluateFollowUp } = await import("@/lib/verification/service");
+  const evaluation = await evaluateFollowUp(session, caseId, remediationCaseId);
+  const reasons = [...evaluation.stopConditions];
+  // One follow-up at a time: the count only moves when a follow-up is actually sent,
+  // so an unsent follow-up draft must block another one.
+  if (await hasPendingFollowUpDraft(remediationCaseId)) reasons.push("follow_up_draft_pending");
+  if (!evaluation.followUpAllowed || reasons.length > 0) {
+    throw new Error(
+      workflowErrorMessage("FOLLOW_UP_BLOCKED", {
+        reasons,
+        nextEligibleDate: evaluation.nextEligibleDate ?? null,
+      }),
+    );
+  }
 
   const templateId =
     remediation.followUpCount === 0 ? "follow-up-first" : "follow-up-final";
@@ -494,15 +520,18 @@ export async function createFollowUpDraft(
     templateId,
   );
 
+  // followUpCount is NOT incremented here — recordOutbound counts a follow-up when it is
+  // actually sent, so an abandoned draft never uses up the follow-up budget.
   await db
     .update(remediationCases)
-    .set({ followUpCount: remediation.followUpCount + 1, status: "draft_ready" })
+    .set({ status: "draft_ready" })
     .where(eq(remediationCases.id, remediationCaseId));
 
-  await db
-    .update(privacyCases)
-    .set({ status: "draft_ready", updatedAt: new Date().toISOString() })
-    .where(eq(privacyCases.id, caseId));
+  // Never reset the whole case: only a follow_up_eligible case re-enters draft_ready.
+  await advanceCaseStatus(caseId, "draft_ready", {
+    allowedFrom: FOLLOW_UP_DRAFT_FROM,
+    skipIfBlocked: true,
+  });
 
   await logAuditEvent({
     caseId,
@@ -523,6 +552,7 @@ export async function createAllDraftVariants(
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  assertCaseNotBlocked(privacyCase);
 
   const remediation = await db.query.remediationCases.findFirst({
     where: and(
@@ -573,6 +603,8 @@ export async function updateDraft(
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  // Paused / archived cases take no new work (and keep their retention clock).
+  assertCaseNotBlocked(privacyCase);
 
   const draft = await db.query.messageDrafts.findFirst({
     where: and(eq(messageDrafts.id, draftId), eq(messageDrafts.caseId, caseId)),
@@ -612,11 +644,21 @@ export async function updateDraft(
 /**
  * Record an outbound message for a draft that has ALREADY been claimed as sent
  * (draft.status === approved_sent). Idempotent: at most one outbound row per draft.
+ *
+ * Case status goes through advanceCaseStatus: `sent` only replaces draft_ready,
+ * user_review or approved_to_send, so a partially_resolved / follow_up_eligible /
+ * reopened case keeps its exposure-derived status. A sent follow-up increments the
+ * remediation's followUpCount atomically and never past its maximum.
  */
 async function recordOutbound(
   session: SessionPayload,
   caseId: string,
-  draft: { id: string; remediationCaseId: string; templateId: string | null },
+  draft: {
+    id: string;
+    remediationCaseId: string;
+    templateId: string | null;
+    isFollowUp: boolean;
+  },
   sentVia: "manual_copy" | "mailto" | "connected_email",
   notes: string | null,
   now: string,
@@ -636,18 +678,17 @@ async function recordOutbound(
     createdAt: now,
   });
 
-  const remediation = await db.query.remediationCases.findFirst({
-    where: eq(remediationCases.id, draft.remediationCaseId),
-  });
   await db
     .update(remediationCases)
-    .set({ status: "sent", messageCount: (remediation?.messageCount ?? 0) + 1 })
+    .set({ status: "sent", messageCount: sql`${remediationCases.messageCount} + 1` })
     .where(eq(remediationCases.id, draft.remediationCaseId));
 
-  await db
-    .update(privacyCases)
-    .set({ status: "sent", updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
+  if (draft.isFollowUp) {
+    incrementFollowUpCount(draft.remediationCaseId);
+  }
+
+  // The message already left; a case paused in the meantime simply keeps its status.
+  await advanceCaseStatus(caseId, "sent", { skipIfBlocked: true });
 
   await logAuditEvent({
     caseId,
@@ -655,7 +696,12 @@ async function recordOutbound(
     userId: session.userId,
     eventType: "message_sent_recorded",
     summary: `Outbound message recorded via ${sentVia}`,
-    detail: { draftId: draft.id, sentVia, templateId: draft.templateId },
+    detail: {
+      draftId: draft.id,
+      sentVia,
+      templateId: draft.templateId,
+      isFollowUp: draft.isFollowUp,
+    },
   });
 
   void import("@/lib/enterprise/sla-service")
@@ -675,6 +721,24 @@ async function recordOutbound(
     });
 
   return { recorded: true };
+}
+
+/**
+ * Count one sent follow-up: a single conditional UPDATE, so concurrent sends can never
+ * push follow_up_count past the remediation's max_follow_ups (default 2).
+ */
+function incrementFollowUpCount(remediationCaseId: string): boolean {
+  const res = db.run(sql`
+    UPDATE remediation_cases
+       SET follow_up_count = follow_up_count + 1
+     WHERE id = ${remediationCaseId}
+       AND follow_up_count < COALESCE(
+         (SELECT max_follow_ups FROM follow_up_rules
+           WHERE remediation_case_id = ${remediationCaseId}
+           ORDER BY created_at DESC LIMIT 1),
+         2)
+  `);
+  return res.changes === 1;
 }
 
 async function loadSendableDraft(caseId: string, draftId: string) {
@@ -711,6 +775,7 @@ export async function approveAndRecordSent(
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  assertCaseNotBlocked(privacyCase);
 
   const { draft, remediation } = await loadSendableDraft(caseId, draftId);
   const now = new Date().toISOString();
@@ -739,6 +804,8 @@ export async function pushDraftToGmail(
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  // Paused / archived cases take no new work (and keep their retention clock).
+  assertCaseNotBlocked(privacyCase);
 
   const draft = await db.query.messageDrafts.findFirst({
     where: and(eq(messageDrafts.id, draftId), eq(messageDrafts.caseId, caseId)),
@@ -779,6 +846,7 @@ export async function sendDraftViaConnector(
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
+  assertCaseNotBlocked(privacyCase);
 
   const { draft, remediation } = await loadSendableDraft(caseId, draftId);
   if (draft.status === DRAFT_SENT) throw new Error("DRAFT_ALREADY_SENT");
@@ -837,24 +905,52 @@ export function listAllTemplateCatalog() {
   }));
 }
 
-export async function getRemediationData(caseId: string) {
-  const controllers = await db.query.controllerTargets.findMany({
-    where: eq(controllerTargets.caseId, caseId),
+export type RemediationWithFollowUp = typeof remediationCases.$inferSelect & {
+  /** Present only when the exposure's latest live check still shows the information. */
+  followUp: Omit<FollowUpEligibility, "remediationId" | "exposureId"> | null;
+};
+
+/**
+ * Remediation data for the case UI. Outbound message rows are not part of the payload.
+ * Pass the (already authorized) session to include a per-remediation `followUp`
+ * ({allowed, stopConditions, nextEligibleDate}); without it every `followUp` is null.
+ * NOTE: callers must authorize access to `caseId` first.
+ */
+export async function getRemediationData(caseId: string, session?: SessionPayload) {
+  const [controllers, remedies, rawRemediations, drafts, exposures, eligibility] =
+    await Promise.all([
+      db.query.controllerTargets.findMany({
+        where: eq(controllerTargets.caseId, caseId),
+      }),
+      db.query.remedyRoutes.findMany({
+        where: eq(remedyRoutes.caseId, caseId),
+      }),
+      db.query.remediationCases.findMany({
+        where: eq(remediationCases.caseId, caseId),
+      }),
+      db.query.messageDrafts.findMany({
+        where: eq(messageDrafts.caseId, caseId),
+      }),
+      db.query.verifiedExposures.findMany({
+        where: eq(verifiedExposures.caseId, caseId),
+      }),
+      session ? listFollowUpEligibleRemediations(session, caseId) : Promise.resolve([]),
+    ]);
+
+  const byRemediation = new Map(eligibility.map((e) => [e.remediationId, e]));
+  const remediations: RemediationWithFollowUp[] = rawRemediations.map((r) => {
+    const entry = byRemediation.get(r.id);
+    return {
+      ...r,
+      followUp: entry
+        ? {
+            allowed: entry.allowed,
+            stopConditions: entry.stopConditions,
+            nextEligibleDate: entry.nextEligibleDate,
+          }
+        : null,
+    };
   });
-  const remedies = await db.query.remedyRoutes.findMany({
-    where: eq(remedyRoutes.caseId, caseId),
-  });
-  const remediations = await db.query.remediationCases.findMany({
-    where: eq(remediationCases.caseId, caseId),
-  });
-  const drafts = await db.query.messageDrafts.findMany({
-    where: eq(messageDrafts.caseId, caseId),
-  });
-  const messages = await db.query.outboundMessages.findMany({
-    where: eq(outboundMessages.caseId, caseId),
-  });
-  const exposures = await db.query.verifiedExposures.findMany({
-    where: eq(verifiedExposures.caseId, caseId),
-  });
-  return { controllers, remedies, remediations, drafts, messages, exposures };
+
+  return { controllers, remedies, remediations, drafts, exposures };
 }

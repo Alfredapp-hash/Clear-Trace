@@ -20,9 +20,11 @@ test("v1.0 workflow sections appear on case page", async ({ page }) => {
   await page.getByRole("button", { name: "Complete intake" }).click();
   await expect(page).toHaveURL(/\/cases\/[a-f0-9-]+/);
 
-  await expect(page.getByText("Broker opt-out dispatch")).toBeVisible();
-  await expect(page.getByText("Search deindexing")).toBeVisible();
-  await expect(page.getByRole("button", { name: "Queue from broker sweep" })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Data broker opt-outs/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: /Search engine cleanup/ })).toBeVisible();
+  // Broker opt-outs are an optional phase: collapsed until opened.
+  await page.getByRole("button", { name: /Data broker opt-outs/ }).click();
+  await expect(page.getByRole("button", { name: "Prepare opt-outs from broker check" })).toBeVisible();
 });
 
 test("GET /api/health and manifest are served", async ({ request }) => {

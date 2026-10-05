@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { getRecommendedSkill } from "@/lib/coordinator/hermes";
-import { STATUS_INDEX, WORKFLOW_SKILLS } from "./catalog";
+import { getRecommendedSkill, getWorkflowSteps } from "@/lib/coordinator/hermes";
+import { resolveCurrentSkillId } from "@/lib/guide/workflow-guide";
+import { COMPLETED_STATUS_SKILL, STATUS_INDEX, WORKFLOW_SKILLS } from "./catalog";
 
 const STATUS_TO_SKILL: Record<string, string> = {
   draft: "intake-and-consent",
@@ -18,13 +19,14 @@ const STATUS_TO_SKILL: Record<string, string> = {
   awaiting_response: "schedule-monitoring",
   verification_due: "verify-removal",
   reopened: "verify-removal",
+  // Status-only: with the case at hand, getRecommendedSkillForCase recommends
+  // follow-up-policy when a remediation is eligible (see skill-runner.test.ts).
   partially_resolved: "verify-removal",
-  removed_confirmed: "follow-up-policy",
   follow_up_eligible: "follow-up-policy",
   escalated: "follow-up-policy",
 };
 
-describe("status machine ↔ Hermes", () => {
+describe("status machine ↔ Autopilot", () => {
   it("maps every STATUS_INDEX entry to a workflow skill or terminal state", () => {
     for (const [status, index] of Object.entries(STATUS_INDEX)) {
       if (index < 0) continue;
@@ -49,5 +51,30 @@ describe("status machine ↔ Hermes", () => {
 
   it("returns null for closed cases", () => {
     expect(getRecommendedSkill("closed")).toBeNull();
+  });
+
+  it("never recommends a follow-up for removed_confirmed", () => {
+    // Every workflow step is complete; the next action is the certificate.
+    expect(STATUS_INDEX.removed_confirmed).toBe(WORKFLOW_SKILLS.length);
+    expect(getRecommendedSkill("removed_confirmed")).toBeNull();
+    expect(getWorkflowSteps("removed_confirmed").every((s) => s.status === "completed")).toBe(
+      true,
+    );
+    expect(COMPLETED_STATUS_SKILL.removed_confirmed).toBe("generate-removal-certificate");
+    expect(resolveCurrentSkillId("removed_confirmed")).toBe("generate-removal-certificate");
+  });
+
+  it("guide resolution matches the status machine for every non-terminal status", () => {
+    for (const [status, skillId] of Object.entries(STATUS_TO_SKILL)) {
+      expect(resolveCurrentSkillId(status)).toBe(skillId);
+    }
+    expect(resolveCurrentSkillId("closed")).toBeNull();
+    expect(resolveCurrentSkillId("paused")).toBeNull();
+  });
+
+  it("orders exposure-derived statuses after sending", () => {
+    expect(STATUS_INDEX.sent).toBeLessThan(STATUS_INDEX.partially_resolved!);
+    expect(STATUS_INDEX.partially_resolved).toBeLessThan(STATUS_INDEX.follow_up_eligible!);
+    expect(STATUS_INDEX.follow_up_eligible).toBeLessThan(STATUS_INDEX.removed_confirmed!);
   });
 });

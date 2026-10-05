@@ -7,6 +7,9 @@ import { getStripe } from "@/lib/billing/stripe";
 import {
   findOrgByStripeCustomer,
   findOrgByStripeSubscription,
+  isActiveSubscriptionStatus,
+  isBillingConfigured,
+  shouldIgnoreSubscriptionEvent,
   updateOrgSubscription,
 } from "@/lib/billing/service";
 import { jsonError, jsonOk } from "@/lib/api";
@@ -23,6 +26,9 @@ export async function POST(request: Request) {
 
   const secret = process.env.STRIPE_WEBHOOK_SECRET?.trim();
   if (!secret) return jsonError("Webhook secret not configured", 503);
+  // Without a Stripe key the event cannot be verified; that is a server misconfiguration,
+  // not a bad request.
+  if (!isBillingConfigured()) return jsonError("Billing not configured", 503);
 
   const signature = request.headers.get("stripe-signature");
   if (!signature) return jsonError("Missing stripe-signature", 400);
@@ -68,8 +74,12 @@ export async function POST(request: Request) {
           ? await findOrgByStripeCustomer(sub.customer)
           : null);
 
+      // The org is on another, still-active subscription: an update/cancel of this one
+      // must not downgrade it (only this subscription becoming active may replace it).
+      if (org && shouldIgnoreSubscriptionEvent(org, sub)) break;
+
       if (org) {
-        const active = sub.status === "active" || sub.status === "trialing";
+        const active = isActiveSubscriptionStatus(sub.status);
         await updateOrgSubscription(org.id, {
           plan: active ? "pro" : "free",
           stripeSubscriptionId: sub.id,

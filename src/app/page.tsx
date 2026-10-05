@@ -15,20 +15,48 @@ import {
 import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import { redirect } from "next/navigation";
+import { after } from "next/server";
 import { and, eq, desc } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { privacyCases, auditEvents } from "@/lib/db/schema";
-import { getActionItems, getDashboardStats } from "@/lib/dashboard/actions";
+import { getActionItems, getDashboardStats, type ActionItem } from "@/lib/dashboard/actions";
 import { getConnectorHealth } from "@/lib/connectors/service";
 import { getExposureRadar, getVictoryStats } from "@/lib/dashboard/radar";
-import { maybeRunBackgroundJobs } from "@/lib/worker/processor";
+import { maybeRunBackgroundJobs, shouldRunInlineWorker } from "@/lib/worker/processor";
+
+const ACTION_LABEL: Record<ActionItem["type"], string> = {
+  verification_due: "Check if it's gone",
+  follow_up: "Follow-up due",
+  reopened: "Reappeared",
+  candidate_review: "Review matches",
+  opt_out_pending: "Opt-out to submit",
+  opt_out_verify: "Confirm opt-out",
+  deindex_pending: "Search removal to submit",
+};
+
+/** Audit event types are snake_case identifiers; show them as a short sentence. */
+function eventLabel(eventType: string): string {
+  const words = eventType.split("_").filter(Boolean).join(" ");
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
 
 export default async function DashboardPage() {
   ensureDatabase();
   const session = await getSession();
   if (!session) redirect("/login");
 
-  await maybeRunBackgroundJobs();
+  // Background jobs never run on the render path. The worker-cron sidecar calls
+  // /api/worker/run; only without one (no WORKER_SECRET, or INLINE_WORKER=1) do we fall
+  // back to a throttled run after the response has been sent.
+  if (shouldRunInlineWorker()) {
+    after(async () => {
+      try {
+        await maybeRunBackgroundJobs();
+      } catch (err) {
+        console.error("[worker] inline background run failed", err);
+      }
+    });
+  }
 
   const [cases, recentEvents, actionItems, stats, connectorHealth, radar, victories] =
     await Promise.all([
@@ -169,7 +197,7 @@ export default async function DashboardPage() {
                     <p className="mt-0.5 text-sm text-slate-400">{item.message}</p>
                   </div>
                   <Badge tone={item.priority === "high" ? "danger" : "warning"}>
-                    {item.type.replaceAll("_", " ")}
+                    {ACTION_LABEL[item.type] ?? eventLabel(item.type)}
                   </Badge>
                 </ListRow>
               </li>
@@ -228,7 +256,7 @@ export default async function DashboardPage() {
                 <li key={event.id}>
                   <div className="rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3.5">
                     <div className="mb-1.5 flex flex-wrap items-center gap-2">
-                      <Badge tone="info">{event.eventType.replaceAll("_", " ")}</Badge>
+                      <Badge tone="info">{eventLabel(event.eventType)}</Badge>
                       <span className="text-xs text-slate-500">
                         {new Date(event.createdAt).toLocaleString()}
                       </span>

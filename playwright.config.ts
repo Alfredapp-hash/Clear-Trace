@@ -42,6 +42,9 @@ export default defineConfig({
           ENCRYPTION_KEY: "e2e-encryption-key-not-for-production-0123456789",
           WORKER_SECRET: "e2e-worker-secret",
           NEXT_PUBLIC_APP_URL: `http://localhost:${PORT}`,
+          // The suite registers several accounts; the default (first_user) closes
+          // self-signup after the first one.
+          REGISTRATION_MODE: "open",
         },
       },
   projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
