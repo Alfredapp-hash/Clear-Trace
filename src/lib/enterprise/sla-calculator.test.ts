@@ -35,3 +35,19 @@ describe("sla calculator", () => {
     expect(rows[0]?.deadlineType).toBe("removal_verification");
   });
 });
+describe("statutory deadline types", () => {
+  it("use fixed 45 / 90 day windows regardless of tier", () => {
+    for (const tier of ["standard", "expedited", "enterprise"]) {
+      const policy = resolveSlaPolicy({ slaTier: tier });
+      const rows = buildDeadlinesForAnchor({
+        anchorAt: "2026-09-01T00:00:00.000Z",
+        policy,
+        types: ["statutory_first_pull", "statutory_deletion_due"],
+      });
+      expect(rows).toEqual([
+        { deadlineType: "statutory_first_pull", dueAt: "2026-10-16T00:00:00.000Z" },
+        { deadlineType: "statutory_deletion_due", dueAt: "2026-11-30T00:00:00.000Z" },
+      ]);
+    }
+  });
+});

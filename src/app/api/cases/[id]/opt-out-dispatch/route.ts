@@ -52,13 +52,23 @@ export async function POST(
   const rate = await checkRateLimit(`opt-out:${authRateKey(auth)}`, 30);
   if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
 
-  const body = await request.json().catch(() => ({}));
+  const parsedBody: unknown = await request.json().catch(() => ({}));
+  const body = (
+    parsedBody && typeof parsedBody === "object" ? parsedBody : {}
+  ) as Record<string, unknown>;
   const action = body.action as string | undefined;
 
   try {
     if (action === "queue") {
       await requireBillingFeature(session.organizationId, "opt_out_dispatch");
-      const result = await queueOptOutDispatchesFromSweep(session, id);
+      if (body.includeUnchecked !== undefined && typeof body.includeUnchecked !== "boolean") {
+        return jsonError("includeUnchecked must be a boolean", 400);
+      }
+      // Default: only brokers the case was seen on. includeUnchecked adds the unchecked
+      // to-check brokers (proactive opt-outs). Registry brokers are never queued.
+      const result = await queueOptOutDispatchesFromSweep(session, id, {
+        includeUnchecked: body.includeUnchecked === true,
+      });
       return jsonOk(result, result.created > 0 ? 201 : 200);
     }
 

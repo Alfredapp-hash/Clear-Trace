@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Button, ButtonLink, Input } from "../ui";
+import { Badge, Button, ButtonLink, InlineResult, Input, type InlineResultView } from "../ui";
+import { latestResult } from "./useCaseMutations";
 import { DraftTemplatePicker } from "../DraftTemplatePicker";
 import { isEmailAddress, parseStringArray, safeHttpUrl } from "@/lib/ui/safe-url";
 import { formatDate, humanize, itemStatusLabel } from "@/lib/ux/plain-status";
@@ -67,7 +68,12 @@ export interface DraftEdit {
   id: string;
   subject: string;
   body: string;
+  /** Email address or removal-form link; required when the draft has no verified contact. */
+  recipient: string;
 }
+
+/** Shown wherever a contact or recipient is empty: ClearTrace never guesses an address. */
+const NO_VERIFIED_CONTACT = "No verified contact — find the site's own privacy or removal contact";
 
 const CONTACT_KIND: Record<string, string> = {
   email: "Email",
@@ -100,6 +106,8 @@ export function RemediationPhase({
   onPushGmail,
   onFollowUp,
   onCopy,
+  results = {},
+  onRetry = () => {},
 }: {
   caseId: string;
   status: string;
@@ -121,14 +129,21 @@ export function RemediationPhase({
   onPushGmail: (draftId: string) => void;
   onFollowUp: (remediationCaseId: string) => void;
   onCopy: (text: string) => void;
+  results?: Record<string, InlineResultView>;
+  onRetry?: (key: string) => void;
 }) {
   const [editing, setEditing] = useState<DraftEdit | null>(null);
+  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
   const disabled = busy || casePaused;
 
   async function save() {
     if (!editing) return;
+    // Only send the recipient when the user changed it, so a legacy stored value is never
+    // re-validated by an unrelated text edit.
+    const original = drafts.find((d) => d.id === editing.id)?.recipient ?? "";
+    const edit = editing.recipient.trim() === original.trim() ? { ...editing, recipient: "" } : editing;
     // Keep the editor open on failure so edits are not lost.
-    if (await onSaveDraft(editing)) setEditing(null);
+    if (await onSaveDraft(edit)) setEditing(null);
   }
 
   if (exposures.length === 0) {
@@ -172,18 +187,21 @@ export function RemediationPhase({
             )}
 
             {!controller ? (
-              <Button
-                variant="secondary"
-                className="mt-3"
-                onClick={() => onFindContact(exp.id)}
-                disabled={disabled}
-              >
-                {loading === `resolve-${exp.id}` ? "Looking up…" : "Find who to contact"}
-              </Button>
+              <div className="mt-3 flex flex-wrap items-center gap-2">
+                <Button variant="secondary" onClick={() => onFindContact(exp.id)} disabled={disabled}>
+                  {loading === `resolve-${exp.id}` ? "Looking up…" : "Find who to contact"}
+                </Button>
+                <InlineResult
+                  result={results[`resolve-${exp.id}`]}
+                  onRetry={() => onRetry(`resolve-${exp.id}`)}
+                />
+              </div>
             ) : (
               <p className="mt-2 text-xs text-slate-300 [overflow-wrap:anywhere]">
                 Contact: {CONTACT_KIND[controller.targetType] ?? humanize(controller.targetType)} →{" "}
-                {controller.contactValue}
+                {controller.contactValue || (
+                  <span className="text-amber-300">{NO_VERIFIED_CONTACT}</span>
+                )}
               </p>
             )}
             {remedy && (
@@ -208,18 +226,54 @@ export function RemediationPhase({
               const formUrl = recipientIsEmail ? null : safeHttpUrl(draft.recipient);
               const reviewItems = parseStringArray(draft.reviewItemsJson);
               const sent = draft.status === "approved_sent";
+              // A sibling variant was sent: this one is kept for the record only.
+              const superseded = draft.status === "superseded";
+              const bodyId = `draft-body-preview-${draft.id}`;
+              const isExpanded = expanded[draft.id] === true;
+              const rowResult = latestResult(results, [`sent-${draft.id}`, `send-${draft.id}`, `gmail-${draft.id}`]);
               return (
-                <div key={draft.id} className="mt-4 space-y-2 border-t border-white/[0.06] pt-3">
-                  <p className="text-xs text-[var(--muted)]">
-                    {draft.templateLabel ?? "Request"} · version {draft.currentVersion} —{" "}
-                    {itemStatusLabel(draft.status)}
+                <div
+                  key={draft.id}
+                  data-draft-status={draft.status}
+                  className={`mt-4 space-y-2 border-t border-white/[0.06] pt-3 ${superseded ? "opacity-70" : ""}`}
+                >
+                  <p className="flex flex-wrap items-center gap-2 text-xs text-[var(--muted)]">
+                    <span>
+                      {draft.templateLabel ?? "Request"} · version {draft.currentVersion}
+                      {superseded ? "" : ` — ${itemStatusLabel(draft.status)}`}
+                    </span>
+                    {superseded && <Badge tone="neutral">{itemStatusLabel("superseded")}</Badge>}
                   </p>
+                  {superseded && (
+                    <p className="text-xs text-[var(--muted)]">
+                      Another version of this request was sent, so this one can&apos;t be sent or
+                      edited.
+                    </p>
+                  )}
                   <p className="text-xs text-[var(--muted)] break-all">
                     {recipientIsEmail ? "To: " : formUrl ? "Removal form: " : "Recipient: "}
-                    {draft.recipient || "—"}
+                    {draft.recipient.trim() ? (
+                      draft.recipient
+                    ) : (
+                      <span className="text-amber-300">
+                        {NO_VERIFIED_CONTACT}, then add it with Edit.
+                      </span>
+                    )}
                   </p>
-                  {editing?.id === draft.id ? (
+                  {editing?.id === draft.id && !superseded ? (
                     <div className="space-y-2">
+                      <label
+                        htmlFor={`draft-recipient-${draft.id}`}
+                        className="block text-xs text-[var(--muted)]"
+                      >
+                        Recipient (email address or removal-form link)
+                      </label>
+                      <Input
+                        id={`draft-recipient-${draft.id}`}
+                        value={editing.recipient}
+                        placeholder="privacy@example.com or https://example.com/opt-out"
+                        onChange={(e) => setEditing({ ...editing, recipient: e.target.value })}
+                      />
                       <label htmlFor={`draft-subject-${draft.id}`} className="sr-only">
                         Request subject
                       </label>
@@ -256,73 +310,96 @@ export function RemediationPhase({
                       <p className="text-sm text-slate-200 [overflow-wrap:anywhere]">
                         {draft.subject}
                       </p>
-                      <pre className="whitespace-pre-wrap rounded-xl border border-white/[0.06] bg-black/30 p-4 text-xs leading-relaxed text-slate-300 [overflow-wrap:anywhere]">
+                      <pre
+                        id={bodyId}
+                        className={`whitespace-pre-wrap rounded-xl border border-white/[0.06] bg-black/30 p-4 text-xs leading-relaxed text-slate-300 [overflow-wrap:anywhere] ${isExpanded ? "" : "line-clamp-3"}`}
+                      >
                         {draft.body}
                       </pre>
-                      {reviewItems.length > 0 && (
+                      <button
+                        type="button"
+                        aria-expanded={isExpanded}
+                        aria-controls={bodyId}
+                        onClick={() => setExpanded((e) => ({ ...e, [draft.id]: !isExpanded }))}
+                        className="text-xs font-medium text-teal-300 hover:underline focus-visible:outline-2 focus-visible:outline-teal-300"
+                      >
+                        {isExpanded ? "Show less" : "Show full request"}
+                      </button>
+                      {!superseded && reviewItems.length > 0 && (
                         <ul className="text-xs text-amber-300" aria-label="Check before sending">
                           {reviewItems.map((item) => (
                             <li key={item}>• {item}</li>
                           ))}
                         </ul>
                       )}
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          variant="secondary"
-                          onClick={() =>
-                            setEditing({ id: draft.id, subject: draft.subject, body: draft.body })
-                          }
-                          disabled={disabled}
-                        >
-                          Edit
-                        </Button>
-                        <Button
-                          variant="secondary"
-                          onClick={() => onCopy(`Subject: ${draft.subject}\n\n${draft.body}`)}
-                        >
-                          Copy
-                        </Button>
-                        {recipientIsEmail && (
-                          <ButtonLink
-                            variant="secondary"
-                            href={`mailto:${encodeURIComponent(draft.recipient.trim())}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
-                          >
-                            Open in mail app
-                          </ButtonLink>
-                        )}
-                        {formUrl && (
-                          <ButtonLink variant="secondary" href={formUrl} external>
-                            Open removal form
-                          </ButtonLink>
-                        )}
-                        {recipientIsEmail && (
+                      {!superseded && (
+                        <div className="flex flex-wrap items-center gap-2">
                           <Button
                             variant="secondary"
-                            onClick={() => onPushGmail(draft.id)}
+                            onClick={() =>
+                              setEditing({
+                                id: draft.id,
+                                subject: draft.subject,
+                                body: draft.body,
+                                recipient: draft.recipient,
+                              })
+                            }
                             disabled={disabled}
                           >
-                            {loading === `gmail-${draft.id}` ? "Saving to Gmail…" : "Save as Gmail draft"}
+                            Edit
                           </Button>
-                        )}
-                        {recipientIsEmail && emailAutoSendEnabled && !sent && (
                           <Button
                             variant="secondary"
-                            onClick={() => onSendViaConnector(draft.id)}
-                            disabled={disabled}
+                            onClick={() => onCopy(`Subject: ${draft.subject}\n\n${draft.body}`)}
                           >
-                            {loading === `send-${draft.id}` ? "Sending…" : "Send from my email account"}
+                            Copy
                           </Button>
-                        )}
-                        {!sent && (
-                          <Button onClick={() => onRecordSent(draft.id)} disabled={disabled}>
-                            {loading === `sent-${draft.id}`
-                              ? "Saving…"
-                              : formUrl
-                                ? "I submitted the form"
-                                : "Mark as sent"}
-                          </Button>
-                        )}
-                      </div>
+                          {recipientIsEmail && (
+                            <ButtonLink
+                              variant="secondary"
+                              href={`mailto:${encodeURIComponent(draft.recipient.trim())}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
+                            >
+                              Open in mail app
+                            </ButtonLink>
+                          )}
+                          {formUrl && (
+                            <ButtonLink variant="secondary" href={formUrl} external>
+                              Open removal form
+                            </ButtonLink>
+                          )}
+                          {recipientIsEmail && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => onPushGmail(draft.id)}
+                              disabled={disabled}
+                            >
+                              {loading === `gmail-${draft.id}` ? "Saving to Gmail…" : "Save as Gmail draft"}
+                            </Button>
+                          )}
+                          {recipientIsEmail && emailAutoSendEnabled && !sent && (
+                            <Button
+                              variant="secondary"
+                              onClick={() => onSendViaConnector(draft.id)}
+                              disabled={disabled}
+                            >
+                              {loading === `send-${draft.id}` ? "Sending…" : "Send from my email account"}
+                            </Button>
+                          )}
+                          {!sent && (
+                            <Button onClick={() => onRecordSent(draft.id)} disabled={disabled}>
+                              {loading === `sent-${draft.id}`
+                                ? "Saving…"
+                                : formUrl
+                                  ? "I submitted the form"
+                                  : "Mark as sent"}
+                            </Button>
+                          )}
+                          <InlineResult
+                            result={rowResult?.result}
+                            onRetry={rowResult ? () => onRetry(rowResult.key) : undefined}
+                          />
+                        </div>
+                      )}
                     </>
                   )}
                 </div>

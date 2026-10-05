@@ -103,6 +103,10 @@ export const privacyCases = sqliteTable("privacy_cases", {
   scanScopes: text("scan_scopes").notNull().default("[]"),
   ruthlessMode: integer("ruthless_mode", { mode: "boolean" }).notNull().default(false),
   familyMemberId: text("family_member_id").references(() => familyMembers.id),
+  /** USPS 2-letter state code used for statutory routing (e.g. California DROP guidance). v2. */
+  jurisdictionState: text("jurisdiction_state"),
+  /** How jurisdiction_state was set: inferred from claims ('auto') or chosen by the user. v2. */
+  jurisdictionSource: text("jurisdiction_source", { enum: ["auto", "user"] }),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -169,6 +173,8 @@ export const scanRuns = sqliteTable("scan_runs", {
   candidateCount: integer("candidate_count").notNull().default(0),
   startedAt: text("started_at"),
   completedAt: text("completed_at"),
+  /** What started the run: a user ('manual') or the protection scheduler ('scheduled'). v2. */
+  trigger: text("trigger", { enum: ["manual", "scheduled"] }).notNull().default("manual"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -184,6 +190,8 @@ export const searchQueries = sqliteTable("search_queries", {
     .references(() => privacyCases.id),
   queryText: text("query_text").notNull(),
   sourceType: text("source_type").notNull(),
+  /** JSON SearchQueryCoverage: which broker group / brokers this query covered or skipped. v2. */
+  coverageJson: text("coverage_json"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -206,6 +214,10 @@ export const exposureCandidates = sqliteTable("exposure_candidates", {
   conflictingFactors: text("conflicting_factors"),
   evidenceId: text("evidence_id"),
   reviewedAt: text("reviewed_at"),
+  /** BROKER_UNIVERSE id when the candidate is a known broker listing. v2. */
+  brokerId: text("broker_id"),
+  /** How the candidate was captured. v2. */
+  captureMethod: text("capture_method", { enum: ["serp", "page_fetch", "user_reported"] }),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -229,6 +241,8 @@ export const verifiedExposures = sqliteTable("verified_exposures", {
   recommendedRemedyFamily: text("recommended_remedy_family"),
   informationSummary: text("information_summary"),
   evidenceId: text("evidence_id"),
+  /** BROKER_UNIVERSE id when the exposure is a known broker listing. v2. */
+  brokerId: text("broker_id"),
   confirmedAt: text("confirmed_at").notNull(),
   createdAt: text("created_at")
     .notNull()
@@ -636,6 +650,15 @@ export const brokerSweepMatches = sqliteTable("broker_sweep_matches", {
   matchConfidence: real("match_confidence").notNull(),
   optOutUrl: text("opt_out_url"),
   status: text("status").notNull().default("open"),
+  /** JSON string[] of profile URLs the user / checker found on this broker. v2. */
+  profileUrlsJson: text("profile_urls_json"),
+  /** content_evidence.id captured for this check (same case). v2. */
+  evidenceId: text("evidence_id"),
+  checkMethod: text("check_method", { enum: ["manual", "auto", "user_reported"] }),
+  checkOutcome: text("check_outcome", { enum: ["found", "not_found", "blocked"] }),
+  checkedAt: text("checked_at"),
+  /** users.id of whoever recorded the check (null for automatic checks). v2. */
+  checkedBy: text("checked_by"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -701,6 +724,13 @@ export const optOutDispatches = sqliteTable("opt_out_dispatches", {
   submittedAt: text("submitted_at"),
   completedAt: text("completed_at"),
   notes: text("notes"),
+  /** When this dispatch is next due for a relist re-check / re-submission. v2. */
+  nextDueAt: text("next_due_at"),
+  resubmitCount: integer("resubmit_count").notNull().default(0),
+  /** Last time the listing was seen live (relist detection). v2. */
+  lastSeenAt: text("last_seen_at"),
+  /** opt_out_dispatches.id this dispatch re-submits after a relist. v2. */
+  relistedFromId: text("relisted_from_id"),
   createdAt: text("created_at")
     .notNull()
     .default(sql`(datetime('now'))`),
@@ -728,6 +758,82 @@ export const deindexRequests = sqliteTable("deindex_requests", {
     .notNull()
     .default(sql`(datetime('now'))`),
 });
+
+/* ------------------------------------------------------------------------------------------
+ * Schema v2 (Sprint 4 / v1.4.0): ongoing protection, statutory filings, job health.
+ * Created by migration v2 in migrations.ts — every column here must exist there (drift test).
+ * ---------------------------------------------------------------------------------------- */
+
+export const PROTECTION_SCHEDULE_KINDS = ["discovery", "broker_sweep", "broker_recheck"] as const;
+export type ProtectionScheduleKind = (typeof PROTECTION_SCHEDULE_KINDS)[number];
+
+/** Recurring work per case. One row per (case, kind, broker) — see the unique index in v2. */
+export const protectionSchedules = sqliteTable("protection_schedules", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id")
+    .notNull()
+    .references(() => privacyCases.id),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  kind: text("kind", { enum: PROTECTION_SCHEDULE_KINDS }).notNull(),
+  /** Set for broker_recheck rows (BROKER_UNIVERSE id); null for case-wide kinds. */
+  brokerId: text("broker_id"),
+  dispatchId: text("dispatch_id").references(() => optOutDispatches.id),
+  cadenceDays: integer("cadence_days").notNull(),
+  nextRunAt: text("next_run_at").notNull(),
+  lastRunAt: text("last_run_at"),
+  lastOutcome: text("last_outcome"),
+  enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+  updatedAt: text("updated_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+/** A filing the user made themselves under a statute (e.g. California DROP). Never filed by ClearTrace. */
+export const statutoryFilings = sqliteTable("statutory_filings", {
+  id: text("id").primaryKey(),
+  caseId: text("case_id")
+    .notNull()
+    .references(() => privacyCases.id),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organizations.id),
+  mechanism: text("mechanism", { enum: ["ca_drop"] }).notNull(),
+  jurisdiction: text("jurisdiction", { enum: ["CA"] }).notNull(),
+  filedAt: text("filed_at").notNull(),
+  createdBy: text("created_by").references(() => users.id),
+  createdAt: text("created_at")
+    .notNull()
+    .default(sql`(datetime('now'))`),
+});
+
+/** Background job health. Holds counts and error codes only — never case data. */
+export const jobRuns = sqliteTable("job_runs", {
+  id: text("id").primaryKey(),
+  job: text("job").notNull(),
+  startedAt: text("started_at").notNull(),
+  finishedAt: text("finished_at"),
+  status: text("status", { enum: ["ok", "partial", "error"] }).notNull(),
+  countsJson: text("counts_json").notNull().default("{}"),
+  errorCode: text("error_code"),
+});
+
+/** Shape of search_queries.coverage_json. */
+export interface SearchQueryCoverage {
+  group: string;
+  brokerIds: string[];
+  skippedBrokerIds: string[];
+}
+
+export type ProtectionSchedule = typeof protectionSchedules.$inferSelect;
+export type StatutoryFiling = typeof statutoryFilings.$inferSelect;
+export type JobRun = typeof jobRuns.$inferSelect;
+export type OptOutDispatch = typeof optOutDispatches.$inferSelect;
+export type BrokerSweepMatch = typeof brokerSweepMatches.$inferSelect;
 
 export type PrivacyCase = typeof privacyCases.$inferSelect;
 export type ExposureCandidate = typeof exposureCandidates.$inferSelect;

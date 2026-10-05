@@ -28,8 +28,12 @@ import { encryptValue, hashValue } from "@/lib/crypto/encryption";
 import { getRecommendedSkillForCase, runNextSkill } from "./skill-runner";
 import type { SessionPayload } from "@/lib/auth/session";
 import { recomputeCaseStatus } from "@/lib/verification/service";
-import { getRemediationData } from "@/lib/remediation/service";
-import { seedWorkflowUser } from "@/lib/verification/test-fixtures";
+import {
+  createRemovalDraft,
+  getRemediationData,
+  resolveControllerForExposure,
+} from "@/lib/remediation/service";
+import { seedWorkflowCase, seedWorkflowUser } from "@/lib/verification/test-fixtures";
 import {
   addLiveCheck,
   addVerifiedAuthorization,
@@ -326,5 +330,71 @@ describe("Autopilot: follow-ups and certificates", () => {
     expect(await getRecommendedSkillForCase(session, scenario.caseId)).toBe("verify-removal");
     await setCaseStatus(scenario.caseId, "closed");
     expect(await getRecommendedSkillForCase(session, scenario.caseId)).toBeNull();
+  });
+});
+
+describe("Autopilot: no duplicate drafts", () => {
+  let session: SessionPayload;
+  const url = (label: string) => `https://www.spokeo.com/${label}-${uuid().slice(0, 6)}`;
+
+  beforeAll(async () => {
+    session = await seedWorkflowUser();
+  });
+
+  async function draftCount(caseId: string) {
+    return (await db.query.messageDrafts.findMany({ where: eq(messageDrafts.caseId, caseId) })).length;
+  }
+
+  it("Run-next-step at remedy_selected with existing drafts makes no new draft", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session, {
+      status: "confirmed_exposure",
+      exposureUrls: [url("NoDup")],
+    });
+    const resolved = await resolveControllerForExposure(session, caseId, exposureIds[0]!);
+    await createRemovalDraft(session, caseId, resolved.remediationId);
+    await setCaseStatus(caseId, "remedy_selected");
+    expect(await draftCount(caseId)).toBe(1);
+
+    const result = await runNextSkill(session, caseId);
+    expect(result.skillId).toBe("draft-removal-request");
+    expect(result.summary).toMatch(/nothing to draft/i);
+    expect(result.output.drafts).toEqual([]);
+    expect(await draftCount(caseId)).toBe(1);
+    // The case catches up so the next step reviews the existing draft.
+    expect(await caseStatusOf(caseId)).toBe("draft_ready");
+  });
+
+  it("drafts only the remediations that have no live draft", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session, {
+      status: "confirmed_exposure",
+      exposureUrls: [url("HasDraft"), url("NoDraft")],
+    });
+    const a = await resolveControllerForExposure(session, caseId, exposureIds[0]!);
+    await resolveControllerForExposure(session, caseId, exposureIds[1]!);
+    await createRemovalDraft(session, caseId, a.remediationId);
+    await setCaseStatus(caseId, "remedy_selected");
+    const result = await runNextSkill(session, caseId);
+    expect((result.output.drafts as unknown[]).length).toBe(1);
+    expect(await draftCount(caseId)).toBe(2);
+  });
+
+  it("compliance-verify-draft checks the newest awaiting draft", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session, {
+      status: "confirmed_exposure",
+      exposureUrls: [url("Newest")],
+    });
+    const resolved = await resolveControllerForExposure(session, caseId, exposureIds[0]!);
+    const older = await createRemovalDraft(session, caseId, resolved.remediationId);
+    const newer = await createRemovalDraft(session, caseId, resolved.remediationId);
+    // Older draft carries prohibited language; the newest is clean.
+    await db
+      .update(messageDrafts)
+      .set({ body: "Remove this or else we file a lawsuit.", createdAt: "2020-01-01T00:00:00.000Z" })
+      .where(eq(messageDrafts.id, older.draftId));
+    await setCaseStatus(caseId, "draft_ready");
+    const result = await runNextSkill(session, caseId);
+    expect(result.skillId).toBe("compliance-verify-draft");
+    expect(result.output.warnings).toEqual([]);
+    expect(newer.draftId).toBeTruthy();
   });
 });

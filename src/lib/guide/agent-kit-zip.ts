@@ -14,17 +14,19 @@ export interface ZipEntry {
 const SKILLPACK_ROOT = path.join(/*turbopackIgnore: true*/ process.cwd(), "agent-builder", "skillpack");
 const MCP_ROOT = path.join(/*turbopackIgnore: true*/ process.cwd(), "agent-builder", "mcp-server");
 
+// The kit is read at request time from agent-builder/ (copied into the Docker image), so every
+// fs call below carries a turbopackIgnore hint: the build must not trace these dynamic paths.
 function walkFiles(dir: string, zipPrefix: string): ZipEntry[] {
-  if (!fs.existsSync(dir)) return [];
+  if (!fs.existsSync(/*turbopackIgnore: true*/ dir)) return [];
   const entries: ZipEntry[] = [];
-  for (const name of fs.readdirSync(dir)) {
-    const full = path.join(dir, name);
+  for (const name of fs.readdirSync(/*turbopackIgnore: true*/ dir)) {
+    const full = path.join(/*turbopackIgnore: true*/ dir, name);
     const rel = path.join(zipPrefix, name);
-    const stat = fs.statSync(full);
+    const stat = fs.statSync(/*turbopackIgnore: true*/ full);
     if (stat.isDirectory()) {
       entries.push(...walkFiles(full, rel));
     } else {
-      entries.push({ zipPath: rel.replace(/\\/g, "/"), content: fs.readFileSync(full) });
+      entries.push({ zipPath: rel.replace(/\\/g, "/"), content: fs.readFileSync(/*turbopackIgnore: true*/ full) });
     }
   }
   return entries;
@@ -67,28 +69,28 @@ export function collectAgentKitZipEntries(platform: BuilderPlatform): ZipEntry[]
     "CLEARTRACE_PRD_AND_SKILLS.md",
   ];
   for (const doc of skillpackDocs) {
-    const docPath = path.join(SKILLPACK_ROOT, doc);
-    if (fs.existsSync(docPath)) {
+    const docPath = path.join(/*turbopackIgnore: true*/ SKILLPACK_ROOT, doc);
+    if (fs.existsSync(/*turbopackIgnore: true*/ docPath)) {
       entries.push({
         zipPath: `${root}/docs/${doc}`,
-        content: fs.readFileSync(docPath),
+        content: fs.readFileSync(/*turbopackIgnore: true*/ docPath),
       });
     }
   }
 
-  const examplesDir = path.join(SKILLPACK_ROOT, "examples");
+  const examplesDir = path.join(/*turbopackIgnore: true*/ SKILLPACK_ROOT, "examples");
   entries.push(...walkFiles(examplesDir, `${root}/docs/examples`));
 
-  const skillsDir = path.join(SKILLPACK_ROOT, "skills");
+  const skillsDir = path.join(/*turbopackIgnore: true*/ SKILLPACK_ROOT, "skills");
   entries.push(...walkFiles(skillsDir, `${root}/skills`));
 
   const mcpFiles = ["index.mjs", "package.json", "README.md", "cursor-mcp.json.example"];
   for (const file of mcpFiles) {
-    const filePath = path.join(MCP_ROOT, file);
-    if (fs.existsSync(filePath)) {
+    const filePath = path.join(/*turbopackIgnore: true*/ MCP_ROOT, file);
+    if (fs.existsSync(/*turbopackIgnore: true*/ filePath)) {
       entries.push({
         zipPath: `${root}/mcp-server/${file}`,
-        content: fs.readFileSync(filePath),
+        content: fs.readFileSync(/*turbopackIgnore: true*/ filePath),
       });
     }
   }

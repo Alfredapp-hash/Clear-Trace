@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("v1.0 workflow sections appear on case page", async ({ page }) => {
   const suffix = randomUUID().slice(0, 8);

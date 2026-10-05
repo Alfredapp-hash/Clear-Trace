@@ -1,7 +1,10 @@
 {
   "name": "cleartrace",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "private": true,
+  "cleartrace": {
+    "schemaVersion": 2
+  },
   "bin": {
     "create-cleartrace": "./scripts/create-cleartrace.mjs"
   },

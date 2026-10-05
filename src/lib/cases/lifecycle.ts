@@ -9,6 +9,7 @@ import {
 } from "@/lib/audit/logger";
 import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "./service";
+import { log } from "@/lib/log";
 
 export async function updateCaseStatus(
   session: SessionPayload,
@@ -209,9 +210,23 @@ const B = "SELECT id FROM remediation_batches WHERE case_id = @caseId";
 const BSR = "SELECT id FROM broker_sweep_runs WHERE case_id = @caseId";
 const BRS = "SELECT id FROM breach_scan_runs WHERE case_id = @caseId";
 const P = "SELECT id FROM identity_profiles WHERE case_id = @caseId";
+const OD = "SELECT id FROM opt_out_dispatches WHERE case_id = @caseId";
+/**
+ * Evidence ids the case's rows point at (evidence_id columns are plain text, not FKs). Rows
+ * captured for the case carry its case_id anyway; this also catches evidence referenced by the
+ * case's candidates, exposures, checks and broker-sweep matches (e.g. live-url captures).
+ */
+const EV = `SELECT evidence_id FROM exposure_candidates WHERE evidence_id IS NOT NULL AND id IN (${C})
+  UNION SELECT evidence_id FROM verified_exposures WHERE evidence_id IS NOT NULL AND id IN (${E})
+  UNION SELECT evidence_id FROM verification_checks WHERE evidence_id IS NOT NULL AND (case_id = @caseId OR exposure_id IN (${E}))
+  UNION SELECT evidence_id FROM broker_sweep_matches WHERE evidence_id IS NOT NULL AND sweep_run_id IN (${BSR})`;
 
 /** Children-first delete plan. `audit_events` is scrubbed (not deleted) separately. */
 export const CASE_ERASURE_PLAN: ReadonlyArray<{ table: string; where: string }> = [
+  // Evidence first: its references live in rows deleted below (no FK, so order is free).
+  { table: "content_evidence", where: `case_id = @caseId OR id IN (${EV})` },
+  { table: "protection_schedules", where: `case_id = @caseId OR dispatch_id IN (${OD})` },
+  { table: "statutory_filings", where: "case_id = @caseId" },
   { table: "agent_tasks", where: `run_id IN (${AR})` },
   { table: "agent_runs", where: "case_id = @caseId" },
   { table: "message_versions", where: `draft_id IN (${D})` },
@@ -242,7 +257,6 @@ export const CASE_ERASURE_PLAN: ReadonlyArray<{ table: string; where: string }> 
   { table: "exposure_candidates", where: `id IN (${C})` },
   { table: "search_queries", where: `case_id = @caseId OR scan_run_id IN (${S})` },
   { table: "scan_runs", where: "case_id = @caseId" },
-  { table: "content_evidence", where: "case_id = @caseId" },
   { table: "identity_claims", where: `case_id = @caseId OR profile_id IN (${P})` },
   { table: "identity_profiles", where: "case_id = @caseId" },
   { table: "authorization_records", where: "case_id = @caseId" },
@@ -295,20 +309,40 @@ function eraseCaseRows(caseId: string): void {
 }
 
 /**
+ * Copies the WAL back into the database and truncates it, so erased rows do not linger in the
+ * -wal file (secure_delete=ON zeroes the freed pages in the main file). Best effort: with an
+ * open reader the checkpoint is partial and the next one finishes the job.
+ */
+export function checkpointAfterErasure(): void {
+  if (sqlite.inTransaction) return;
+  try {
+    sqlite.pragma("wal_checkpoint(TRUNCATE)");
+  } catch (err) {
+    const code = (err as { code?: unknown } | null)?.code;
+    log.warn("db.checkpoint_failed", { errorCode: typeof code === "string" ? code : "error" });
+  }
+}
+
+/**
  * Permanently erases a case and everything derived from it, then records `auditEvent`
- * (which must not reference the case row) — all in one IMMEDIATE transaction.
+ * (which must not reference the case row) — all in one IMMEDIATE transaction, followed by a
+ * WAL checkpoint (skip it with `{ checkpoint: false }` when erasing many cases in a row).
  * Returns the sanitized audit event so callers can dispatch webhooks after commit.
  */
 export function deleteCaseData(
   caseId: string,
   auditEvent?: AuditEventInput,
+  options: { checkpoint?: boolean } = {},
 ): AuditEventInput | undefined {
   const run = sqlite.transaction(() => {
     eraseCaseRows(caseId);
     if (!auditEvent) return undefined;
     return writeAuditEventSync({ ...auditEvent, caseId: undefined }).event;
   });
-  return sqlite.inTransaction ? run() : run.immediate();
+  if (sqlite.inTransaction) return run();
+  const event = run.immediate();
+  if (options.checkpoint !== false) checkpointAfterErasure();
+  return event;
 }
 
 export async function deleteCase(session: SessionPayload, caseId: string) {
@@ -351,16 +385,20 @@ export async function purgeExpiredArchivedCases(): Promise<{
 
     for (const privacyCase of expired) {
       try {
-        const event = deleteCaseData(privacyCase.id, {
-          organizationId: org.id,
-          eventType: "case_retention_purged",
-          summary: `Archived case purged after ${org.retentionDays} days`,
-          detail: {
-            caseId: privacyCase.id,
-            retentionDays: org.retentionDays,
-            archivedAt: privacyCase.updatedAt,
+        const event = deleteCaseData(
+          privacyCase.id,
+          {
+            organizationId: org.id,
+            eventType: "case_retention_purged",
+            summary: `Archived case purged after ${org.retentionDays} days`,
+            detail: {
+              caseId: privacyCase.id,
+              retentionDays: org.retentionDays,
+              archivedAt: privacyCase.updatedAt,
+            },
           },
-        });
+          { checkpoint: false },
+        );
         if (event) dispatchAuditWebhooks(event);
         purgedCaseIds.push(privacyCase.id);
       } catch (err) {
@@ -369,6 +407,7 @@ export async function purgeExpiredArchivedCases(): Promise<{
     }
   }
 
+  if (purgedCaseIds.length > 0) checkpointAfterErasure();
   return { purgedCount: purgedCaseIds.length, purgedCaseIds, errors };
 }
 

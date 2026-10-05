@@ -751,6 +751,42 @@ function buildConnectorHints(
     });
 }
 
+/** Checklist / action id of the California DROP self-filing step. */
+export const DROP_GUIDE_STEP_ID = "ca-drop";
+
+/** Operator-only guides that are not about a person's case. */
+const NON_CASE_SKILLS: ReadonlySet<string> = new Set([
+  "connector-readiness-check",
+  "sentinel-security-auditor",
+]);
+
+/**
+ * California DROP step — only for California cases. DROP is the state's free consumer
+ * self-service platform: the user files there themselves (ClearTrace never files, never
+ * acts as an authorized agent and never contacts the platform) and records the date here.
+ */
+export function buildDropGuideStep(
+  ctx: WorkflowGuideInput,
+): { checklist: GuideChecklistItem; action: GuideInAppAction } | null {
+  if (ctx.jurisdictionState !== "CA") return null;
+  return {
+    checklist: {
+      id: DROP_GUIDE_STEP_ID,
+      label: "File your California DROP request (yourself)",
+      description:
+        "California residents can ask every registered data broker to delete their data at once through the state's free Delete Request and Opt-out Platform (DROP). You file it yourself; ClearTrace tracks the 45- and 90-day deadlines.",
+      done: Boolean(ctx.dropFiled),
+      inAppHint: "Workflow → California DROP: open the official page, then record your filing date.",
+    },
+    action: {
+      id: DROP_GUIDE_STEP_ID,
+      label: "California DROP",
+      description: "Self-filing guidance and deadline tracking for California residents.",
+      location: "Workflow → California DROP",
+    },
+  };
+}
+
 export function buildStepGuide(
   skillId: string,
   ctx: WorkflowGuideInput,
@@ -759,13 +795,21 @@ export function buildStepGuide(
   const skill = getSkillById(skillId);
   if (!template) return null;
 
+  const checklist = template.buildChecklist(ctx);
+  const inAppActions = template.buildActions(ctx);
+  const drop = NON_CASE_SKILLS.has(skillId) ? null : buildDropGuideStep(ctx);
+  if (drop) {
+    checklist.push(drop.checklist);
+    inAppActions.push(drop.action);
+  }
+
   return {
     skillId,
     skillName: skill?.name ?? skillId,
     headline: template.headline,
     summary: template.summary,
-    checklist: template.buildChecklist(ctx),
-    inAppActions: template.buildActions(ctx),
+    checklist,
+    inAppActions,
     connectorHints: template.buildConnectors(ctx),
     stuckHelp: template.stuckHelp,
   };

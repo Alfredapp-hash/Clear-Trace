@@ -9,6 +9,8 @@ import {
   exposureCandidates,
   verifiedExposures,
   contentEvidence,
+  optOutDispatches,
+  remediationCases,
 } from "@/lib/db/schema";
 import { decryptValue } from "@/lib/crypto/encryption";
 import { logAuditEvent } from "@/lib/audit/logger";
@@ -23,15 +25,30 @@ import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser, getLatestAuthorization } from "@/lib/cases/service";
 import { recomputeCaseStatus } from "@/lib/verification/service";
 import { classifyExposure } from "@/lib/remediation/classifier";
-import { resolveDiscoveryConnector } from "@/lib/connectors/service";
-import { buildConstellationQueries } from "./constellation";
+import {
+  getAgentDefaults,
+  getOrgConnector,
+  resolveDiscoveryConnector,
+} from "@/lib/connectors/service";
+import { buildConstellationQueries, claimCities } from "./constellation";
 import { buildRuthlessDiscoveryQueries } from "@/lib/ruthless/constellation";
 import { RUTHLESS_POLICY } from "@/lib/ruthless/config";
 import { isRuthlessModeForCase } from "@/lib/ruthless/resolve";
 import { runLiveSearch } from "./serp-adapter";
 import type { ConnectorType } from "@/lib/connectors/types";
-import { brokerSiteQueries, matchBrokerByHost } from "@/lib/brokers/universe";
 import { safeFetchPublicPage } from "@/lib/tools/safe-fetch";
+import { hostKey, runPool } from "@/lib/tools/pool";
+import { isNeverQueryClaimType } from "@/lib/constants";
+import {
+  SKIPPED_BROKER_GROUP_SOURCE,
+  brokerForUrl,
+  buildBrokerGroupQueries,
+  listQueryBrokers,
+  planDiscoveryQueries,
+  rotationFromCoverage,
+} from "./broker-queries";
+import { matchStatusForScore, scoreIdentityMatch } from "./identity-match";
+import { MATCHER_RULES, createIdentityAiAssist } from "./identity-match-ai";
 import { recordScopeUsage } from "@/lib/shield/scope-ledger";
 
 const DEMO_SOURCES = [
@@ -69,49 +86,15 @@ const CONFIRM_ENTRY_STATUSES = new Set([
 ]);
 
 function inferSourceType(url: string, fallback: string): string {
-  try {
-    const broker = matchBrokerByHost(new URL(url).hostname);
-    if (broker) return broker.type;
-  } catch {
-    return fallback;
-  }
-  return fallback;
+  return brokerForUrl(url)?.type ?? fallback;
 }
 
-function scoreCandidate(
-  excerpt: string,
-  claims: Array<{ claimType: string; value: string }>,
-): { score: number; corroborating: string[]; conflicting: string[] } {
-  const lower = excerpt.toLowerCase();
-  const corroborating: string[] = [];
-  const conflicting: string[] = [];
-  let score = 0;
-
-  for (const claim of claims) {
-    const val = claim.value.toLowerCase();
-    if (val.length >= 3 && lower.includes(val)) {
-      corroborating.push(`${claim.claimType} match in excerpt`);
-      score += claim.claimType === "full_name" ? 0.35 : 0.2;
-    }
-  }
-
-  if (claims.some((c) => c.claimType === "city_state")) {
-    const city = claims.find((c) => c.claimType === "city_state")!.value;
-    const wrongCity = ["new york", "chicago", "miami"].find(
-      (c) => lower.includes(c) && !city.toLowerCase().includes(c.split(" ")[0]),
-    );
-    if (wrongCity) {
-      conflicting.push(`Geography mismatch: mentions ${wrongCity}`);
-      score -= 0.25;
-    }
-  }
-
-  return {
-    score: Math.max(0, Math.min(1, score)),
-    corroborating,
-    conflicting,
-  };
+function brokerIdForUrl(url: string): string | null {
+  return brokerForUrl(url)?.id ?? null;
 }
+
+/** Opt-out dispatch statuses that mean the broker is being / has been opted out. */
+const OPTED_OUT_DISPATCH_STATUSES = ["approved", "submitted", "completed"] as const;
 
 /**
  * Gate for anything that searches for or fetches pages about the subject (runDiscovery,
@@ -316,39 +299,196 @@ export async function refreshPendingCandidate(
   return known.candidate.id;
 }
 
-function matchStatusForScore(score: number): string {
-  return score >= 0.7 ? "probable_match" : score >= 0.4 ? "possible_match" : "unreviewed";
+type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** refreshPendingCandidate inside the run's final synchronous transaction. */
+function refreshPendingCandidateSync(
+  tx: Tx,
+  known: Extract<KnownUrl, { kind: "pending" }>,
+  update: RefreshUpdate,
+): void {
+  let evidenceId = known.candidate.evidenceId;
+  if (known.contentHash !== update.contentHash) {
+    evidenceId = uuid();
+    tx.insert(contentEvidence)
+      .values({ ...update.evidence, id: evidenceId, contentHash: update.contentHash })
+      .run();
+  }
+  tx.update(exposureCandidates)
+    .set({
+      evidenceId,
+      confidenceScore: update.confidenceScore,
+      matchStatus: update.matchStatus,
+      corroboratingFactors: JSON.stringify(update.corroborating),
+      conflictingFactors: JSON.stringify(update.conflicting),
+    })
+    .where(
+      and(
+        eq(exposureCandidates.id, known.candidate.id),
+        // never overwrite a decision the user made meanwhile
+        inArray(exposureCandidates.matchStatus, [...PENDING_MATCH_STATUSES]),
+      ),
+    )
+    .run();
 }
 
+/** Total SERP + page-fetch + local-AI budget for one discovery run (owner decision: ~45s). */
+export const DISCOVERY_BUDGET_MS = 45_000;
+/** Page fetches in flight at once, and per hostname. */
+export const FETCH_CONCURRENCY = 6;
+export const FETCH_PER_HOST = 2;
+
+export interface RunDiscoveryOptions {
+  /** Defaults to "demo", or "live" when requireLive is set. */
+  mode?: "demo" | "live";
+  ruthless?: boolean;
+  /** Who started the run; persisted on scan_runs.trigger. Default 'manual'. */
+  trigger?: "manual" | "scheduled";
+  /**
+   * Scheduled runs: refuse to run without an active discovery connector (throws
+   * NO_LIVE_CONNECTOR before any write or fetch) instead of falling back to demo.
+   */
+  requireLive?: boolean;
+  /** Caps the SERP queries for this run (e.g. an org's monthly scheduled-query cap). */
+  maxQueries?: number;
+  /** Test hook: overrides DISCOVERY_BUDGET_MS. */
+  budgetMs?: number;
+}
+
+/** A row the run will write in its final transaction. */
+type PendingWrite =
+  | {
+      kind: "refresh";
+      known: Extract<KnownUrl, { kind: "pending" }>;
+      update: RefreshUpdate;
+    }
+  | {
+      kind: "create";
+      evidence: typeof contentEvidence.$inferInsert;
+      candidate: typeof exposureCandidates.$inferInsert;
+    };
+
+interface RefreshUpdate {
+  contentHash: string;
+  evidence: Omit<typeof contentEvidence.$inferInsert, "id" | "contentHash">;
+  confidenceScore: number;
+  matchStatus: string;
+  corroborating: string[];
+  conflicting: string[];
+}
+
+/** Brokers already found (exposure / live candidate) or opted out for the case. */
+async function brokersToSkip(caseId: string): Promise<Set<string>> {
+  const skip = new Set<string>();
+  const exposures = await db.query.verifiedExposures.findMany({
+    where: eq(verifiedExposures.caseId, caseId),
+    columns: { brokerId: true, canonicalUrl: true },
+  });
+  for (const e of exposures) {
+    const id = e.brokerId ?? brokerIdForUrl(e.canonicalUrl);
+    if (id) skip.add(id);
+  }
+  const candidates = await db.query.exposureCandidates.findMany({
+    where: and(
+      eq(exposureCandidates.caseId, caseId),
+      inArray(exposureCandidates.matchStatus, [...PENDING_MATCH_STATUSES, "confirmed_match"]),
+    ),
+    columns: { brokerId: true },
+  });
+  for (const c of candidates) if (c.brokerId) skip.add(c.brokerId);
+  const dispatches = await db.query.optOutDispatches.findMany({
+    where: and(
+      eq(optOutDispatches.caseId, caseId),
+      inArray(optOutDispatches.status, [...OPTED_OUT_DISPATCH_STATUSES]),
+    ),
+    columns: { brokerId: true },
+  });
+  for (const d of dispatches) if (d.brokerId) skip.add(d.brokerId);
+  return skip;
+}
+
+/** Broker groups the case's previous run (with a query plan) could not run, per city key. */
+async function previousSkippedGroups(caseId: string, currentRunId: string) {
+  const previous = db
+    .select({ scanRunId: searchQueries.scanRunId })
+    .from(searchQueries)
+    .innerJoin(scanRuns, eq(scanRuns.id, searchQueries.scanRunId))
+    .where(and(eq(searchQueries.caseId, caseId), ne(searchQueries.scanRunId, currentRunId)))
+    .orderBy(desc(scanRuns.createdAt), desc(searchQueries.createdAt))
+    .limit(1)
+    .get();
+  if (!previous) return new Map<string, Set<string>>();
+  const rows = await db.query.searchQueries.findMany({
+    where: and(
+      eq(searchQueries.scanRunId, previous.scanRunId),
+      eq(searchQueries.sourceType, SKIPPED_BROKER_GROUP_SOURCE),
+    ),
+    columns: { coverageJson: true },
+  });
+  return rotationFromCoverage(rows.map((r) => r.coverageJson));
+}
+
+function resolveRunOptions(
+  modeOrOptions: "demo" | "live" | RunDiscoveryOptions,
+  options?: RunDiscoveryOptions,
+): RunDiscoveryOptions & { mode: "demo" | "live"; trigger: "manual" | "scheduled" } {
+  const merged: RunDiscoveryOptions =
+    typeof modeOrOptions === "string" ? { ...options, mode: modeOrOptions } : { ...modeOrOptions };
+  const mode = merged.requireLive ? "live" : (merged.mode ?? "demo");
+  return { ...merged, mode, trigger: merged.trigger ?? "manual" };
+}
+
+/**
+ * Runs discovery for a case: builds queries from scan-enabled claims, searches (live) or
+ * synthesizes demo pages, fetches pages, scores candidates and records them.
+ *
+ * Stays synchronous for the caller (owner decision): the network phase runs SERP requests 4
+ * at a time and page fetches 6 at a time (≤ 2 per host) inside a ~45s budget; URLs not
+ * fetched in time keep their SERP snippet (capture_method 'serp'). Every candidate and
+ * evidence row is written in ONE synchronous transaction after the network phase, so a run
+ * that fails or is paused mid-way writes none of them.
+ *
+ * `runDiscovery(session, caseId, "live", { ruthless })` (legacy) and
+ * `runDiscovery(session, caseId, { mode, trigger, requireLive, maxQueries, ruthless })` both work.
+ */
 export async function runDiscovery(
   session: SessionPayload,
   caseId: string,
-  mode: "demo" | "live" = "demo",
-  options?: { ruthless?: boolean },
+  modeOrOptions: "demo" | "live" | RunDiscoveryOptions = "demo",
+  legacyOptions?: RunDiscoveryOptions,
 ) {
+  const options = resolveRunOptions(modeOrOptions, legacyOptions);
+  const { mode, trigger } = options;
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
   await assertDiscoveryAllowed(privacyCase);
 
-  const claims = await db.query.identityClaims.findMany({
-    where: and(
-      eq(identityClaims.caseId, caseId),
-      eq(identityClaims.scanEnabled, true),
-    ),
+  const allClaims = await db.query.identityClaims.findMany({
+    where: eq(identityClaims.caseId, caseId),
   });
-
-  if (!claims.length) throw new Error("NO_SCAN_ENABLED_CLAIMS");
+  // Searched: scan-enabled claims that are not disambiguators.
+  const scanClaims = allClaims.filter((c) => c.scanEnabled && !isNeverQueryClaimType(c.claimType));
+  if (!scanClaims.length) throw new Error("NO_SCAN_ENABLED_CLAIMS");
 
   let activeConnector: string | null = null;
   if (mode === "live") {
     activeConnector = await resolveDiscoveryConnector(session.organizationId);
-    if (!activeConnector) throw new Error("CONNECTOR_REQUIRED:discovery");
+    if (!activeConnector) {
+      throw new Error(options.requireLive ? "NO_LIVE_CONNECTOR" : "CONNECTOR_REQUIRED:discovery");
+    }
   }
 
-  const decryptedClaims = claims.map((c) => ({
+  const decryptedClaims = scanClaims.map((c) => ({
     claimType: c.claimType,
     value: decryptValue(c.encryptedValue),
   }));
+  // Scoring also uses disambiguators (birth year, relatives), which are never searched.
+  const matchClaims = [
+    ...decryptedClaims,
+    ...allClaims
+      .filter((c) => isNeverQueryClaimType(c.claimType))
+      .map((c) => ({ claimType: c.claimType, value: decryptValue(c.encryptedValue) })),
+  ];
 
   const scanRunId = uuid();
   const now = new Date().toISOString();
@@ -358,6 +498,7 @@ export async function runDiscovery(
     caseId,
     status: "running",
     mode,
+    trigger,
     startedAt: now,
     createdAt: now,
   });
@@ -371,8 +512,10 @@ export async function runDiscovery(
   const created: string[] = [];
   let alreadyKnown = 0;
   let previouslyRejected = 0;
-  let uniqueQueries: string[] = [];
+  let queryCount = 0;
   let duplicates: string[] = [];
+  let notFetched = 0;
+  let brokerGroups = { run: 0, skipped: 0 };
   try {
     if (isEntryStatus) {
       // Conditional on the status that was read: a pause/archive that landed meanwhile wins.
@@ -386,61 +529,102 @@ export async function runDiscovery(
     }
 
     const ruthless =
-      options?.ruthless ??
+      options.ruthless ??
       (await isRuthlessModeForCase(caseId, session.organizationId));
 
     const name = decryptedClaims.find((c) => c.claimType === "full_name")?.value;
     const city = decryptedClaims.find((c) => c.claimType === "city_state")?.value;
-    const baseQueries = ruthless
+    const coreQueries = ruthless
       ? buildRuthlessDiscoveryQueries(decryptedClaims)
       : buildConstellationQueries(decryptedClaims);
-    // Broker site: queries go right after the top core identity queries so the
-    // SERP query limit (maxQueries) does not silently truncate them away.
-    const queries = [
-      ...baseQueries.slice(0, 3),
-      ...(name ? brokerSiteQueries(name, city) : []),
-      ...baseQueries.slice(3),
-    ];
-    uniqueQueries = [...new Set(queries)];
+    const brokerQueries = name
+      ? buildBrokerGroupQueries({
+          name,
+          cities: claimCities(decryptedClaims),
+          brokers: listQueryBrokers(),
+          excludeBrokerIds: await brokersToSkip(caseId),
+          rotateFirst: await previousSkippedGroups(caseId, scanRunId),
+        })
+      : [];
+    const policyLimit = ruthless
+      ? RUTHLESS_POLICY.serpQueryLimit
+      : RUTHLESS_POLICY.standardSerpQueryLimit;
+    const plan = planDiscoveryQueries({
+      core: coreQueries,
+      broker: brokerQueries,
+      limit:
+        options.maxQueries !== undefined
+          ? Math.max(0, Math.min(policyLimit, Math.floor(options.maxQueries)))
+          : policyLimit,
+      brokerLimit: ruthless
+        ? RUTHLESS_POLICY.brokerGroupQueryLimit
+        : RUTHLESS_POLICY.standardBrokerGroupQueryLimit,
+    });
+    queryCount = plan.run.length;
+    brokerGroups = {
+      run: plan.run.filter((q) => q.coverage).length,
+      skipped: plan.skipped.length,
+    };
+    // Paused or archived meanwhile: stop before recording or sending any query.
+    await assertStillActive(caseId);
 
     await recordScopeUsage({
       caseId,
       organizationId: session.organizationId,
       userId: session.userId,
       action: "discovery_search",
-      claimTypes: decryptedClaims.map((c) => c.claimType),
-      detail: { mode, queryCount: uniqueQueries.length },
+      claimTypes: [...new Set(decryptedClaims.map((c) => c.claimType))],
+      detail: { mode, trigger, queryCount },
     });
 
-    for (const q of uniqueQueries) {
-      await db.insert(searchQueries).values({
-        id: uuid(),
-        scanRunId,
-        caseId,
-        queryText: q,
-        sourceType: "approved_public_search",
-        createdAt: now,
-      });
-    }
+    // The query plan (what runs, and the broker groups the budget skipped) — one write.
+    db.transaction((tx) => {
+      for (const q of plan.run) {
+        tx.insert(searchQueries)
+          .values({
+            id: uuid(),
+            scanRunId,
+            caseId,
+            queryText: q.text,
+            sourceType: "approved_public_search",
+            coverageJson: q.coverage ? JSON.stringify(q.coverage) : null,
+            createdAt: now,
+          })
+          .run();
+      }
+      for (const q of plan.skipped) {
+        tx.insert(searchQueries)
+          .values({
+            id: uuid(),
+            scanRunId,
+            caseId,
+            queryText: q.text,
+            sourceType: SKIPPED_BROKER_GROUP_SOURCE,
+            coverageJson: JSON.stringify(q.coverage),
+            createdAt: now,
+          })
+          .run();
+      }
+    });
 
-    const sensitiveTerms = decryptedClaims.map((c) => c.value);
+    // ------------------------------------------------------------ network phase (no writes)
+    const deadline = Date.now() + (options.budgetMs ?? DISCOVERY_BUDGET_MS);
+    const sensitiveTerms = matchClaims.map((c) => c.value);
     const rawUrls: string[] = [];
-    const serpEntries: Array<{ url: string; title: string; snippet: string }> = [];
+    /** canonical URL → first SERP entry for it */
+    const serpByUrl = new Map<string, { title: string; snippet: string }>();
 
     if (mode === "live" && activeConnector) {
       const serpResults = await runLiveSearch(
         session.organizationId,
         activeConnector as ConnectorType,
-        uniqueQueries,
-        {
-          maxQueries: ruthless
-            ? RUTHLESS_POLICY.serpQueryLimit
-            : RUTHLESS_POLICY.standardSerpQueryLimit,
-        },
+        plan.run.map((q) => q.text),
+        { maxQueries: plan.run.length },
       );
       for (const r of serpResults) {
         rawUrls.push(r.link);
-        serpEntries.push({ url: r.link, title: r.title, snippet: r.snippet });
+        const canonical = canonicalizeUrl(r.link);
+        if (!serpByUrl.has(canonical)) serpByUrl.set(canonical, { title: r.title, snippet: r.snippet });
       }
     } else {
       for (const source of DEMO_SOURCES) {
@@ -453,10 +637,15 @@ export async function runDiscovery(
     }
 
     const deduped = deduplicateUrls(rawUrls);
-    const unique = deduped.unique;
     duplicates = deduped.duplicates;
 
-    for (const url of unique) {
+    interface Item {
+      url: string;
+      canonical: string;
+      known: KnownUrl;
+    }
+    const items: Item[] = [];
+    for (const url of deduped.unique) {
       const canonical = canonicalizeUrl(url);
       const known = await findKnownUrl(caseId, canonical);
       // Already a verified exposure (or confirmed): nothing new to review, and no fetch.
@@ -464,29 +653,69 @@ export async function runDiscovery(
         alreadyKnown++;
         continue;
       }
+      items.push({ url, canonical, known });
+    }
 
-      // Paused or archived while this run was in flight: stop before any further fetch or write.
-      await assertStillActive(caseId);
+    // Paused or archived while this run was in flight: stop before any fetch.
+    await assertStillActive(caseId);
 
-      const serp = serpEntries.find((e) => canonicalizeUrl(e.url) === canonical);
+    /** Full visible text per item index; undefined = not fetched (budget) / failed. */
+    const fetched: Array<{ visibleText: string | null; reached: boolean }> = items.map(() => ({
+      visibleText: null,
+      reached: false,
+    }));
+    if (mode === "live") {
+      await runPool(
+        items,
+        async (item, i) => {
+          // Before each fetch: a pause/archive stops the run (no further fetch, no writes).
+          await assertStillActive(caseId);
+          fetched[i]!.reached = true;
+          try {
+            const page = await safeFetchPublicPage(item.canonical);
+            const text = extractVisibleText(page.body);
+            if (text) fetched[i]!.visibleText = text;
+          } catch {
+            // keep the SERP snippet
+          }
+        },
+        {
+          concurrency: FETCH_CONCURRENCY,
+          keyOf: (item) => hostKey(item.canonical),
+          perKeyLimit: FETCH_PER_HOST,
+          deadline,
+        },
+      );
+      notFetched = fetched.filter((f) => !f.reached).length;
+    }
+
+    const assist =
+      mode === "live"
+        ? createIdentityAiAssist({
+            deps: {
+              getAgentDefaults: () => getAgentDefaults(session.organizationId),
+              getOrgConnector: (type) => getOrgConnector(session.organizationId, type),
+            },
+            deadline,
+          })
+        : null;
+
+    const writes: PendingWrite[] = [];
+    for (const [i, item] of items.entries()) {
+      const { canonical, known } = item;
+      const serp = serpByUrl.get(canonical);
       let pageText = serp?.snippet ?? "";
       let title = serp?.title ?? "Exposure candidate";
       /** Full visible text of a successfully fetched (or demo) page; null when only a snippet is known. */
       let visibleText: string | null = null;
+      let captureMethod: "serp" | "page_fetch" | null = null;
 
       if (mode === "live") {
-        try {
-          const fetched = await safeFetchPublicPage(canonical);
-          const text = extractVisibleText(fetched.body);
-          if (text) {
-            visibleText = text;
-            pageText = text.slice(0, 2000);
-          }
-        } catch {
-          // keep SERP snippet
-        }
+        visibleText = fetched[i]!.visibleText;
+        if (visibleText !== null) pageText = visibleText.slice(0, 2000);
+        captureMethod = visibleText !== null ? "page_fetch" : "serp";
       } else {
-        const source = DEMO_SOURCES.find((s) => url.includes(s.domain))!;
+        const source = DEMO_SOURCES.find((s) => item.url.includes(s.domain))!;
         title = source.title;
         pageText = `Public profile for ${name ?? "subject"}. Location: ${city ?? "unknown"}. Contact information may be visible on this page.`;
         visibleText = pageText;
@@ -505,8 +734,8 @@ export async function runDiscovery(
           continue;
         }
       }
-      await assertStillActive(caseId);
 
+      const brokerId = brokerIdForUrl(canonical);
       const sourceType = inferSourceType(canonical, mode === "live" ? "search_engine" : "people_search");
       const excerpt = redactExcerpt(pageText, sensitiveTerms);
       const evidence = {
@@ -517,52 +746,76 @@ export async function runDiscovery(
         metadataJson: JSON.stringify({ sourceType, mode, connector: activeConnector, hashSource }),
         createdAt: now,
       };
-      const { score, corroborating, conflicting } = scoreCandidate(pageText, decryptedClaims);
+      const rule = scoreIdentityMatch(pageText, matchClaims);
+      // Live runs may consult a local model on borderline scores; demo runs are rules only.
+      const { score, corroborating, conflicting } = assist
+        ? await assist.refine(pageText, matchClaims, rule)
+        : { ...rule, corroborating: [...rule.corroborating, MATCHER_RULES] };
       const matchStatus = matchStatusForScore(score);
 
       if (known.kind === "pending") {
-        await refreshPendingCandidate(known, {
-          contentHash,
-          evidence,
-          confidenceScore: score,
-          matchStatus,
-          corroborating,
-          conflicting,
+        writes.push({
+          kind: "refresh",
+          known,
+          update: { contentHash, evidence, confidenceScore: score, matchStatus, corroborating, conflicting },
         });
         alreadyKnown++;
         continue;
       }
 
       const evidenceId = uuid();
-      await db.insert(contentEvidence).values({ ...evidence, id: evidenceId, contentHash });
-
       const candidateId = uuid();
-      await db.insert(exposureCandidates).values({
-        id: candidateId,
-        caseId,
-        scanRunId,
-        canonicalUrl: canonical,
-        sourceType,
-        title,
-        matchStatus,
-        confidenceScore: score,
-        corroboratingFactors: JSON.stringify(corroborating),
-        conflictingFactors: JSON.stringify(conflicting),
-        evidenceId,
-        createdAt: now,
+      writes.push({
+        kind: "create",
+        evidence: { ...evidence, id: evidenceId, contentHash },
+        candidate: {
+          id: candidateId,
+          caseId,
+          scanRunId,
+          canonicalUrl: canonical,
+          sourceType,
+          title,
+          matchStatus,
+          confidenceScore: score,
+          corroboratingFactors: JSON.stringify(corroborating),
+          conflictingFactors: JSON.stringify(conflicting),
+          evidenceId,
+          brokerId,
+          captureMethod,
+          createdAt: now,
+        },
       });
       created.push(candidateId);
     }
 
-    await db
-      .update(scanRuns)
-      .set({
-        status: "completed",
-        queryCount: uniqueQueries.length,
-        candidateCount: created.length,
-        completedAt: new Date().toISOString(),
-      })
-      .where(eq(scanRuns.id, scanRunId));
+    // ------------------------------------------------------------ one write
+    db.transaction((tx) => {
+      // A pause/archive that landed during the network phase wins: nothing is written.
+      const row = tx
+        .select({ status: privacyCases.status })
+        .from(privacyCases)
+        .where(eq(privacyCases.id, caseId))
+        .get();
+      if (!row) throw new Error("CASE_NOT_FOUND");
+      if (BLOCKED_CASE_STATUSES.has(row.status)) throw new Error("CASE_BLOCKED");
+      for (const w of writes) {
+        if (w.kind === "create") {
+          tx.insert(contentEvidence).values(w.evidence).run();
+          tx.insert(exposureCandidates).values(w.candidate).run();
+        } else {
+          refreshPendingCandidateSync(tx, w.known, w.update);
+        }
+      }
+      tx.update(scanRuns)
+        .set({
+          status: "completed",
+          queryCount,
+          candidateCount: created.length,
+          completedAt: new Date().toISOString(),
+        })
+        .where(eq(scanRuns.id, scanRunId))
+        .run();
+    });
 
     // Only early-stage cases move to candidate_review; a case that already has
     // confirmed exposures keeps its status (re-running discovery must not regress it).
@@ -571,6 +824,7 @@ export async function runDiscovery(
       settleRunningStatus(caseId, "candidate_review", new Date().toISOString());
     }
   } catch (error) {
+    created.length = 0;
     // Never leave the scan run stuck in "running" or the case in "discovery_running".
     await db
       .update(scanRuns)
@@ -595,12 +849,16 @@ export async function runDiscovery(
     detail: {
       scanRunId,
       mode,
-      queryCount: uniqueQueries.length,
+      trigger,
+      queryCount,
       connector: activeConnector,
       new: created.length,
       alreadyKnown,
       previouslyRejected,
       duplicatesRemoved: duplicates.length,
+      notFetched,
+      brokerGroupsRun: brokerGroups.run,
+      brokerGroupsSkipped: brokerGroups.skipped,
     },
   });
 
@@ -612,8 +870,11 @@ export async function runDiscovery(
     alreadyKnown,
     previouslyRejected,
     duplicatesRemoved: duplicates.length,
+    /** URLs the fetch budget did not reach (kept their SERP snippet). */
+    notFetched,
     connector: activeConnector,
     mode,
+    trigger,
   };
 }
 
@@ -621,7 +882,7 @@ export async function reviewCandidate(
   session: SessionPayload,
   caseId: string,
   candidateId: string,
-  decision: "confirm" | "reject",
+  decision: "confirm" | "reject" | "reset",
   reason?: string,
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
@@ -638,11 +899,79 @@ export async function reviewCandidate(
 
   const now = new Date().toISOString();
 
+  if (decision === "reset") {
+    // Undo a review (e.g. the Undo of "Confirm all above 90%"): back to pending review, never
+    // to "Not me". The exposure a confirm created is closed (status 'rejected', which a later
+    // confirm revives) only while nothing has happened to it yet; otherwise the reset is
+    // refused, since its requests and evidence must remain on record.
+    const outcome = db.transaction((tx): "reset" | "reset_exposure" | "in_use" => {
+      const exposure = tx
+        .select({ id: verifiedExposures.id, status: verifiedExposures.status })
+        .from(verifiedExposures)
+        .where(and(eq(verifiedExposures.caseId, caseId), eq(verifiedExposures.candidateId, candidateId)))
+        .get();
+      if (exposure && exposure.status !== "rejected") {
+        if (exposure.status !== "confirmed_exposure") return "in_use";
+        const started = tx
+          .select({ id: remediationCases.id })
+          .from(remediationCases)
+          .where(eq(remediationCases.exposureId, exposure.id))
+          .get();
+        if (started) return "in_use";
+        tx.update(verifiedExposures)
+          .set({ status: "rejected" })
+          .where(and(eq(verifiedExposures.id, exposure.id), eq(verifiedExposures.status, "confirmed_exposure")))
+          .run();
+      }
+      tx.update(exposureCandidates)
+        .set({ matchStatus: matchStatusForScore(candidate.confidenceScore ?? 0), reviewedAt: null })
+        .where(eq(exposureCandidates.id, candidateId))
+        .run();
+      return exposure && exposure.status !== "rejected" ? "reset_exposure" : "reset";
+    });
+    if (outcome === "in_use") throw new Error("CANDIDATE_IN_USE");
+    if (outcome === "reset_exposure") await recomputeCaseStatus(caseId, now);
+    await logAuditEvent({
+      caseId,
+      organizationId: session.organizationId,
+      userId: session.userId,
+      eventType: "candidate_review_reset",
+      summary: `Exposure candidate returned to review`,
+      detail: { candidateId, previousStatus: candidate.matchStatus, exposureClosed: outcome === "reset_exposure" },
+    });
+    return { status: "pending" as const, exposureClosed: outcome === "reset_exposure" };
+  }
+
   if (decision === "reject") {
-    await db
-      .update(exposureCandidates)
-      .set({ matchStatus: "rejected", reviewedAt: now })
-      .where(eq(exposureCandidates.id, candidateId));
+    // Rejecting a candidate that was already confirmed (e.g. the Undo of "Confirm all
+    // above 90%") also closes the exposure that confirm created, but only while nothing
+    // has happened to it yet: still 'confirmed_exposure' and no remediation started. An
+    // exposure with work on it stays, since its requests and evidence must remain on record.
+    const exposureRejected = db.transaction((tx) => {
+      tx.update(exposureCandidates)
+        .set({ matchStatus: "rejected", reviewedAt: now })
+        .where(eq(exposureCandidates.id, candidateId))
+        .run();
+      if (candidate.matchStatus !== "confirmed_match") return false;
+      const exposure = tx
+        .select({ id: verifiedExposures.id, status: verifiedExposures.status })
+        .from(verifiedExposures)
+        .where(and(eq(verifiedExposures.caseId, caseId), eq(verifiedExposures.candidateId, candidateId)))
+        .get();
+      if (!exposure || exposure.status !== "confirmed_exposure") return false;
+      const started = tx
+        .select({ id: remediationCases.id })
+        .from(remediationCases)
+        .where(eq(remediationCases.exposureId, exposure.id))
+        .get();
+      if (started) return false;
+      tx.update(verifiedExposures)
+        .set({ status: "rejected" })
+        .where(and(eq(verifiedExposures.id, exposure.id), eq(verifiedExposures.status, "confirmed_exposure")))
+        .run();
+      return true;
+    });
+    if (exposureRejected) await recomputeCaseStatus(caseId, now);
 
     await logAuditEvent({
       caseId,
@@ -650,9 +979,9 @@ export async function reviewCandidate(
       userId: session.userId,
       eventType: "candidate_rejected",
       summary: `Exposure candidate rejected`,
-      detail: { candidateId, reason },
+      detail: { candidateId, reason, exposureRejected },
     });
-    return { status: "rejected" };
+    return { status: "rejected", exposureRejected };
   }
 
   // Idempotent confirm: a candidate maps to at most one verified exposure.
@@ -663,6 +992,20 @@ export async function reviewCandidate(
     ),
   });
   if (existingExposure) {
+    if (existingExposure.status === "rejected" || candidate.matchStatus !== "confirmed_match") {
+      // Confirmed again after a reject/undo: revive the same exposure rather than duplicate it.
+      db.transaction((tx) => {
+        tx.update(exposureCandidates)
+          .set({ matchStatus: "confirmed_match", reviewedAt: now })
+          .where(eq(exposureCandidates.id, candidateId))
+          .run();
+        tx.update(verifiedExposures)
+          .set({ status: "confirmed_exposure" })
+          .where(and(eq(verifiedExposures.id, existingExposure.id), eq(verifiedExposures.status, "rejected")))
+          .run();
+      });
+      await recomputeCaseStatus(caseId, now);
+    }
     return { status: "confirmed", exposureId: existingExposure.id, alreadyConfirmed: true };
   }
 
@@ -710,7 +1053,14 @@ export async function reviewCandidate(
         ),
       )
       .get();
-    if (sameUrl) return { kind: "reused", id: sameUrl.id };
+    if (sameUrl) {
+      // A same-URL exposure closed by an earlier undo is revived, never duplicated.
+      tx.update(verifiedExposures)
+        .set({ status: "confirmed_exposure" })
+        .where(and(eq(verifiedExposures.id, sameUrl.id), eq(verifiedExposures.status, "rejected")))
+        .run();
+      return { kind: "reused", id: sameUrl.id };
+    }
     tx.insert(verifiedExposures)
       .values({
         id: exposureId,
@@ -726,6 +1076,8 @@ export async function reviewCandidate(
         recommendedRemedyFamily: classification.recommendedRemedyFamily,
         informationSummary: classification.informationSummary,
         evidenceId: candidate.evidenceId,
+        // Broker listings keep their broker id (relist re-checks, live-url follow-ups).
+        brokerId: candidate.brokerId ?? brokerIdForUrl(candidate.canonicalUrl),
         confirmedAt: now,
         createdAt: now,
       })

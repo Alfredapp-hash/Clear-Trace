@@ -78,6 +78,109 @@ describe("discovery service", () => {
     expect(rows).toHaveLength(1);
   });
 
+  describe("rejecting a confirmed candidate (Undo of a bulk confirm)", () => {
+    async function confirmedCandidate() {
+      const caseId = await freshCase(session);
+      await runDiscovery(session, caseId, "demo");
+      const [candidate] = await candidatesOf(caseId);
+      const { exposureId } = await reviewCandidate(session, caseId, candidate.id, "confirm");
+      return { caseId, candidateId: candidate.id, exposureId: exposureId! };
+    }
+    const exposure = (id: string) =>
+      db.query.verifiedExposures.findFirst({ where: eq(verifiedExposures.id, id) });
+
+    it("closes the exposure it created when nothing has happened to it yet", async () => {
+      const { caseId, candidateId, exposureId } = await confirmedCandidate();
+      expect(await reviewCandidate(session, caseId, candidateId, "reject")).toMatchObject({
+        status: "rejected",
+        exposureRejected: true,
+      });
+      expect((await exposure(exposureId))?.status).toBe("rejected");
+      const candidate = await db.query.exposureCandidates.findFirst({ where: eq(exposureCandidates.id, candidateId) });
+      expect(candidate?.matchStatus).toBe("rejected");
+    });
+
+    it("leaves an exposure that has moved on (e.g. verified) untouched", async () => {
+      const { caseId, candidateId, exposureId } = await confirmedCandidate();
+      await db.update(verifiedExposures).set({ status: "still_exposed" }).where(eq(verifiedExposures.id, exposureId));
+      expect(await reviewCandidate(session, caseId, candidateId, "reject")).toMatchObject({
+        status: "rejected",
+        exposureRejected: false,
+      });
+      expect((await exposure(exposureId))?.status).toBe("still_exposed");
+    });
+
+    it("confirming again after an undo revives the same exposure", async () => {
+      const { caseId, candidateId, exposureId } = await confirmedCandidate();
+      await reviewCandidate(session, caseId, candidateId, "reject");
+      const again = await reviewCandidate(session, caseId, candidateId, "confirm");
+      expect(again.exposureId).toBe(exposureId);
+      expect((await exposure(exposureId))?.status).toBe("confirmed_exposure");
+      const candidate = await db.query.exposureCandidates.findFirst({ where: eq(exposureCandidates.id, candidateId) });
+      expect(candidate?.matchStatus).toBe("confirmed_match");
+      const rows = await db.query.verifiedExposures.findMany({ where: eq(verifiedExposures.caseId, caseId) });
+      expect(rows).toHaveLength(1);
+    });
+  });
+
+  describe("resetting a review (Undo of a bulk confirm)", () => {
+    async function confirmedCandidate() {
+      const caseId = await freshCase(session);
+      await runDiscovery(session, caseId, "demo");
+      const [candidate] = await candidatesOf(caseId);
+      const before = candidate.matchStatus;
+      const { exposureId } = await reviewCandidate(session, caseId, candidate.id, "confirm");
+      return { caseId, candidateId: candidate.id, exposureId: exposureId!, before };
+    }
+    const candidateRow = (id: string) =>
+      db.query.exposureCandidates.findFirst({ where: eq(exposureCandidates.id, id) });
+
+    it("returns the candidate to pending review (not rejected) and closes the new exposure", async () => {
+      const { caseId, candidateId, exposureId, before } = await confirmedCandidate();
+      expect(await reviewCandidate(session, caseId, candidateId, "reset")).toMatchObject({
+        status: "pending",
+        exposureClosed: true,
+      });
+      const c = await candidateRow(candidateId);
+      expect(c?.matchStatus).not.toBe("rejected");
+      expect(c?.matchStatus).not.toBe("confirmed_match");
+      expect(c?.matchStatus).toBe(before);
+      expect(c?.reviewedAt).toBeNull();
+      const e = await db.query.verifiedExposures.findFirst({ where: eq(verifiedExposures.id, exposureId) });
+      expect(e?.status).toBe("rejected");
+
+      // Still reviewable: confirming again revives the same exposure.
+      const again = await reviewCandidate(session, caseId, candidateId, "confirm");
+      expect(again.exposureId).toBe(exposureId);
+      expect((await candidateRow(candidateId))?.matchStatus).toBe("confirmed_match");
+    });
+
+    it("a later discovery run does not treat a reset candidate as previously rejected", async () => {
+      const { caseId, candidateId } = await confirmedCandidate();
+      await reviewCandidate(session, caseId, candidateId, "reset");
+      await runDiscovery(session, caseId, "demo");
+      const rows = await candidatesOf(caseId);
+      expect(rows.some((r) => r.matchStatus === "rejected")).toBe(false);
+    });
+
+    it("refuses (CANDIDATE_IN_USE) once work started on the exposure, changing nothing", async () => {
+      const { caseId, candidateId, exposureId } = await confirmedCandidate();
+      await db.update(verifiedExposures).set({ status: "still_exposed" }).where(eq(verifiedExposures.id, exposureId));
+      await expect(reviewCandidate(session, caseId, candidateId, "reset")).rejects.toThrow("CANDIDATE_IN_USE");
+      expect((await candidateRow(candidateId))?.matchStatus).toBe("confirmed_match");
+    });
+
+    it("a rejected candidate can be confirmed again (\"This is me after all\")", async () => {
+      const caseId = await freshCase(session);
+      await runDiscovery(session, caseId, "demo");
+      const [candidate] = await candidatesOf(caseId);
+      await reviewCandidate(session, caseId, candidate.id, "reject");
+      const res = await reviewCandidate(session, caseId, candidate.id, "confirm");
+      expect(res.exposureId).toBeTruthy();
+      expect((await candidateRow(candidate.id))?.matchStatus).toBe("confirmed_match");
+    });
+  });
+
   it("re-running discovery does not regress a confirmed_exposure case", async () => {
     const { caseId } = await seedWorkflowCase(session, { status: "confirmed_exposure", scanMode: "demo" });
     await consent(caseId);

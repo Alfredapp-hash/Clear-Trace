@@ -3,7 +3,19 @@ export type SlaDeadlineType =
   | "initial_response"
   | "removal_verification"
   | "follow_up"
-  | "broker_opt_out";
+  | "broker_opt_out"
+  /** California DROP: registered brokers must have retrieved the request (see statutory/drop.ts). */
+  | "statutory_first_pull"
+  /** California DROP: registered brokers must have processed (deleted) the request. */
+  | "statutory_deletion_due";
+
+/**
+ * Fixed statutory windows (Delete Act / CPPA DROP regulations). They do not depend on the
+ * org's SLA tier: brokers retrieve DROP requests at least every 45 days and must process
+ * each request within 45 days of retrieving it. See statutory/drop.ts for the anchor rule.
+ */
+export const STATUTORY_FIRST_PULL_DAYS = 45;
+export const STATUTORY_DELETION_DAYS = 90;
 
 export interface SlaPolicy {
   tier: SlaTier;
@@ -48,6 +60,10 @@ export function daysForDeadlineType(
     case "follow_up":
     case "broker_opt_out":
       return policy.followUpDays;
+    case "statutory_first_pull":
+      return STATUTORY_FIRST_PULL_DAYS;
+    case "statutory_deletion_due":
+      return STATUTORY_DELETION_DAYS;
     default:
       return policy.responseDays;
   }

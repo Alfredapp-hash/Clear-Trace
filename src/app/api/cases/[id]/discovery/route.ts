@@ -80,8 +80,8 @@ export async function PATCH(
     reason?: string;
   };
 
-  if (!candidateId || (decision !== "confirm" && decision !== "reject")) {
-    return jsonError("candidateId and decision (confirm|reject) are required");
+  if (!candidateId || (decision !== "confirm" && decision !== "reject" && decision !== "reset")) {
+    return jsonError("candidateId and decision (confirm|reject|reset) are required");
   }
 
   try {

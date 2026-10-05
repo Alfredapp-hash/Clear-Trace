@@ -87,4 +87,11 @@ export interface GuideBuildInput {
    * removal). Never inferred from case status; undefined/false keeps the checklist open.
    */
   certificateIssuable?: boolean;
+  /**
+   * USPS state code of the case (privacy_cases.jurisdiction_state, detected from claims
+   * unless the user overrode it). "CA" adds the California DROP self-filing step.
+   */
+  jurisdictionState?: string | null;
+  /** True once the user recorded that they filed their own DROP request. */
+  dropFiled?: boolean;
 }

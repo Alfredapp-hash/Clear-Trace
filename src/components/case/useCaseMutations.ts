@@ -1,9 +1,10 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useCallback, useState, useTransition } from "react";
+import { useCallback, useEffect, useReducer, useRef, useState, useTransition } from "react";
 import { callApi, type ApiResult } from "@/lib/ui/call-api";
 import { formatDate } from "@/lib/ux/plain-status";
+import type { InlineResultView, ToastTone, ToastView } from "../ui";
 
 export type Json = Record<string, unknown>;
 
@@ -67,6 +68,15 @@ export function friendlyApiError(
     return { text };
   }
 
+  if (res.status === 400 && code === "BROKER_DOMAIN_MISMATCH") {
+    return {
+      text:
+        error && !/^BROKER_DOMAIN_MISMATCH/.test(error)
+          ? error
+          : "That link is not on this broker's website. Paste the address of your profile page on the broker's own site.",
+    };
+  }
+
   if (res.status === 403 && (code === "NOT_CONSENTED" || /consent/i.test(error))) {
     return { text: "Record your consent for this case before ClearTrace searches or fetches pages." };
   }
@@ -82,7 +92,141 @@ export interface MutateOptions {
   onError?: (res: Extract<ApiResult<Json>, { ok: false }>) => WorkflowError | undefined;
   /** Skip router.refresh() (e.g. a download that changes nothing). */
   skipRefresh?: boolean;
+  /** Record the row result but raise no toast (batch items report one summary instead). */
+  silent?: boolean;
 }
+
+/* ----------------------------- per-row results ----------------------------- */
+
+/** Last result per mutation key ("opt-<id>", "review-<id>", "match-<id>", …). */
+export type RowResults = Record<string, InlineResultView>;
+
+export type RowResultAction =
+  | { type: "start"; key: string }
+  | { type: "saved"; key: string; at: number }
+  | { type: "failed"; key: string; text: string; at: number }
+  | { type: "clear"; key: string };
+
+/** Pure reducer for per-row results; exported for tests. */
+export function rowResultsReducer(state: RowResults, action: RowResultAction): RowResults {
+  switch (action.type) {
+    case "start":
+    case "clear": {
+      if (!(action.key in state)) return state;
+      const next = { ...state };
+      delete next[action.key];
+      return next;
+    }
+    case "saved":
+      return { ...state, [action.key]: { kind: "saved", at: action.at } };
+    case "failed":
+      return { ...state, [action.key]: { kind: "error", text: action.text, at: action.at } };
+  }
+}
+
+/** The most recent result among several keys of one row (e.g. a draft's send / mark-sent). */
+export function latestResult(
+  results: RowResults,
+  keys: ReadonlyArray<string>,
+): { key: string; result: InlineResultView } | undefined {
+  let best: { key: string; result: InlineResultView } | undefined;
+  for (const key of keys) {
+    const result = results[key];
+    if (result && (!best || result.at >= best.result.at)) best = { key, result };
+  }
+  return best;
+}
+
+/* --------------------------------- toasts ---------------------------------- */
+
+export type ToastInput = Omit<ToastView, "id"> & {
+  /** Auto-dismiss after this many ms. Errors default to staying until dismissed. */
+  ttl?: number;
+};
+
+export type ToastAction =
+  | { type: "push"; toast: ToastView }
+  | { type: "dismiss"; id: number };
+
+/** Most toasts kept at once; the oldest goes first. */
+export const MAX_TOASTS = 3;
+/** How long a success toast (and its Undo) stays up. */
+export const TOAST_TTL_MS = 6000;
+export const UNDO_TTL_MS = 10000;
+
+export function toastsReducer(state: ToastView[], action: ToastAction): ToastView[] {
+  if (action.type === "dismiss") return state.filter((t) => t.id !== action.id);
+  // Same text and tone replaces the older copy instead of stacking duplicates.
+  const rest = state.filter((t) => !(t.text === action.toast.text && t.tone === action.toast.tone));
+  return [...rest, action.toast].slice(-MAX_TOASTS);
+}
+
+/** Toast queue with timers. Errors stay until dismissed or pushed out by newer toasts. */
+export function useToasts() {
+  const [toasts, dispatch] = useReducer(toastsReducer, []);
+  const nextId = useRef(1);
+  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+
+  useEffect(() => {
+    const pending = timers.current;
+    return () => {
+      for (const t of pending.values()) clearTimeout(t);
+      pending.clear();
+    };
+  }, []);
+
+  const dismissToast = useCallback((id: number) => {
+    const timer = timers.current.get(id);
+    if (timer) clearTimeout(timer);
+    timers.current.delete(id);
+    dispatch({ type: "dismiss", id });
+  }, []);
+
+  const pushToast = useCallback(
+    (input: ToastInput): number => {
+      const { ttl, ...view } = input;
+      const id = nextId.current++;
+      dispatch({ type: "push", toast: { ...view, id } });
+      const life = ttl ?? (view.tone === "error" ? 0 : view.action ? UNDO_TTL_MS : TOAST_TTL_MS);
+      if (life > 0) timers.current.set(id, setTimeout(() => dismissToast(id), life));
+      return id;
+    },
+    [dismissToast],
+  );
+
+  return { toasts, pushToast, dismissToast };
+}
+
+/* ------------------------------ batch helpers ------------------------------ */
+
+/**
+ * Run `worker` over `items` with at most `concurrency` in flight; results keep input
+ * order. A worker that throws counts as `false`. Pure apart from the worker; exported
+ * for tests.
+ */
+export async function runPool<T, R>(
+  items: ReadonlyArray<T>,
+  concurrency: number,
+  worker: (item: T) => Promise<R>,
+): Promise<Array<R | false>> {
+  const results: Array<R | false> = new Array(items.length);
+  let next = 0;
+  async function lane() {
+    while (next < items.length) {
+      const i = next++;
+      try {
+        results[i] = await worker(items[i]);
+      } catch {
+        results[i] = false;
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.max(1, Math.min(concurrency, items.length)) }, lane));
+  return results;
+}
+
+/** Batch actions from the client never run more than this many requests at once. */
+export const BATCH_CONCURRENCY = 3;
 
 /**
  * Shared mutation runner for the case page.
@@ -90,21 +234,39 @@ export interface MutateOptions {
  * Server data arrives as props from cases/[id]/page.tsx; after a successful
  * mutation we only call router.refresh() (inside a transition) and the new
  * props re-render the phases. No client-side re-fetching.
+ *
+ * Feedback: every mutation records a per-row result under its key ("Saved" or the
+ * error with Retry) and messages/errors go to the fixed toast region, so a failure at
+ * the bottom of a long case is visible and announced without scrolling.
  */
 export function useCaseMutations() {
   const router = useRouter();
   const [requestKey, setRequestKey] = useState("");
   const [refreshKey, setRefreshKey] = useState("");
   const [isRefreshing, startTransition] = useTransition();
-  const [error, setErrorState] = useState<WorkflowError | null>(null);
-  const [message, setMessage] = useState("");
+  const [results, dispatchResult] = useReducer(rowResultsReducer, {});
+  /** What to re-run for Retry, per row key. */
+  const retries = useRef(new Map<string, { url: string; body: unknown; opts: MutateOptions }>());
+  const { toasts, pushToast, dismissToast } = useToasts();
 
   const loading = requestKey || (isRefreshing ? refreshKey : "");
   const busy = loading !== "";
 
-  const setError = useCallback((value: WorkflowError | string | null) => {
-    setErrorState(typeof value === "string" ? (value ? { text: value } : null) : value);
-  }, []);
+  const toast = useCallback(
+    (tone: ToastTone, text: string, extra: Partial<ToastInput> = {}) => pushToast({ tone, text, ...extra }),
+    [pushToast],
+  );
+  const setMessage = useCallback((text: string) => {
+    if (text) toast("success", text);
+  }, [toast]);
+  const setError = useCallback(
+    (value: WorkflowError | string | null) => {
+      if (!value) return;
+      const err = typeof value === "string" ? { text: value } : value;
+      toast("error", err.text, { billing: err.billing });
+    },
+    [toast],
+  );
 
   const refresh = useCallback(
     (key: string) => {
@@ -116,28 +278,78 @@ export function useCaseMutations() {
     [router],
   );
 
+  /** One API call with row-result bookkeeping; does not touch the loading key. */
+  const request = useCallback(
+    async (key: string, url: string, body: unknown, opts: MutateOptions): Promise<boolean> => {
+      dispatchResult({ type: "start", key });
+      const res = await callApi<Json>(url, {
+        method: opts.method ?? "POST",
+        body,
+        errorMessage: opts.errorMessage,
+      });
+      if (!res.ok) {
+        const err = opts.onError?.(res) ?? friendlyApiError(res);
+        dispatchResult({ type: "failed", key, text: err.text, at: Date.now() });
+        if (!opts.silent) toast("error", err.text, { billing: err.billing });
+        return false;
+      }
+      dispatchResult({ type: "saved", key, at: Date.now() });
+      opts.onSuccess?.(res.data);
+      return true;
+    },
+    [toast],
+  );
+
   const mutate = useCallback(
     async (key: string, url: string, body: unknown, opts: MutateOptions): Promise<boolean> => {
+      retries.current.set(key, { url, body, opts });
       setRequestKey(key);
-      setErrorState(null);
       try {
-        const res = await callApi<Json>(url, {
-          method: opts.method ?? "POST",
-          body,
-          errorMessage: opts.errorMessage,
-        });
-        if (!res.ok) {
-          setErrorState(opts.onError?.(res) ?? friendlyApiError(res));
-          return false;
-        }
-        opts.onSuccess?.(res.data);
-        if (!opts.skipRefresh) refresh(key);
-        return true;
+        const ok = await request(key, url, body, opts);
+        if (ok && !opts.skipRefresh) refresh(key);
+        return ok;
       } finally {
         setRequestKey("");
       }
     },
-    [refresh],
+    [refresh, request],
+  );
+
+  /**
+   * Run one request per item at BATCH_CONCURRENCY, under a single loading key, then
+   * refresh once. Each item keeps its own row result (and Retry).
+   */
+  const batch = useCallback(
+    async <T,>(
+      batchKey: string,
+      items: ReadonlyArray<T>,
+      each: (item: T) => { key: string; url: string; body: unknown; opts: MutateOptions },
+    ): Promise<{ ok: T[]; failed: T[] }> => {
+      setRequestKey(batchKey);
+      try {
+        const outcomes = await runPool(items, BATCH_CONCURRENCY, (item) => {
+          const r = each(item);
+          const opts = { ...r.opts, silent: true, skipRefresh: true };
+          retries.current.set(r.key, { url: r.url, body: r.body, opts: r.opts });
+          return request(r.key, r.url, r.body, opts);
+        });
+        const ok = items.filter((_, i) => outcomes[i] === true);
+        const failed = items.filter((_, i) => outcomes[i] !== true);
+        if (ok.length) refresh(batchKey);
+        return { ok, failed };
+      } finally {
+        setRequestKey("");
+      }
+    },
+    [refresh, request],
+  );
+
+  const retry = useCallback(
+    (key: string) => {
+      const r = retries.current.get(key);
+      if (r) void mutate(key, r.url, r.body, { ...r.opts, silent: false });
+    },
+    [mutate],
   );
 
   /** Run a GET (no refresh). Used for downloads such as the certificate. */
@@ -148,11 +360,10 @@ export function useCaseMutations() {
       opts: Pick<MutateOptions, "errorMessage" | "onError">,
     ): Promise<Json | null> => {
       setRequestKey(key);
-      setErrorState(null);
       try {
         const res = await callApi<Json>(url, { errorMessage: opts.errorMessage });
         if (!res.ok) {
-          setErrorState(opts.onError?.(res) ?? friendlyApiError(res));
+          setError(opts.onError?.(res) ?? friendlyApiError(res));
           return null;
         }
         return res.data;
@@ -160,28 +371,35 @@ export function useCaseMutations() {
         setRequestKey("");
       }
     },
-    [],
+    [setError],
   );
 
-  const copyText = useCallback(async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      setMessage("Copied to clipboard");
-    } catch {
-      setErrorState({ text: "Clipboard unavailable — select and copy the text manually" });
-    }
-  }, []);
+  const copyText = useCallback(
+    async (text: string) => {
+      try {
+        await navigator.clipboard.writeText(text);
+        setMessage("Copied to clipboard");
+      } catch {
+        setError("Clipboard unavailable — select and copy the text manually");
+      }
+    },
+    [setError, setMessage],
+  );
 
   return {
     mutate,
+    batch,
     fetchJson,
     refresh,
     copyText,
+    retry,
+    results,
+    toasts,
+    pushToast,
+    dismissToast,
     loading,
     busy,
-    error,
     setError,
-    message,
     setMessage,
   };
 }
@@ -195,6 +413,44 @@ export function discoveryRequestBody(discoveryReady: boolean): { mode: "live" | 
 
 const num = (v: unknown) => (typeof v === "number" ? v : 0);
 const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+
+/** Row keys shared by the actions below and the rows that show their results. */
+export const optOutKey = (dispatchId: string) => `opt-${dispatchId}`;
+export const matchKey = (matchId: string) => `match-${matchId}`;
+export const foundKey = (brokerId: string) => `found-${brokerId}`;
+
+/** "Approved 10 of 12 opt-outs. 2 failed — use Retry on those rows." */
+export function batchSummary(verb: string, ok: number, total: number, one: string, many = `${one}s`): string {
+  if (ok === total) return `${verb} ${count(total, one, many)}.`;
+  const failed = total - ok;
+  return `${verb} ${ok} of ${count(total, one, many)}. ${failed} failed — use Retry on ${failed === 1 ? "that row" : "those rows"}.`;
+}
+
+/**
+ * Result of "Prepare opt-outs". A zero result always says why: brokers that already have an
+ * opt-out, CPPA-registry brokers (never queued automatically) and, for the default
+ * seen-only queue, that nothing is marked found yet, with the proactive alternative.
+ */
+export function queueResultMessage(
+  d: { created?: unknown; skippedExisting?: unknown; skippedRegistry?: unknown },
+  includeUnchecked = false,
+): string {
+  const created = num(d.created);
+  const existing = num(d.skippedExisting);
+  const registry = num(d.skippedRegistry);
+  const notes = [
+    existing ? `${count(existing, "broker")} already ${existing === 1 ? "has" : "have"} an opt-out` : "",
+    registry ? `${count(registry, "registry-only broker")} skipped — California residents can use DROP for those` : "",
+  ].filter(Boolean);
+  const tail = notes.length ? ` (${notes.join("; ")}).` : ".";
+  if (created > 0) return `Prepared ${count(created, "opt-out")}${tail}`;
+  if (includeUnchecked) return `No new opt-outs to prepare${tail}`;
+  if (notes.length) return `No new opt-outs to prepare${tail}`;
+  return (
+    "No new opt-outs: no broker is confirmed to list you yet. Mark the listings you find in the " +
+    'checklist below, or use "Prepare opt-outs for all unchecked brokers" to opt out proactively.'
+  );
+}
 
 /**
  * Every case-page action, named, built on useCaseMutations. Phase components
@@ -263,12 +519,89 @@ export function useCaseActions(caseId: string) {
           `Checked ${count(num(d.brokerCount), "broker")}: ${num(d.matchCount)} may list you. These are possible listings, not confirmed matches.`,
         ),
       ),
-    queueOptOuts: () =>
-      post("opt-out-queue", "opt-out-dispatch", { action: "queue" }, "Could not prepare opt-outs", (d) =>
-        setMessage(`Prepared ${count(num(d.created), "opt-out")}.`),
+    /** Seen / found brokers only; `includeUnchecked` adds unchecked brokers (proactive). */
+    queueOptOuts: (includeUnchecked = false) =>
+      post(
+        includeUnchecked ? "opt-out-queue-all" : "opt-out-queue",
+        "opt-out-dispatch",
+        includeUnchecked ? { action: "queue", includeUnchecked: true } : { action: "queue" },
+        "Could not prepare opt-outs",
+        (d) => setMessage(queueResultMessage(d, includeUnchecked)),
       ),
     optOutAction: (dispatchId: string, action: "approve" | "submit" | "complete") =>
-      post(`opt-${action}-${dispatchId}`, "opt-out-dispatch", { action, dispatchId }, "Could not update this opt-out"),
+      post(optOutKey(dispatchId), "opt-out-dispatch", { action, dispatchId }, "Could not update this opt-out"),
+    /** Approve several opt-outs (the per-dispatch API, BATCH_CONCURRENCY at a time). */
+    approveAll: async (dispatchIds: string[]) => {
+      if (dispatchIds.length === 0) return;
+      const { ok, failed } = await m.batch("approve-all", dispatchIds, (dispatchId) => ({
+        key: optOutKey(dispatchId),
+        url: `${base}/opt-out-dispatch`,
+        body: { action: "approve", dispatchId },
+        opts: { errorMessage: "Could not approve this opt-out" },
+      }));
+      const text = batchSummary("Approved", ok.length, dispatchIds.length, "opt-out");
+      if (failed.length) m.setError(text);
+      else setMessage(text);
+    },
+    /**
+     * Confirm several possible matches, then offer Undo for the toast's lifetime. Undo puts
+     * the same matches back into review (decision "reset"); it never marks them "Not me".
+     */
+    confirmMany: async (candidateIds: string[]) => {
+      if (candidateIds.length === 0) return;
+      const review = (decision: "confirm" | "reset") => (candidateId: string) => ({
+        key: `review-${candidateId}`,
+        url: `${base}/discovery`,
+        body: { candidateId, decision },
+        opts: {
+          method: "PATCH" as const,
+          errorMessage: decision === "confirm" ? "Could not confirm this match" : "Could not undo this match",
+        },
+      });
+      const { ok, failed } = await m.batch("confirm-many", candidateIds, review("confirm"));
+      const text = batchSummary("Confirmed", ok.length, candidateIds.length, "match", "matches");
+      if (ok.length === 0) {
+        m.setError(text);
+        return;
+      }
+      let toastId = 0;
+      toastId = m.pushToast({
+        tone: failed.length ? "error" : "success",
+        text,
+        ttl: UNDO_TTL_MS,
+        action: {
+          label: "Undo",
+          onClick: () => {
+            m.dismissToast(toastId);
+            void m.batch("confirm-undo", ok, review("reset")).then((r) =>
+              r.failed.length
+                ? m.setError(batchSummary("Undid", r.ok.length, ok.length, "match", "matches"))
+                : setMessage(`Undone: ${count(r.ok.length, "match", "matches")} back to review.`),
+            );
+          },
+        },
+      });
+    },
+    /** Checklist: "Not listed" for one broker (survives reloads; audited on the server). */
+    markNotListed: (matchId: string) =>
+      mutate(matchKey(matchId), `${base}/broker-sweep/matches/${encodeURIComponent(matchId)}`, { outcome: "not_found" }, {
+        method: "PATCH",
+        errorMessage: "Could not save that this broker does not list you",
+      }),
+    /** Checklist: undo "Not listed" (back to "To check"). */
+    clearCheck: (matchId: string) =>
+      mutate(matchKey(matchId), `${base}/broker-sweep/matches/${encodeURIComponent(matchId)}`, { outcome: "to_check" }, {
+        method: "PATCH",
+        errorMessage: "Could not undo that check",
+      }),
+    /** Checklist: "I found my listing" — adds the pasted profile page tied to that broker. */
+    foundListing: (brokerId: string, url: string) =>
+      post(foundKey(brokerId), "live-url", { url, brokerId }, "Could not add that page", (d) => {
+        if (d.outcome === "already_known") setMessage("That page is already in this case.");
+        else if (d.captureMethod === "user_reported")
+          setMessage("Listing saved. The broker blocked an automatic copy, so review it from your own browser.");
+        else setMessage("Listing added — review it in step 1.");
+      }),
     findContact: (exposureId: string) =>
       post(`resolve-${exposureId}`, "remediation", { action: "resolve_controller", exposureId }, "Could not find who to contact"),
     /** Look up contacts for several pages, then refresh once. Stops at the first failure. */
@@ -286,12 +619,24 @@ export function useCaseActions(caseId: string) {
       post("draft", "remediation", { action: "create_draft", remediationCaseId, templateId }, "Could not write the request"),
     generateAll: (remediationCaseId: string) =>
       post("all-drafts", "remediation", { action: "create_all_variants", remediationCaseId }, "Could not write the request versions"),
-    saveDraft: (d: { id: string; subject: string; body: string }) =>
-      post("save-draft", "remediation", { action: "update_draft", draftId: d.id, subject: d.subject, body: d.body }, "Could not save — your edits are still here"),
+    saveDraft: (d: { id: string; subject: string; body: string; recipient?: string }) =>
+      post(
+        "save-draft",
+        "remediation",
+        {
+          action: "update_draft",
+          draftId: d.id,
+          subject: d.subject,
+          body: d.body,
+          // Only sent when the user entered one; an empty field keeps the stored recipient.
+          ...(d.recipient?.trim() ? { recipient: d.recipient.trim() } : {}),
+        },
+        "Could not save — your edits are still here",
+      ),
     recordSent: (draftId: string) =>
       post(`sent-${draftId}`, "remediation", { action: "record_sent", draftId, sentVia: "manual_copy" }, "Could not mark the request as sent"),
     sendViaConnector: (draftId: string) =>
-      post(`send-${draftId}`, "remediation", { action: "send_email", draftId, recordAfterSend: true }, "Email send failed — check Settings", say("Email sent from your connected account")),
+      post(`send-${draftId}`, "remediation", { action: "send_email", draftId }, "Email send failed — check Settings", say("Email sent from your connected account")),
     pushGmail: (draftId: string) =>
       post(`gmail-${draftId}`, "remediation", { action: "gmail_draft", draftId }, "Gmail draft failed — connect Gmail in Settings", say("Saved as a draft in your Gmail")),
     followUp: (remediationCaseId: string) =>

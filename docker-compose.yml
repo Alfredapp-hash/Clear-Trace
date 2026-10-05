@@ -11,6 +11,12 @@
 # Registration: REGISTRATION_MODE defaults to first_user (self-signup closes once the
 # first account exists). Set REGISTRATION_MODE=open to allow anyone who can reach the
 # app to sign up.
+#
+# Backups (docs/self-hosting/backup-restore.md): set BACKUP_PASSPHRASE in .env, then either
+#   docker compose exec cleartrace node scripts/backup.mjs      (one-off)
+#   docker compose --profile backup up -d                       (daily, off by default)
+# Backups land in the volume at /app/data/backups; copy them offsite (restic/rclone) and
+# escrow ENCRYPTION_KEY separately — a backup is useless without it.
 
 services:
   cleartrace:
@@ -35,6 +41,14 @@ services:
       TRUST_PROXY: ${TRUST_PROXY:-}
       # Ollama on the Docker host is reachable as host.docker.internal (see extra_hosts).
       OLLAMA_ALLOWED_ORIGINS: ${OLLAMA_ALLOWED_ORIGINS:-http://localhost:11434,http://127.0.0.1:11434,http://host.docker.internal:11434}
+      # Structured JSON logs: debug | info (default) | warn | error | silent.
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      # Used by `docker compose exec cleartrace node scripts/backup.mjs` / restore.mjs, and to
+      # encrypt pre-migrate snapshots at startup (pre-migrate-v<N>-<ts>.db.enc).
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+      # Days to keep pre-migrate / pre-restore snapshots (the worker deletes older ones).
+      BACKUP_SNAPSHOT_RETENTION_DAYS: ${BACKUP_SNAPSHOT_RETENTION_DAYS:-30}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -73,6 +87,43 @@ services:
             last_digest="$$week"
           fi
           sleep 3600
+        done
+    restart: unless-stopped
+
+  # Optional scheduled backups (profile "backup", off by default):
+  #   docker compose --profile backup up -d
+  # Every BACKUP_INTERVAL_HOURS (default 24) writes an AES-256-GCM encrypted
+  # /app/data/backups/cleartrace-<ISO>.db.enc (key from scrypt(BACKUP_PASSPHRASE)) and keeps
+  # the newest BACKUP_KEEP (default 7). SQLite's online backup is safe while the app runs.
+  backup:
+    build: .
+    profiles: ["backup"]
+    depends_on:
+      cleartrace:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: /app/data/cleartrace.db
+      BACKUP_PASSPHRASE: ${BACKUP_PASSPHRASE:-}
+      BACKUP_KEEP: ${BACKUP_KEEP:-7}
+      BACKUP_SNAPSHOT_RETENTION_DAYS: ${BACKUP_SNAPSHOT_RETENTION_DAYS:-30}
+      BACKUP_INTERVAL_HOURS: ${BACKUP_INTERVAL_HOURS:-24}
+    volumes:
+      - cleartrace-data:/app/data
+    # The image's healthcheck probes the web server, which this container does not run.
+    healthcheck:
+      disable: true
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        if [ -z "$$BACKUP_PASSPHRASE" ]; then
+          echo "backup: set BACKUP_PASSPHRASE in .env (see docs/self-hosting/backup-restore.md)" >&2
+          sleep 3600 # do not restart-loop; retried hourly until configured
+          exit 1
+        fi
+        hours="$${BACKUP_INTERVAL_HOURS:-24}"
+        while true; do
+          node scripts/backup.mjs || echo "$$(date -u +%FT%TZ) backup FAILED" >&2
+          sleep $$((hours * 3600))
         done
     restart: unless-stopped
 

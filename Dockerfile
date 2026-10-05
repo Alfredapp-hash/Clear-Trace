@@ -41,8 +41,13 @@ COPY --from=builder --chown=cleartrace:cleartrace /app/.next/static ./.next/stat
 COPY --from=builder --chown=cleartrace:cleartrace /app/skills ./skills
 COPY --from=builder --chown=cleartrace:cleartrace /app/agent-builder/skillpack ./agent-builder/skillpack
 COPY --from=builder --chown=cleartrace:cleartrace /app/agent-builder/mcp-server ./agent-builder/mcp-server
+# Operator tools (docs/self-hosting/backup-restore.md): encrypted backup, guarded restore and
+# ENCRYPTION_KEY check. Plain ESM on Node built-ins + better-sqlite3 (already in standalone).
+# restore.mjs reads "cleartrace.schemaVersion" from package.json.
+COPY --from=builder --chown=cleartrace:cleartrace /app/scripts/backup.mjs /app/scripts/restore.mjs /app/scripts/check-key.mjs ./scripts/
+COPY --from=builder --chown=cleartrace:cleartrace /app/package.json ./package.json
 
-RUN mkdir -p /app/data && chown -R cleartrace:cleartrace /app/data
+RUN mkdir -p /app/data/backups && chown -R cleartrace:cleartrace /app/data && chmod 700 /app/data/backups
 VOLUME ["/app/data"]
 
 USER cleartrace

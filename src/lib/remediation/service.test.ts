@@ -468,4 +468,204 @@ describe("remediation service guards", () => {
       expect(data.remediations[0]?.followUp).toBeNull();
     });
   });
+
+  describe("draft variants and superseding (create_all_variants)", () => {
+    async function variantsCase() {
+      const { caseId, exposureIds } = await seedWorkflowCase(session, {
+        status: "confirmed_exposure",
+        exposureUrls: [`https://www.spokeo.com/Variant-${uuid().slice(0, 6)}`],
+      });
+      const resolved = await resolveControllerForExposure(session, caseId, exposureIds[0]!);
+      const variants = await createAllDraftVariants(session, caseId, resolved.remediationId);
+      return { caseId, remediationId: resolved.remediationId, ids: variants.drafts.map((d) => d.draftId) };
+    }
+
+    async function statusOf(draftId: string) {
+      return (await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) }))?.status;
+    }
+
+    it("sending one variant supersedes its siblings; sending another is 409 REMEDIATION_ALREADY_SENT", async () => {
+      const { caseId, ids } = await variantsCase();
+      expect(ids.length).toBeGreaterThanOrEqual(3);
+      const [first, second, ...rest] = ids;
+
+      await sendDraftViaConnector(session, caseId, first!);
+      await expect(sendDraftViaConnector(session, caseId, second!)).rejects.toThrow(
+        "REMEDIATION_ALREADY_SENT",
+      );
+      await expect(approveAndRecordSent(session, caseId, second!, "manual_copy")).rejects.toThrow(
+        "REMEDIATION_ALREADY_SENT",
+      );
+
+      expect(await statusOf(first!)).toBe("approved_sent");
+      for (const id of [second!, ...rest]) expect(await statusOf(id)).toBe("superseded");
+      expect(mockedSend).toHaveBeenCalledTimes(1);
+      const outbound = await db.query.outboundMessages.findMany({
+        where: eq(outboundMessages.caseId, caseId),
+      });
+      expect(outbound).toHaveLength(1);
+    });
+
+    it("after a request was sent, new initial drafts are refused (409) and none is left awaiting", async () => {
+      const { caseId, ids, remediationId } = await variantsCase();
+      await sendDraftViaConnector(session, caseId, ids[0]!);
+
+      await expect(createAllDraftVariants(session, caseId, remediationId)).rejects.toThrow(
+        "REMEDIATION_ALREADY_SENT",
+      );
+      await expect(
+        createRemovalDraft(session, caseId, remediationId, "privacy-suppression"),
+      ).rejects.toThrow("REMEDIATION_ALREADY_SENT");
+      await expect(createRemovalDraft(session, caseId, remediationId)).rejects.toThrow(
+        "REMEDIATION_ALREADY_SENT",
+      );
+
+      const drafts = await db.query.messageDrafts.findMany({
+        where: eq(messageDrafts.remediationCaseId, remediationId),
+      });
+      expect(drafts.filter((d) => d.status === "awaiting_user_approval")).toHaveLength(0);
+      expect(drafts).toHaveLength(ids.length);
+    });
+
+    it("manual record of one variant supersedes the others", async () => {
+      const { caseId, ids } = await variantsCase();
+      await approveAndRecordSent(session, caseId, ids[1]!, "manual_copy");
+      expect(await statusOf(ids[1]!)).toBe("approved_sent");
+      for (const id of ids.filter((_, i) => i !== 1)) expect(await statusOf(id)).toBe("superseded");
+    });
+
+    it("two variants sent at the same moment only send once", async () => {
+      const { caseId, ids } = await variantsCase();
+      const results = await Promise.allSettled([
+        sendDraftViaConnector(session, caseId, ids[0]!),
+        sendDraftViaConnector(session, caseId, ids[1]!),
+      ]);
+      expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+      expect(mockedSend).toHaveBeenCalledTimes(1);
+    });
+
+    it("a failed send supersedes nothing, so another variant can still be sent", async () => {
+      const { caseId, ids } = await variantsCase();
+      mockedSend.mockRejectedValueOnce(new Error("SMTP_DOWN"));
+      await expect(sendDraftViaConnector(session, caseId, ids[0]!)).rejects.toThrow("SMTP_DOWN");
+      for (const id of ids) expect(await statusOf(id)).toBe("awaiting_user_approval");
+      await sendDraftViaConnector(session, caseId, ids[1]!);
+      expect(await statusOf(ids[0]!)).toBe("superseded");
+    });
+
+    it("follow-up drafts are not superseded by an initial send and may still be sent", async () => {
+      const { caseId, ids, remediationId } = await variantsCase();
+      await approveAndRecordSent(session, caseId, ids[0]!, "manual_copy");
+      const followUpId = uuid();
+      const now = new Date().toISOString();
+      await db.insert(messageDrafts).values({
+        id: followUpId,
+        caseId,
+        remediationCaseId: remediationId,
+        subject: "Follow-up",
+        recipient: "privacy@spokeo.com",
+        body: "Following up",
+        status: "awaiting_user_approval",
+        isFollowUp: true,
+        createdAt: now,
+        updatedAt: now,
+      });
+      await expect(
+        approveAndRecordSent(session, caseId, followUpId, "manual_copy"),
+      ).resolves.toMatchObject({ ok: true, alreadyRecorded: false });
+    });
+  });
+
+  describe("drafts with no verified contact (manual_research)", () => {
+    async function seedNoRecipientDraft() {
+      const seeded = await seedDraft(session);
+      await db.update(messageDrafts).set({ recipient: "" }).where(eq(messageDrafts.id, seeded.draftId));
+      return seeded;
+    }
+
+    it("refuses connector send and Gmail push until a recipient is entered", async () => {
+      const { caseId, draftId } = await seedNoRecipientDraft();
+      await expect(sendDraftViaConnector(session, caseId, draftId)).rejects.toThrow("DRAFT_NO_RECIPIENT");
+      await expect(pushDraftToGmail(session, caseId, draftId)).rejects.toThrow("DRAFT_NO_RECIPIENT");
+      expect(mockedSend).not.toHaveBeenCalled();
+      const row = await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) });
+      expect(row?.status).toBe("awaiting_user_approval");
+    });
+
+    it("updateDraft sets a recipient the user found, after which the send goes through", async () => {
+      const { caseId, draftId } = await seedNoRecipientDraft();
+      await updateDraft(session, caseId, draftId, "Subject", "Body", "  privacy@broker.example ");
+      const row = await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) });
+      expect(row?.recipient).toBe("privacy@broker.example");
+      await sendDraftViaConnector(session, caseId, draftId);
+      expect(mockedSend).toHaveBeenCalledWith(
+        session.organizationId,
+        expect.objectContaining({ to: "privacy@broker.example" }),
+      );
+    });
+
+    it("rejects a recipient that is neither an email address nor a web link", async () => {
+      const { caseId, draftId } = await seedNoRecipientDraft();
+      await expect(updateDraft(session, caseId, draftId, "S", "B", "call them")).rejects.toThrow("INVALID_RECIPIENT");
+      await expect(updateDraft(session, caseId, draftId, "S", "B", "javascript:alert(1)")).rejects.toThrow(
+        "INVALID_RECIPIENT",
+      );
+      const row = await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) });
+      expect(row?.recipient).toBe("");
+      expect(row?.currentVersion).toBe(1);
+    });
+
+    it("leaves the recipient alone when none is passed", async () => {
+      const { caseId, draftId } = await seedDraft(session);
+      const before = await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) });
+      await updateDraft(session, caseId, draftId, "S", "B");
+      const after = await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) });
+      expect(after?.recipient).toBe(before?.recipient);
+    });
+  });
+
+  describe("updateDraft editability", () => {
+    it("refuses to edit a sent draft with DRAFT_NOT_EDITABLE and keeps its text", async () => {
+      const { caseId, draftId } = await seedDraft(session);
+      await approveAndRecordSent(session, caseId, draftId, "manual_copy");
+      await expect(updateDraft(session, caseId, draftId, "New", "New body")).rejects.toThrow(
+        "DRAFT_NOT_EDITABLE",
+      );
+      const row = await db.query.messageDrafts.findFirst({ where: eq(messageDrafts.id, draftId) });
+      expect(row?.subject).not.toBe("New");
+      expect(row?.currentVersion).toBe(1);
+    });
+
+    it("still edits a draft awaiting approval", async () => {
+      const { caseId, draftId } = await seedDraft(session);
+      await expect(updateDraft(session, caseId, draftId, "New", "New body")).resolves.toEqual({
+        version: 2,
+      });
+    });
+  });
+
+  describe("SLA creation on send", () => {
+    it("returns slaError (and still records the send) when SLA creation fails", async () => {
+      const { caseId, draftId } = await seedDraft(session);
+      const sla = await import("@/lib/enterprise/sla-service");
+      const spy = vi
+        .spyOn(sla, "createSlaDeadlinesForSentMessage")
+        .mockRejectedValueOnce(new Error("SLA_DB_DOWN"));
+      const stderr = vi.spyOn(process.stderr, "write").mockImplementation(() => true);
+      try {
+        const result = await approveAndRecordSent(session, caseId, draftId, "manual_copy");
+        expect(result).toMatchObject({ ok: true, alreadyRecorded: false, slaError: "SLA_DB_DOWN" });
+        const rows = await db.query.outboundMessages.findMany({
+          where: eq(outboundMessages.draftId, draftId),
+        });
+        expect(rows).toHaveLength(1);
+        expect(stderr.mock.calls.map((c) => String(c[0])).join("")).toContain(
+          "remediation.sla_create_failed",
+        );
+      } finally {
+        spy.mockRestore();
+        stderr.mockRestore();
+      }
+    });
+  });
 });

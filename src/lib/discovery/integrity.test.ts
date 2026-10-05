@@ -97,9 +97,20 @@ describe("discovery: pause/archive during an in-flight run", () => {
 
   it("a pause during the page fetch is not overwritten with candidate_review", async () => {
     const caseId = await freshCase(session);
-    serpFor(URL_A, "https://people.example.net/jane-2");
+    // Ten URLs on ten hosts: fetches run 6 at a time, so the pause lands with the rest queued.
+    serpFor(...Array.from({ length: 10 }, (_, i) => `https://people${i}.example.net/jane-q-testperson`));
+    let first = true;
+    let pauseCommitted = false;
+    let startedAfterPause = 0;
     vi.mocked(safeFetchPublicPage).mockImplementation(async (url: string) => {
-      await pauseCase(session, caseId);
+      if (pauseCommitted) startedAfterPause++;
+      if (first) {
+        first = false;
+        await pauseCase(session, caseId);
+        pauseCommitted = true;
+      } else {
+        await new Promise((r) => setTimeout(r, 20)); // slower than the pause
+      }
       return fakePage(200, LONG_BODY, url);
     });
 
@@ -109,8 +120,10 @@ describe("discovery: pause/archive during an in-flight run", () => {
     // The marker no longer holds the transient discovery_running.
     expect(row?.statusBeforePause).toBe("consent_verified");
     expect(await candidatesOf(caseId)).toHaveLength(0);
-    // Only the first URL was fetched; nothing after the pause.
-    expect(safeFetchPublicPage).toHaveBeenCalledTimes(1);
+    // Fetches already in flight may finish, but none starts after the pause.
+    expect(startedAfterPause).toBe(0);
+    // Only the first wave (6 in flight) was fetched; the 4 queued URLs never were.
+    expect(safeFetchPublicPage).toHaveBeenCalledTimes(6);
 
     expect((await resumeCase(session, caseId)).status).toBe("consent_verified");
   });

@@ -24,11 +24,18 @@ vi.mock("./progress-report", () => ({
 import { v4 as uuid } from "uuid";
 import { db, sqlite } from "@/lib/db";
 import { ensureDatabase } from "@/lib/db/init";
-import { memberships, organizations, users } from "@/lib/db/schema";
+import {
+  memberships,
+  optOutDispatches,
+  organizations,
+  privacyCases,
+  protectionSchedules,
+  users,
+} from "@/lib/db/schema";
 import { parseAgentDefaults } from "@/lib/connectors/service";
 import { isDigestEmailSendEnabled, sendNotificationEmail } from "@/lib/connectors/email-send";
 import { buildProgressReportForOrg } from "./progress-report";
-import { resolveDigestRecipient, runWeeklyDigests } from "./digest";
+import { buildProtectionDigestSection, resolveDigestRecipient, runWeeklyDigests } from "./digest";
 
 async function seedOrg(opts: { members?: { role: string; email: string; createdAt: string }[] } = {}) {
   const orgId = uuid();
@@ -135,5 +142,87 @@ describe("weekly digest", () => {
       ],
     });
     expect(await resolveDigestRecipient(usersOnly)).toMatch(/^early-/);
+  });
+
+  it("appends an Ongoing protection section: relists, re-submissions due, next scan — links, no URLs", async () => {
+    const userId = uuid();
+    const orgId = await seedOrg({
+      members: [{ role: "owner", email: `p-${uuid()}@x.com`, createdAt: "2024-01-01T00:00:00Z" }],
+    });
+    await db.insert(users).values({ id: userId, email: `c-${uuid()}@x.com`, name: "u", passwordHash: "x" });
+    const caseId = uuid();
+    await db.insert(privacyCases).values({
+      id: caseId,
+      organizationId: orgId,
+      ownerUserId: userId,
+      title: "Jane Q Testperson removal",
+      caseType: "people_search",
+      targetRelationship: "self",
+      status: "removed_confirmed",
+    });
+    const oldId = uuid();
+    const now = new Date();
+    await db.insert(optOutDispatches).values([
+      {
+        id: oldId,
+        caseId,
+        organizationId: orgId,
+        brokerId: "spokeo",
+        brokerName: "Spokeo",
+        status: "completed",
+        exposureUrl: "https://www.spokeo.com/Jane-Q-Testperson",
+        createdAt: new Date(now.getTime() - 90 * 86_400_000).toISOString(),
+      },
+      {
+        id: uuid(),
+        caseId,
+        organizationId: orgId,
+        brokerId: "spokeo",
+        brokerName: "Spokeo",
+        status: "pending_approval",
+        exposureUrl: "https://www.spokeo.com/Jane-Q-Testperson",
+        relistedFromId: oldId,
+        createdAt: now.toISOString(),
+      },
+      {
+        id: uuid(),
+        caseId,
+        organizationId: orgId,
+        brokerId: "whitepages",
+        brokerName: "Whitepages",
+        status: "pending_approval",
+        resubmitCount: 1,
+        createdAt: now.toISOString(),
+      },
+    ]);
+    await db.insert(protectionSchedules).values({
+      id: uuid(),
+      caseId,
+      organizationId: orgId,
+      kind: "broker_sweep",
+      cadenceDays: 30,
+      nextRunAt: "2026-11-04T00:00:00.000Z",
+    });
+
+    const section = await buildProtectionDigestSection(orgId, null, now);
+    expect(section).toContain("## Ongoing protection");
+    expect(section).toContain("**Relists found this week:** 1");
+    expect(section).toContain("**Re-submissions due:** 2");
+    expect(section).toContain("**Next broker scan:** 2026-11-04");
+    expect(section).toContain(`/cases/${caseId}`);
+    expect(section).toContain("Spokeo");
+    expect(section).not.toContain("https://www.spokeo.com");
+    expect(section).not.toContain("Jane");
+
+    vi.mocked(parseAgentDefaults).mockReturnValue({ weeklyDigest: true, weeklyDigestEmail: "o@x.com" });
+    await runWeeklyDigests(now);
+    const [, msg] = sendsTo(orgId)[0]!;
+    expect(msg.body).toContain("# Weekly progress");
+    expect(msg.body).toContain("## Ongoing protection");
+  });
+
+  it("omits the section when an org has no protection activity", async () => {
+    const orgId = await seedOrg();
+    expect(await buildProtectionDigestSection(orgId, null)).toBeNull();
   });
 });

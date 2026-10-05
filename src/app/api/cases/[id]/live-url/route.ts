@@ -18,16 +18,22 @@ export async function POST(
   if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
 
   const body = await request.json().catch(() => ({}));
-  const { url } = body as { url?: unknown };
+  const { url, brokerId } = body as { url?: unknown; brokerId?: unknown };
 
   if (typeof url !== "string" || !url) return jsonError("URL is required");
+  if (brokerId !== undefined && brokerId !== null && (typeof brokerId !== "string" || !brokerId)) {
+    return jsonError("brokerId must be a broker id");
+  }
 
   try {
-    const result = await addLiveUrlCandidate(session, id, url);
+    const result = await addLiveUrlCandidate(session, id, url, {
+      brokerId: typeof brokerId === "string" ? brokerId : null,
+    });
     return jsonOk(result, result.outcome === "new" ? 201 : 200);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);
+    if (msg === "BROKER_NOT_FOUND") return jsonError("Unknown broker", 400);
     // Before the safety-policy check: CASE_BLOCKED also contains "BLOCKED".
     const workflow = workflowErrorResponse(msg);
     if (workflow) return workflow;

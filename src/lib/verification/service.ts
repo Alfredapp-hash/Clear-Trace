@@ -20,6 +20,7 @@ import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
 import { FROZEN_CASE_STATUSES, deriveCaseStatusFromExposures } from "@/lib/cases/derive-status";
 import { performLiveExposureCheck, type LiveCheckResult } from "./live-check";
+import { resolveExposureDeadlinesOnRemoval } from "@/lib/enterprise/sla-service";
 import {
   SIMULATED_SEARCH_STATUS,
   checkModeOf,
@@ -263,6 +264,12 @@ async function recordLiveCheck(input: {
       .update(verifiedExposures)
       .set({ status: exposureStatus })
       .where(eq(verifiedExposures.id, exposure.id));
+  }
+
+  // A conclusive LIVE removal closes the exposure's pending removal_verification and
+  // follow_up SLA deadlines ('auto: live verification'). Simulated checks never get here.
+  if (exposureStatus === "removed_confirmed") {
+    resolveExposureDeadlinesOnRemoval(caseId, exposure.id, now);
   }
 
   const caseStatus =

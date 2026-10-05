@@ -13,6 +13,8 @@ import { listEnterpriseWebhooks } from "@/lib/enterprise/webhooks";
 import { getFamilySeatLimit, listFamilyMembers } from "@/lib/family/service";
 import { FamilySettings } from "@/components/FamilySettings";
 import { PrivacyAiSection, WorkspaceSection } from "@/components/settings/PrivacyAiSection";
+import { ProtectionSettings } from "@/components/settings/ProtectionSettings";
+import { getScheduledDiscoveryStatus } from "@/lib/protection/runner";
 import { Card, PageHeader } from "@/components/ui";
 import { canAccessDeveloperTools, getSession } from "@/lib/auth/session";
 import { isOrgAdmin } from "@/lib/auth/org-role";
@@ -30,6 +32,7 @@ import {
 const SECTIONS = [
   { id: "connections", label: "Search & email connections" },
   { id: "privacy-ai", label: "Privacy & AI" },
+  { id: "protection", label: "Ongoing protection" },
   { id: "household", label: "Household" },
   { id: "api", label: "API & integrations" },
   { id: "workspace", label: "Workspace" },
@@ -89,13 +92,14 @@ export default async function SettingsPage() {
     db.query.organizations.findFirst({ where: eq(organizations.id, orgId) }),
   ]);
 
-  const [familyMembers, familySeatLimit, apiKeys, webhooks] = await Promise.all([
+  const [familyMembers, familySeatLimit, apiKeys, webhooks, scheduledDiscovery] = await Promise.all([
     listFamilyMembers(orgId).then((rows) =>
       rows.map(({ id, displayName, relationship, notes }) => ({ id, displayName, relationship, notes })),
     ),
     getFamilySeatLimit(orgId),
     listIfAllowed(canManage, orgId, "api_keys", () => listApiKeys(orgId)),
     listIfAllowed(canManage, orgId, "enterprise_webhooks", () => listEnterpriseWebhooks(orgId)),
+    getScheduledDiscoveryStatus(orgId),
   ]);
 
   const connectorData: ConnectorSettingsData = {
@@ -155,6 +159,23 @@ export default async function SettingsPage() {
             initialLocalOnly={agentDefaults.llmLocalOnly !== false}
             initialIntelligence={agentDefaults.intelligence ?? null}
             intelligenceOptions={intelligenceOptions}
+            canManage={canManage}
+          />
+        </section>
+
+        <section id="protection" aria-labelledby="protection-heading" className="ct-anchor-section">
+          <SectionHeading
+            id="protection"
+            title="Ongoing protection"
+            subtitle="Recurring broker re-checks for monitored cases, and optional scheduled web discovery."
+          />
+          <ProtectionSettings
+            initialScheduledDiscovery={scheduledDiscovery.enabled}
+            initialMonthlyQueryCap={scheduledDiscovery.cap}
+            usedThisMonth={scheduledDiscovery.used}
+            hasDiscoveryConnector={connectors.some(
+              (c) => c.category === "discovery" && c.enabled && c.status === "connected",
+            )}
             canManage={canManage}
           />
         </section>

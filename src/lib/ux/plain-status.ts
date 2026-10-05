@@ -112,7 +112,37 @@ const ITEM_STATUS: Record<string, string> = {
   // authorization records
   verified: "Verified",
   pending: "Pending",
+  // drafts replaced by a sibling variant that was sent (create_all_variants)
+  superseded: "Superseded",
+  // broker checklist outcomes
+  found: "Found",
+  not_found: "Not listed",
+  blocked: "Needs a manual check",
+  to_check: "To check",
 };
+
+/** Badge for an opt-out re-filed because the listing came back. */
+export const RELISTED_LABEL = "Relisted";
+
+/** Badge for an opt-out sent again: "Re-submission", then "Re-submission 2", … */
+export function resubmissionLabel(resubmitCount: number): string {
+  return resubmitCount > 1 ? `Re-submission ${resubmitCount}` : "Re-submission";
+}
+
+/** Plain labels for SLA / statutory deadline types (sla_deadlines.deadline_type). */
+const DEADLINE_TYPES: Record<string, string> = {
+  initial_response: "Reply due",
+  removal_verification: "Removal check due",
+  follow_up: "Follow-up due",
+  broker_opt_out: "Broker opt-outs due",
+  statutory_first_pull: "Brokers must pick up your DROP request",
+  statutory_deletion_due: "Brokers must delete your data (DROP)",
+};
+
+export function deadlineTypeLabel(type: string | null | undefined): string {
+  if (!type) return "Deadline";
+  return DEADLINE_TYPES[type] ?? humanize(type);
+}
 
 export function itemStatusLabel(status: string | null | undefined): string {
   if (!status) return "Unknown";

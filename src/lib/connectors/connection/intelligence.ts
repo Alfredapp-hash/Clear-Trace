@@ -119,3 +119,27 @@ export async function resolveIntelligenceConnection(
   if (preferred !== "ollama") return anyLocal(deps);
   return null;
 }
+
+/**
+ * Local-only resolver for privacy-sensitive tasks (identity matching sends page text and
+ * claim types to the model). Returns a connected *local* Ollama or the on-device Apple
+ * bridge — never Ollama Cloud, OpenAI, Anthropic or OpenRouter, whatever `llmLocalOnly`
+ * or the preferred provider says. `rules_only` (or an unreadable setting) ⇒ null.
+ *
+ * Order: the preferred local provider when it is one, else local Ollama, else the bridge.
+ */
+export async function resolveLocalIntelligenceConnection(
+  deps: Pick<IntelligenceResolverDeps, "getAgentDefaults" | "getOrgConnector">,
+): Promise<ResolvedConnection | null> {
+  let defaults: AgentDefaults;
+  try {
+    defaults = await deps.getAgentDefaults();
+  } catch {
+    return null;
+  }
+  if (defaults.intelligence === "rules_only") return null;
+  if (defaults.intelligence === "apple_intelligence") {
+    return (await appleBridge(deps)) ?? (await localOllama(deps));
+  }
+  return anyLocal(deps);
+}

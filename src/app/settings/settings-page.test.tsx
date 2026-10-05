@@ -27,6 +27,7 @@ vi.mock("next/navigation", () => {
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { renderToStaticMarkup } from "react-dom/server";
+import { eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import { apiKeys, familyMembers, memberships, organizations, users } from "@/lib/db/schema";
@@ -172,8 +173,8 @@ describe("settings page (server render)", () => {
     mockSessionCookie(seeded.ownerToken);
     const html = renderToStaticMarkup(await SettingsPage());
 
-    const order = ["connections", "privacy-ai", "household", "api", "workspace"].map((id) =>
-      html.indexOf(`<section id="${id}"`),
+    const order = ["connections", "privacy-ai", "protection", "household", "api", "workspace"].map(
+      (id) => html.indexOf(`<section id="${id}"`),
     );
     expect(order.every((i) => i >= 0)).toBe(true);
     expect([...order].sort((a, b) => a - b)).toEqual(order);
@@ -184,6 +185,54 @@ describe("settings page (server render)", () => {
     expect(localOnly).toBeLessThan(privacy.indexOf("AI model for drafts"));
     // The block moved out of the connector section.
     expect(html.slice(order[0], order[1])).not.toContain("Local-only AI");
+  });
+
+  it("renders Ongoing protection from the server: scheduled discovery off by default, with the quota warning", async () => {
+    mockSessionCookie(seeded.ownerToken);
+    const html = renderToStaticMarkup(await SettingsPage());
+    const section = html.slice(
+      html.indexOf('<section id="protection"'),
+      html.indexOf('<section id="household"'),
+    );
+    expect(section).toContain("Ongoing protection");
+    expect(section).toContain("Scheduled web discovery every 90 days");
+    // Copy warns that it spends search quota and what is sent to the provider.
+    expect(section).toContain("spends your SerpAPI / Google CSE quota");
+    expect(section).toMatch(/sends the subject(&#x27;|')s name and city to that search provider/);
+    expect(section).toMatch(/<input type="checkbox"[^>]*>/);
+    expect(section).not.toMatch(/<input type="checkbox"[^>]*checked/);
+    expect(section).toMatch(/id="scheduled-discovery-cap"[^>]*value="100"/);
+    expect(html).toContain('href="#protection"');
+    expect(fetchSpy).not.toHaveBeenCalled();
+
+    await db
+      .update(organizations)
+      .set({
+        agentDefaultsJson: JSON.stringify({
+          scheduledDiscovery: true,
+          scheduledDiscoveryMonthlyQueryCap: 250,
+        }),
+      })
+      .where(eq(organizations.id, seeded.orgId));
+    const onHtml = renderToStaticMarkup(await SettingsPage());
+    const onSection = onHtml.slice(
+      onHtml.indexOf('<section id="protection"'),
+      onHtml.indexOf('<section id="household"'),
+    );
+    expect(onSection).toMatch(/<input type="checkbox"[^>]*checked/);
+    expect(onSection).toMatch(/id="scheduled-discovery-cap"[^>]*value="250"/);
+    // No discovery connector configured → the skip is explained up front.
+    expect(onSection).toContain("scheduled discovery will be skipped");
+
+    // Members see the state but cannot change it.
+    mockSessionCookie(seeded.memberToken);
+    const memberHtml = renderToStaticMarkup(await SettingsPage());
+    const memberSection = memberHtml.slice(
+      memberHtml.indexOf('<section id="protection"'),
+      memberHtml.indexOf('<section id="household"'),
+    );
+    expect(memberSection).toMatch(/id="scheduled-discovery-cap"[^>]*disabled/);
+    expect(fetchSpy).not.toHaveBeenCalled();
   });
 
   it("shows Settings → Developer to an org owner but not to a standard member", async () => {

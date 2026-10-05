@@ -10,6 +10,12 @@ export const RUTHLESS_INCLUDES_BREACH_INTEL = true;
 export const RUTHLESS_POLICY = {
   serpQueryLimit: 40,
   standardSerpQueryLimit: 10,
+  /**
+   * Grouped people-search broker queries (4–6 domains each) share the SERP budget above with
+   * the core identity queries: at most this many of the budget go to broker groups first.
+   */
+  brokerGroupQueryLimit: 16,
+  standardBrokerGroupQueryLimit: 4,
   monitoringSchedule: "daily" as const,
   standardMonitoringSchedule: "weekly" as const,
   maxFollowUps: 4,

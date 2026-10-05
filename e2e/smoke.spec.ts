@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("GET /api/health returns ok", async ({ request }) => {
   const res = await request.get("/api/health");

@@ -105,6 +105,18 @@ export interface AgentDefaults {
    * no fallback to any cloud provider.
    */
   llmLocalOnly?: boolean;
+  /**
+   * Opt-in: let the background worker run live discovery (SerpAPI / Google CSE) on each
+   * monitored case's 90-day schedule. Off by default. When on, it spends search quota and
+   * sends the subject's name and city to the search provider. Never runs demo mode.
+   */
+  scheduledDiscovery?: boolean;
+  /** Org-wide cap on scheduled discovery search queries per UTC month (default 100, 0–1000). */
+  scheduledDiscoveryMonthlyQueryCap?: number;
 }
+
+/** Default monthly query cap for scheduled discovery (owner decision). */
+export const DEFAULT_SCHEDULED_DISCOVERY_MONTHLY_QUERY_CAP = 100;
+export const MAX_SCHEDULED_DISCOVERY_MONTHLY_QUERY_CAP = 1000;
 
 export type ConnectorCredentials = Record<string, string>;

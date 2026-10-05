@@ -34,6 +34,12 @@ import { listOptOutDispatches } from "@/lib/opt-out/dispatch";
 import { listDeindexRequests } from "@/lib/deindexing/service";
 import { getBreachScanData } from "@/lib/breach-intel/service";
 import { buildCaseGuide } from "@/lib/guide/service";
+import { buildChecklist } from "@/lib/brokers/checklist";
+import { getStatutorySummary } from "@/lib/statutory/drop";
+import StatutoryPhase from "@/components/case/StatutoryPhase";
+import ResidenceState from "@/components/case/ResidenceState";
+import ProtectionPanel from "@/components/case/ProtectionPanel";
+import { getProtectionSummary } from "@/lib/protection/summary";
 import { db } from "@/lib/db";
 import { contentEvidence } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
@@ -69,6 +75,9 @@ export default async function CaseDetailPage({
     deindexRequests,
     breach,
     guide,
+    brokerChecklist,
+    statutory,
+    protection,
   ] = await Promise.all([
     getLatestAuthorization(id),
     getIdentityClaimsRedacted(id),
@@ -87,6 +96,11 @@ export default async function CaseDetailPage({
     listDeindexRequests(id, session),
     getBreachScanData(id),
     buildCaseGuide(session, id),
+    // Decrypts the name / place claims on the server to prefill broker search links.
+    buildChecklist(id, session.organizationId),
+    // Also settles the case's jurisdiction from its claims (California DROP guidance).
+    getStatutorySummary(id, session.organizationId),
+    getProtectionSummary(id, session.organizationId),
   ]);
 
   const exposures = remediation.exposures.length ? remediation.exposures : discovery.exposures;
@@ -142,7 +156,14 @@ export default async function CaseDetailPage({
             breachFindings={breach.findings}
             optOutDispatches={optOutDispatches}
             deindexRequests={deindexRequests}
+            brokerChecklist={brokerChecklist}
           />
+
+          <ProtectionPanel caseId={id} initial={protection} />
+
+          {statutory.jurisdictionState === "CA" && (
+            <StatutoryPhase caseId={id} jurisdictionState={statutory.jurisdictionState} initial={statutory} />
+          )}
 
           <Card variant="elevated">
             <SectionTitle subtitle="Tamper-evident record of every action">Case timeline</SectionTitle>
@@ -213,6 +234,12 @@ export default async function CaseDetailPage({
                 ))}
               </ul>
             )}
+            {/* Every case: the only way to set California when it was not detected. */}
+            <ResidenceState
+              caseId={id}
+              jurisdictionState={statutory.jurisdictionState}
+              jurisdictionSource={statutory.jurisdictionSource}
+            />
           </Card>
 
           <Card>

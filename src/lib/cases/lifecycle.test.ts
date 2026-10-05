@@ -11,6 +11,7 @@ vi.hoisted(() => {
 
 import { eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
+import fs from "fs";
 import { db, sqlite } from "@/lib/db";
 import { ensureDatabase } from "@/lib/db/init";
 import {
@@ -20,6 +21,7 @@ import {
   authorizationRecords,
   breachFindings,
   breachScanRuns,
+  brokerSweepMatches,
   contentEvidence,
   controllerTargets,
   deindexRequests,
@@ -34,12 +36,15 @@ import {
   optOutDispatches,
   outboundMessages,
   privacyCases,
+  protectionSchedules,
   remediationBatchItems,
   remediationBatches,
   remediationCases,
   remedyRoutes,
   searchQueries,
   slaDeadlines,
+  statutoryFilings,
+  exposureCandidates,
   verificationChecks,
   webhookDeliveries,
 } from "@/lib/db/schema";
@@ -230,7 +235,80 @@ async function seedFullCase(fixture: TestUserFixture) {
     breachTitle: "X",
     candidateId: cand.id,
   });
-  await db.insert(optOutDispatches).values({ id: uuid(), caseId, organizationId: fixture.orgId, brokerName: "Spokeo" });
+  const dispatchId = uuid();
+  await db
+    .insert(optOutDispatches)
+    .values({ id: dispatchId, caseId, organizationId: fixture.orgId, brokerId: "spokeo", brokerName: "Spokeo" });
+  // v2: ongoing protection schedules (case-wide + per-dispatch relist re-check).
+  await db.insert(protectionSchedules).values([
+    {
+      id: uuid(),
+      caseId,
+      organizationId: fixture.orgId,
+      kind: "broker_sweep",
+      cadenceDays: 30,
+      nextRunAt: now,
+    },
+    {
+      id: uuid(),
+      caseId,
+      organizationId: fixture.orgId,
+      kind: "broker_recheck",
+      brokerId: "spokeo",
+      dispatchId,
+      cadenceDays: 60,
+      nextRunAt: now,
+    },
+  ]);
+  // v2: a California DROP filing the user recorded.
+  await db.insert(statutoryFilings).values({
+    id: uuid(),
+    caseId,
+    organizationId: fixture.orgId,
+    mechanism: "ca_drop",
+    jurisdiction: "CA",
+    filedAt: now,
+    createdBy: fixture.userId,
+  });
+  // v2: live-url evidence captured from the broker checklist, referenced by a sweep match.
+  const liveEvidenceId = uuid();
+  await db.insert(contentEvidence).values({
+    id: liveEvidenceId,
+    caseId,
+    sourceUrl: "https://www.whitepages.com/name/Jane-Doe",
+    redactedExcerpt: "J*** D** — Springfield",
+    contentHash: "live",
+    capturedAt: now,
+    metadataJson: JSON.stringify({ captureMethod: "live-url", brokerId: "whitepages" }),
+  });
+  if (sweepRunId) {
+    await db.insert(brokerSweepMatches).values({
+      id: uuid(),
+      sweepRunId,
+      brokerId: "whitepages",
+      brokerName: "Whitepages",
+      domain: "whitepages.com",
+      matchReason: "user reported listing",
+      matchConfidence: 0.8,
+      profileUrlsJson: JSON.stringify(["https://www.whitepages.com/name/Jane-Doe"]),
+      evidenceId: liveEvidenceId,
+      checkMethod: "user_reported",
+      checkOutcome: "found",
+      checkedAt: now,
+      checkedBy: fixture.userId,
+    });
+  }
+  // v2: a candidate the user reported themselves ("I found my listing").
+  await db.insert(exposureCandidates).values({
+    id: uuid(),
+    caseId,
+    scanRunId: scan.id,
+    canonicalUrl: "https://www.whitepages.com/name/Jane-Doe",
+    sourceType: "people_search",
+    brokerId: "whitepages",
+    captureMethod: "user_reported",
+    evidenceId: liveEvidenceId,
+  });
   await db.insert(deindexRequests).values({
     id: uuid(),
     caseId,
@@ -281,7 +359,7 @@ async function seedFullCase(fixture: TestUserFixture) {
     summary: "Case paused",
   });
 
-  return { caseId, exposureId, sweepRunId };
+  return { caseId, exposureId, sweepRunId, dispatchId, liveEvidenceId };
 }
 
 function auditRowsMentioning(text: string): number {
@@ -356,6 +434,44 @@ describe("case erasure", () => {
     // Other case untouched.
     expect(Object.keys(rowsReferencingCase(other.caseId)).length).toBeGreaterThan(10);
     deleteCaseData(other.caseId);
+  });
+
+  it("erases v2 data: schedules, statutory filings, evidence-carrying sweep matches, user-reported candidates, live-url evidence", async () => {
+    const fixture = await seedTestUser();
+    const { caseId, liveEvidenceId } = await seedFullCase(fixture);
+    const other = await seedFullCase(fixture);
+    const count = (sql: string, ...args: unknown[]) =>
+      (sqlite.prepare(sql).get(...args) as { n: number }).n;
+
+    expect(count("SELECT COUNT(*) AS n FROM protection_schedules WHERE case_id = ?", caseId)).toBe(2);
+    expect(count("SELECT COUNT(*) AS n FROM statutory_filings WHERE case_id = ?", caseId)).toBe(1);
+    expect(count("SELECT COUNT(*) AS n FROM broker_sweep_matches WHERE evidence_id = ?", liveEvidenceId)).toBe(1);
+
+    deleteCaseData(caseId);
+
+    expect(count("SELECT COUNT(*) AS n FROM protection_schedules WHERE case_id = ?", caseId)).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM statutory_filings WHERE case_id = ?", caseId)).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM broker_sweep_matches WHERE evidence_id = ?", liveEvidenceId)).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM content_evidence WHERE id = ?", liveEvidenceId)).toBe(0);
+    expect(
+      count("SELECT COUNT(*) AS n FROM exposure_candidates WHERE case_id = ? AND capture_method = 'user_reported'", caseId),
+    ).toBe(0);
+    expect(count("SELECT COUNT(*) AS n FROM content_evidence WHERE case_id = ?", caseId)).toBe(0);
+
+    // The other case keeps all of its v2 rows.
+    expect(count("SELECT COUNT(*) AS n FROM protection_schedules WHERE case_id = ?", other.caseId)).toBe(2);
+    expect(count("SELECT COUNT(*) AS n FROM statutory_filings WHERE case_id = ?", other.caseId)).toBe(1);
+    expect(count("SELECT COUNT(*) AS n FROM content_evidence WHERE id = ?", other.liveEvidenceId)).toBe(1);
+    deleteCaseData(other.caseId);
+  });
+
+  it("erasure checkpoints the WAL (TRUNCATE) so deleted pages do not linger in the -wal file", async () => {
+    const fixture = await seedTestUser();
+    const { caseId } = await seedFullCase(fixture);
+    const wal = `${sqlite.name}-wal`;
+    expect(fs.existsSync(wal) && fs.statSync(wal).size).toBeGreaterThan(0);
+    deleteCaseData(caseId);
+    expect(fs.statSync(wal).size).toBe(0);
   });
 
   it("rolls back entirely if any step fails (single transaction)", async () => {

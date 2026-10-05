@@ -1,6 +1,6 @@
 import { beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { cookies } from "next/headers";
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 
 vi.mock("next/headers", () => ({
@@ -15,7 +15,16 @@ vi.mock("@/lib/routing/policy-reader", () => ({
 
 import { safeFetchPublicPage } from "@/lib/tools/safe-fetch";
 import { db, sqlite } from "@/lib/db";
-import { authorizationRecords, exposureCandidates, privacyCases, verifiedExposures } from "@/lib/db/schema";
+import {
+  authorizationRecords,
+  brokerSweepMatches,
+  exposureCandidates,
+  identityClaims,
+  identityProfiles,
+  privacyCases,
+  verifiedExposures,
+} from "@/lib/db/schema";
+import { encryptValue, hashValue } from "@/lib/crypto/encryption";
 import { seedTestCase, seedTestUser, readJson, type TestUserFixture } from "@/lib/test/api-helpers";
 import { POST as liveUrlPost } from "./route";
 import { POST as lifecyclePost } from "../lifecycle/route";
@@ -74,10 +83,10 @@ async function consent(caseId: string) {
 }
 
 async function caseWithStatus(fixture: TestUserFixture, status: string, withConsent = true) {
-  const { caseId, exposureId } = await seedTestCase(fixture);
+  const { caseId, exposureId, sweepRunId } = await seedTestCase(fixture);
   await db.update(privacyCases).set({ status }).where(eq(privacyCases.id, caseId));
   if (withConsent) await consent(caseId);
-  return { caseId, exposureId };
+  return { caseId, exposureId, sweepRunId };
 }
 
 async function statusOf(caseId: string) {
@@ -183,6 +192,42 @@ describe("POST /api/cases/[id]/live-url", () => {
     expect(await getRecommendedSkillForCase(fixture.session, caseId)).toBe("draft-removal-request");
   });
 
+  it("scores the page with the identity matcher, not raw substrings of every claim", async () => {
+    const { caseId } = await caseWithStatus(fixture, "candidate_review");
+    const profileId = uuid();
+    await db.insert(identityProfiles).values({ id: profileId, caseId, label: "Primary" });
+    for (const [claimType, value] of [
+      ["full_name", "Jane Doe"],
+      ["city_state", "Austin, TX"],
+      ["birth_year", "1991"],
+    ] as const) {
+      await db.insert(identityClaims).values({
+        id: uuid(), profileId, caseId, claimType,
+        encryptedValue: encryptValue(value), valueHash: hashValue(value), scanEnabled: claimType !== "birth_year",
+      });
+    }
+    // Only the birth year appears (as an unrelated number): no identity match.
+    vi.mocked(safeFetchPublicPage).mockImplementationOnce(async (url: string) =>
+      page(url, "Acme Directory, serving customers since 1991. Search millions of records."),
+    );
+    const weak = await readJson<{ candidateId: string }>(await addUrl(caseId, "https://weak.example.com/x"));
+    // Name in "Last, First" order plus the matching city and state: a probable match.
+    vi.mocked(safeFetchPublicPage).mockImplementationOnce(async (url: string) =>
+      page(url, "Doe, Jane — age 34 — Austin, Texas. Phone and relatives listed."),
+    );
+    const strong = await readJson<{ candidateId: string }>(await addUrl(caseId, "https://strong.example.com/x"));
+    const row = (id: string) => db.query.exposureCandidates.findFirst({ where: eq(exposureCandidates.id, id) });
+    const w = await row(weak.candidateId);
+    const s = await row(strong.candidateId);
+    expect(w?.confidenceScore).toBeLessThan(0.4);
+    expect(w?.matchStatus).toBe("possible_match"); // user-added pages are never below possible
+    expect(s?.confidenceScore).toBeGreaterThanOrEqual(0.7);
+    expect(s?.matchStatus).toBe("probable_match");
+    const factors = JSON.parse(s?.corroboratingFactors ?? "[]") as string[];
+    expect(factors).toContain("matcher:rules");
+    expect(factors.join(" ")).not.toMatch(/Jane|Austin|1991/);
+  });
+
   it("adding the same pending URL twice refreshes the candidate instead of duplicating it", async () => {
     const { caseId } = await caseWithStatus(fixture, "candidate_review");
     const url = "https://dup.example.com/jane";
@@ -216,5 +261,138 @@ describe("POST /api/cases/[id]/live-url", () => {
     expect(changed.status).toBe(201);
     expect((await readJson(changed)).outcome).toBe("new");
     expect(await countFor()).toBe(2);
+  });
+});
+
+describe("POST /api/cases/[id]/live-url with brokerId (broker checklist)", () => {
+  let fixture: TestUserFixture;
+
+  beforeAll(async () => {
+    fixture = await seedTestUser();
+    mockSessionCookie(fixture.token);
+  });
+
+  beforeEach(() => {
+    mockSessionCookie(fixture.token);
+    sqlite.prepare("DELETE FROM rate_limit_events WHERE key = ?").run(`live-url:${fixture.userId}`);
+    vi.mocked(safeFetchPublicPage).mockReset();
+    vi.mocked(safeFetchPublicPage).mockImplementation(async (url: string) =>
+      page(url, "Jane Doe, age 40, Austin TX. Relatives and phone numbers."),
+    );
+  });
+
+  const addBrokerUrl = (caseId: string, url: string, brokerId: string) =>
+    liveUrlPost(
+      jsonRequest(`http://localhost/api/cases/${caseId}/live-url`, "POST", { url, brokerId }),
+      ctx(caseId),
+    );
+
+  async function spokeoMatch(sweepRunId: string) {
+    return db.query.brokerSweepMatches.findFirst({
+      where: and(eq(brokerSweepMatches.sweepRunId, sweepRunId), eq(brokerSweepMatches.brokerId, "spokeo")),
+    });
+  }
+
+  it("a URL on the broker's domain links the candidate to the broker and marks the match found", async () => {
+    const { caseId, sweepRunId } = await seedTestCase(fixture);
+    await db.update(privacyCases).set({ status: "candidate_review" }).where(eq(privacyCases.id, caseId));
+    await consent(caseId);
+
+    const url = "https://www.spokeo.com/Jane-Doe/Texas/Austin/p123";
+    const res = await addBrokerUrl(caseId, url, "spokeo");
+    expect(res.status).toBe(201);
+    const body = await readJson<{ candidateId: string; brokerId: string; captureMethod: string; outcome: string }>(res);
+    expect(body).toMatchObject({ outcome: "new", brokerId: "spokeo", captureMethod: "page_fetch" });
+
+    const candidate = await db.query.exposureCandidates.findFirst({
+      where: eq(exposureCandidates.id, body.candidateId),
+    });
+    expect(candidate).toMatchObject({ brokerId: "spokeo", captureMethod: "page_fetch" });
+    expect(candidate?.evidenceId).toBeTruthy();
+
+    const match = await spokeoMatch(sweepRunId);
+    expect(match).toMatchObject({ checkOutcome: "found", evidenceId: candidate?.evidenceId });
+    expect(JSON.parse(match?.profileUrlsJson ?? "[]")).toEqual([candidate?.canonicalUrl]);
+
+    // Confirmed, it becomes an exposure tied to the broker.
+    const confirm = await review(caseId, body.candidateId, "confirm");
+    expect(confirm.status).toBe(200);
+    const { exposureId } = await readJson<{ exposureId: string }>(confirm);
+    const exposure = await db.query.verifiedExposures.findFirst({ where: eq(verifiedExposures.id, exposureId) });
+    expect(exposure?.brokerId).toBe("spokeo");
+  });
+
+  it("a URL on another domain is 400 BROKER_DOMAIN_MISMATCH and nothing is fetched", async () => {
+    const { caseId, sweepRunId } = await caseWithStatus(fixture, "candidate_review");
+    const res = await addBrokerUrl(caseId, "https://www.whitepages.com/name/Jane-Doe", "spokeo");
+    expect(res.status).toBe(400);
+    expect((await readJson(res)).code).toBe("BROKER_DOMAIN_MISMATCH");
+    expect(safeFetchPublicPage).not.toHaveBeenCalled();
+    // Look-alike hosts are not the broker either.
+    const lookalike = await addBrokerUrl(caseId, "https://spokeo.com.evil.test/p1", "spokeo");
+    expect(lookalike.status).toBe(400);
+    expect((await spokeoMatch(sweepRunId))?.checkOutcome).toBeNull();
+  });
+
+  it("an unknown broker id is 400", async () => {
+    const { caseId } = await caseWithStatus(fixture, "candidate_review");
+    const res = await addBrokerUrl(caseId, "https://www.spokeo.com/p1", "no-such-broker");
+    expect(res.status).toBe(400);
+    expect(safeFetchPublicPage).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["a 403", async (url: string) => ({ ...page(url, "Access denied"), statusCode: 403 })],
+    [
+      "a challenge page",
+      async (url: string) => page(url, "Just a moment... Checking your browser before accessing. Verify you are human."),
+    ],
+    [
+      "a network block",
+      async () => {
+        throw new Error("ECONNRESET");
+      },
+    ],
+  ])("%s becomes a user_reported candidate with no page evidence", async (_label, impl) => {
+    const { caseId, sweepRunId } = await caseWithStatus(fixture, "candidate_review");
+    vi.mocked(safeFetchPublicPage).mockImplementation(impl);
+
+    const res = await addBrokerUrl(caseId, "https://www.spokeo.com/Jane-Doe/p9", "spokeo");
+    expect(res.status).toBe(201);
+    const body = await readJson<{ candidateId: string; captureMethod: string; note: string }>(res);
+    expect(body.captureMethod).toBe("user_reported");
+    expect(body.note).toBe("page could not be fetched automatically");
+
+    const candidate = await db.query.exposureCandidates.findFirst({
+      where: eq(exposureCandidates.id, body.candidateId),
+    });
+    expect(candidate).toMatchObject({ brokerId: "spokeo", captureMethod: "user_reported", evidenceId: null });
+    expect(JSON.parse(candidate?.conflictingFactors ?? "[]")).toContain("page could not be fetched automatically");
+
+    const match = await spokeoMatch(sweepRunId);
+    expect(match).toMatchObject({ checkOutcome: "found", checkMethod: "user_reported", evidenceId: null });
+
+    // Dedupe still holds: reporting the same URL again returns the same candidate.
+    sqlite.prepare("DELETE FROM rate_limit_events WHERE key = ?").run(`live-url:${fixture.userId}`);
+    const again = await addBrokerUrl(caseId, "https://www.spokeo.com/Jane-Doe/p9", "spokeo");
+    expect(again.status).toBe(200);
+    expect((await readJson(again)).candidateId).toBe(body.candidateId);
+  });
+
+  it("safety-policy refusals stay errors for broker URLs", async () => {
+    const { caseId } = await caseWithStatus(fixture, "candidate_review");
+    vi.mocked(safeFetchPublicPage).mockRejectedValue(new Error("PRIVATE_IP_BLOCKED"));
+    const res = await addBrokerUrl(caseId, "https://www.spokeo.com/p1", "spokeo");
+    expect(res.status).toBe(403);
+    const rows = await db.query.exposureCandidates.findMany({ where: eq(exposureCandidates.caseId, caseId) });
+    expect(rows.some((r) => r.captureMethod === "user_reported")).toBe(false);
+  });
+
+  it("consent and paused gates still apply before anything is fetched", async () => {
+    const { caseId: noConsent } = await caseWithStatus(fixture, "candidate_review", false);
+    expect((await addBrokerUrl(noConsent, "https://www.spokeo.com/p1", "spokeo")).status).toBe(403);
+    const { caseId: paused } = await caseWithStatus(fixture, "paused");
+    expect((await addBrokerUrl(paused, "https://www.spokeo.com/p1", "spokeo")).status).toBe(409);
+    expect(safeFetchPublicPage).not.toHaveBeenCalled();
   });
 });

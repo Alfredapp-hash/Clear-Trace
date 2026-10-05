@@ -1,11 +1,33 @@
+import { isNeverQueryClaimType } from "@/lib/constants";
+
 export interface ClaimNode {
   claimType: string;
   value: string;
 }
 
+/**
+ * Claims that may appear in outbound search text. Disambiguators (birth year, relative
+ * names, legacy date of birth) are dropped here so no query builder can ever see them.
+ */
+export function queryableClaims<T extends ClaimNode>(claims: readonly T[]): T[] {
+  return claims.filter((c) => !isNeverQueryClaimType(c.claimType));
+}
+
+/** Current and previous cities, in that order, de-duplicated. */
+export function claimCities(claims: readonly ClaimNode[]): string[] {
+  const out: string[] = [];
+  for (const type of ["city_state", "city", "previous_city_state"]) {
+    for (const c of claims) {
+      const v = c.value?.trim();
+      if (c.claimType === type && v && !out.includes(v)) out.push(v);
+    }
+  }
+  return out;
+}
+
 function groupClaims(claims: ClaimNode[]): Map<string, string[]> {
   const byType = new Map<string, string[]>();
-  for (const c of claims) {
+  for (const c of queryableClaims(claims)) {
     const v = c.value?.trim();
     if (!v) continue;
     const list = byType.get(c.claimType) ?? [];
@@ -26,7 +48,7 @@ export function buildConstellationQueries(claims: ClaimNode[]): string[] {
   const all = (...types: string[]) => types.flatMap((t) => g.get(t) ?? []);
   const names = all("full_name");
   const altNames = all("alias", "maiden_name");
-  const cities = all("city_state", "city");
+  const cities = claimCities(queryableClaims(claims));
   const states = all("state");
   const emails = all("email");
   const phones = all("phone");
@@ -34,7 +56,6 @@ export function buildConstellationQueries(claims: ClaimNode[]): string[] {
   const employers = all("employer");
   const addresses = all("address");
   const zips = all("zip_code");
-  const dobs = all("date_of_birth");
   const linkedinUrls = all("linkedin_url");
   const twitterHandles = all("twitter_handle");
   const githubUsernames = all("github_username");
@@ -43,9 +64,9 @@ export function buildConstellationQueries(claims: ClaimNode[]): string[] {
   const primaryName = names[0];
 
   for (const name of names) {
-    // --- Core identity queries ---
+    // --- Core identity queries --- (every city first, so a query budget covers them all)
+    for (const city of cities) queries.push(`"${name}" ${city}`);
     for (const city of cities) {
-      queries.push(`"${name}" ${city}`);
       queries.push(`"${name}" ${city} phone OR address`);
       queries.push(`"${name}" ${city} contact information`);
     }
@@ -55,13 +76,8 @@ export function buildConstellationQueries(claims: ClaimNode[]): string[] {
     queries.push(`"${name}" truepeoplesearch OR fastpeoplesearch OR thatsthem`);
     queries.push(`"${name}" background check public records`);
 
-    // --- Broker-specific queries ---
-    if (cities.length) queries.push(`site:fastpeoplesearch.com "${name}"`);
-    for (const city of cities) queries.push(`site:truepeoplesearch.com "${name}" ${city}`);
-    queries.push(`site:radaris.com "${name}"`);
-    queries.push(`site:spokeo.com "${name}"`);
-    queries.push(`site:whitepages.com "${name}"`);
-    queries.push(`site:peekyou.com "${name}"`);
+    // People-search broker site: queries are grouped per city by broker-queries.ts
+    // (buildBrokerGroupQueries), which covers far more brokers per query.
 
     // --- Contact / professional ---
     for (const employer of employers) {
@@ -72,7 +88,7 @@ export function buildConstellationQueries(claims: ClaimNode[]): string[] {
     queries.push(`site:zoominfo.com "${name}"`);
     queries.push(`site:clearbit.com "${name}" OR site:apollo.io "${name}"`);
 
-    for (const dob of dobs) queries.push(`"${name}" "${dob}" record`);
+    // Birth year / date of birth are disambiguators only and never searched.
     for (const zip of zips) queries.push(`"${name}" "${zip}" public record`);
 
     // --- Public records / court / voter ---

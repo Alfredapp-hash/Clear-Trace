@@ -8,6 +8,7 @@ import {
   getRecommendedSkillForCase,
   isRemovalCertificateIssuable,
 } from "@/lib/coordinator/skill-runner";
+import { getStatutorySummary } from "@/lib/statutory/drop";
 import { buildAllAgentPacks } from "./agent-packs";
 import { buildGlobalSetupMarkdown } from "./agent-setup-content";
 import {
@@ -33,6 +34,7 @@ export async function buildGuideInput(
     verification,
     connectorHealth,
     certificateIssuable,
+    statutory,
   ] = await Promise.all([
     getLatestAuthorization(caseId),
     getIdentityClaimsRedacted(caseId),
@@ -41,6 +43,8 @@ export async function buildGuideInput(
     getVerificationData(caseId),
     getConnectorHealth(session.organizationId),
     isRemovalCertificateIssuable(session, caseId),
+    // Lazily detects the state from claims; a failure only hides the DROP step.
+    getStatutorySummary(caseId, session.organizationId).catch(() => null),
   ]);
 
   const scanScopes = JSON.parse(privacyCase.scanScopes) as string[];
@@ -62,6 +66,8 @@ export async function buildGuideInput(
     checkCount: verification.checks.length,
     connectorHealth,
     certificateIssuable,
+    jurisdictionState: statutory?.jurisdictionState ?? privacyCase.jurisdictionState ?? null,
+    dropFiled: (statutory?.filings.length ?? 0) > 0,
   };
 }
 

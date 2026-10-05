@@ -1,0 +1,3262 @@
+{
+  "version": 2,
+  "groups": [
+    {
+      "id": "peopleconnect",
+      "name": "PeopleConnect (Intelius, TruthFinder, Instant Checkmate, US Search)",
+      "domains": [
+        "peopleconnect.us"
+      ],
+      "sourceNote": "suppression.peopleconnect.us lists TruthFinder, InstantCheckmate, Intelius and USSearch as the PeopleConnect family; Intelius, LLC's CPPA filing adds ZabaSearch, Addresses.com, PublicRecords.com and ReversePhoneLookup.com (2026-10-05)"
+    },
+    {
+      "id": "beenverified",
+      "name": "BeenVerified, LLC (The Lifetime Value Co.)",
+      "domains": [
+        "ltvco.com"
+      ],
+      "sourceNote": "CPPA registry filing 'BeenVerified, LLC and its subsidiaries and affiliates' lists beenverified, peoplelooker, neighborwho, peoplesmart, ownerly, numberguru and others; privacy contact privacy@ltvco.com. Each brand serves its own opt-out form (2026-10-05)"
+    },
+    {
+      "id": "spokeo",
+      "name": "Spokeo, Inc.",
+      "domains": [
+        "spokeo.com"
+      ],
+      "sourceNote": "CPPA registry filing lists Spokeo, FreePeopleDirectory, ThatsThem, PeopleWin, AnyWho, Family.me; anywho.com/optout redirects to spokeo.com/optout (2026-10-05)"
+    },
+    {
+      "id": "whitepages",
+      "name": "Whitepages, Inc.",
+      "domains": [
+        "whitepages.com"
+      ],
+      "sourceNote": "411.com is a Whitepages property; its listings are removed through whitepages.com/suppression-requests (third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05)"
+    },
+    {
+      "id": "mississippi_tornado_alley",
+      "name": "Mississippi Tornado Alley, LLC",
+      "domains": [
+        "mtalley.zendesk.com"
+      ],
+      "sourceNote": "CPPA registry filing lists FastPeopleSearch, CyberBackgroundChecks, SmartBackgroundChecks, SearchPeopleFree, USPhoneBook and others; privacy desk privacy@mtalley.zendesk.com"
+    },
+    {
+      "id": "infopay",
+      "name": "InfoPay, Inc.",
+      "domains": [
+        "infopay.com"
+      ],
+      "sourceNote": "CPPA registry filing lists InfoTracer and twelve other InfoPay sites, each with its own /optout page"
+    },
+    {
+      "id": "private_records",
+      "name": "Private Records LLC",
+      "domains": [
+        "privaterecords.net"
+      ],
+      "sourceNote": "CPPA registry filing lists privaterecords.net, peoplesearch123.com, backgroundcheckers.net, personsearchers.com; each domain has its own form"
+    },
+    {
+      "id": "thryv",
+      "name": "Thryv, Inc.",
+      "domains": [
+        "thryv.com"
+      ],
+      "sourceNote": "yellowpages.com footer: 'Thryv, the provider of Yellowpages.com'; Thryv privacy policy names dpo@thryv.com"
+    }
+  ],
+  "brokers": [
+    {
+      "id": "spokeo",
+      "name": "Spokeo",
+      "domain": "spokeo.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.spokeo.com/privacy",
+      "detection": {
+        "mode": "auto_fetch",
+        "searchUrlTemplate": "https://www.spokeo.com/{first}-{last}",
+        "profileUrlPattern": "^https://www\\.spokeo\\.com/[A-Za-z-]+/"
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.spokeo.com/optout",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "listing_url",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": false,
+        "requiresIdUpload": false,
+        "hasCaptcha": true,
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "spokeo",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "spokeo.com/optout loaded 2026-10-05; flow (paste listing URL + email, reCAPTCHA, click the emailed link) per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "whitepages",
+      "name": "Whitepages",
+      "domain": "whitepages.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.whitepages.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.whitepages.com/name/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.whitepages.com/suppression-requests",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "listing_url",
+          "phone"
+        ],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": true,
+        "requiresIdUpload": false,
+        "hasCaptcha": "unknown",
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": 1,
+      "relistIntervalDays": null,
+      "parentGroup": "whitepages",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "suppression-requests page behind a bot challenge on 2026-10-05; not re-read; flow (listing URL + automated verification call) per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05; search URL: pattern not live-verified (bot challenge)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "beenverified",
+      "name": "BeenVerified",
+      "domain": "beenverified.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.beenverified.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.beenverified.com/people/{first}-{last}/",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.beenverified.com/svc/optout/search/",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "beenverified",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/app/optout/search redirects to /svc/optout/search/ (page behind a bot challenge on 2026-10-05; not re-read); CPPA filing names the BeenVerified opt-out as the rights page; email confirmation per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "truthfinder",
+      "name": "TruthFinder",
+      "domain": "truthfinder.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.truthfinder.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.truthfinder.com/people-search/{first}-{last}/",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://suppression.peopleconnect.us/login",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "peopleconnect",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "PeopleConnect Suppression Center (https://suppression.peopleconnect.us/login) read on 2026-10-05: one suppression covers the PeopleConnect family; email verification link required",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "intelius",
+      "name": "Intelius",
+      "domain": "intelius.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.intelius.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.intelius.com/people-search/{first}-{last}/",
+        "profileUrlPattern": "^https://www\\.intelius\\.com/people-search/"
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://suppression.peopleconnect.us/login",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "peopleconnect",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "PeopleConnect Suppression Center (https://suppression.peopleconnect.us/login) read on 2026-10-05: one suppression covers the PeopleConnect family; email verification link required",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "instantcheckmate",
+      "name": "Instant Checkmate",
+      "domain": "instantcheckmate.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.instantcheckmate.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.instantcheckmate.com/people/{first}-{last}/",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://suppression.peopleconnect.us/login",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "peopleconnect",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "PeopleConnect Suppression Center (https://suppression.peopleconnect.us/login) read on 2026-10-05: one suppression covers the PeopleConnect family; email verification link required",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "fastpeoplesearch",
+      "name": "FastPeopleSearch",
+      "domain": "fastpeoplesearch.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.fastpeoplesearch.com/name/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.fastpeoplesearch.com/removal",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "mississippi_tornado_alley",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "removal page page behind a bot challenge on 2026-10-05; not re-read; operator per CPPA registry",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "truepeoplesearch",
+      "name": "TruePeopleSearch",
+      "domain": "truepeoplesearch.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.truepeoplesearch.com/results?name={full}&citystatezip={cityState}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.truepeoplesearch.com/removal",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "removal page page behind a bot challenge on 2026-10-05; not re-read",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "thatsthem",
+      "name": "ThatsThem",
+      "domain": "thatsthem.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://thatsthem.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://thatsthem.com/name/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://thatsthem.com/optout",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "spokeo",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "thatsthem.com/optout behind a bot check on 2026-10-05; Spokeo, Inc. CPPA filing lists ThatsThem; name-page pattern from indexed URLs",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "radaris",
+      "name": "Radaris",
+      "domain": "radaris.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "defunct",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://radaris.com/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "radaris.com shows 'This Domain Has Been Transferred by Court Order' — Atlas Data Privacy Corp. v. Radaris.com, NJ Super. Ct., MID-L-000847-24 (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "Defunct: the broker no longer operates this domain. Kept so stored rows still resolve; never queued."
+    },
+    {
+      "id": "mylife",
+      "name": "MyLife",
+      "domain": "mylife.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.mylife.com/privacy-policy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.mylife.com/ccpa/index.pubview",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "CCPA page page behind a bot challenge on 2026-10-05; not re-read; operator Insightbridge LLC per CPPA registry",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "usphonebook",
+      "name": "USPhonebook",
+      "domain": "usphonebook.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "auto_fetch",
+        "searchUrlTemplate": "https://www.usphonebook.com/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.usphonebook.com/removal",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "mississippi_tornado_alley",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/opt-out redirects to /removal (2026-10-05); operator per CPPA registry",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "addresses",
+      "name": "Addresses.com",
+      "domain": "addresses.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.addresses.com/people/{first}+{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://suppression.peopleconnect.us/login",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "peopleconnect",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "PeopleConnect Suppression Center (https://suppression.peopleconnect.us/login) read on 2026-10-05: one suppression covers the PeopleConnect family; email verification link required; Addresses.com is listed under Intelius, LLC in the CPPA registry",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "nuwber",
+      "name": "Nuwber",
+      "domain": "nuwber.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://nuwber.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://nuwber.com/name/{first}-{last}",
+        "profileUrlPattern": "^https://nuwber\\.com/person/"
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://nuwber.com/removal/link",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand; search URL: pattern from indexed URLs",
+      "lastVerifiedAt": "unknown",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "peekyou",
+      "name": "PeekYou",
+      "domain": "peekyou.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "defunct",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.peekyou.com/about/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "peekyou.com is now controlled by Atlas Data Privacy Corp. (NJ Super. Ct., ESX-L-003299-25) (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "Defunct: the broker no longer operates this domain. Kept so stored rows still resolve; never queued."
+    },
+    {
+      "id": "zabasearch",
+      "name": "ZabaSearch",
+      "domain": "zabasearch.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.zabasearch.com/people/{first}+{last}/",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://suppression.peopleconnect.us/login",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "peopleconnect",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "PeopleConnect Suppression Center (https://suppression.peopleconnect.us/login) read on 2026-10-05: one suppression covers the PeopleConnect family; email verification link required; ZabaSearch is listed under Intelius, LLC in the CPPA registry",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "anywho",
+      "name": "AnyWho",
+      "domain": "anywho.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "auto_fetch",
+        "searchUrlTemplate": "https://www.anywho.com/people/{first}+{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.spokeo.com/optout",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "listing_url",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "spokeo",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "anywho.com/optout redirects to spokeo.com/optout (2026-10-05); Spokeo, Inc. CPPA filing lists AnyWho",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "peoplefinders",
+      "name": "PeopleFinders",
+      "domain": "peoplefinders.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.peoplefinders.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.peoplefinders.com/name/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.peoplefinders.com/opt-out",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "opt-out page page behind a bot challenge on 2026-10-05; not re-read",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "publicrecords",
+      "name": "PublicRecords.com",
+      "domain": "publicrecords.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://suppression.peopleconnect.us/login",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "peopleconnect",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "PeopleConnect Suppression Center (https://suppression.peopleconnect.us/login) read on 2026-10-05: one suppression covers the PeopleConnect family; email verification link required; PublicRecords.com is listed under Intelius, LLC in the CPPA registry; the old /content/optout.html path returns 404",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "familytreenow",
+      "name": "FamilyTreeNow",
+      "domain": "familytreenow.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.familytreenow.com/search/genealogy/results?first={first}&last={last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.familytreenow.com/optout",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "opt-out page page behind a bot challenge on 2026-10-05; not re-read",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "infotracer",
+      "name": "InfoTracer",
+      "domain": "infotracer.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://infotracer.com/privacy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://infotracer.com/optout/",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "infopay",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "infotracer.com/optout/ loaded 2026-10-05; listed in the InfoPay, Inc. CPPA filing",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "checkpeople",
+      "name": "CheckPeople",
+      "domain": "checkpeople.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://checkpeople.com/privacy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://checkpeople.com/opt-out",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/opt-out loaded 2026-10-05",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "cyberbackgroundchecks",
+      "name": "CyberBackgroundChecks",
+      "domain": "cyberbackgroundchecks.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.cyberbackgroundchecks.com/people/{first}-{last}",
+        "profileUrlPattern": "^https://www\\.cyberbackgroundchecks\\.com/detail/"
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.cyberbackgroundchecks.com/removal",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "mississippi_tornado_alley",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "removal page page behind a bot challenge on 2026-10-05; not re-read; operator per CPPA registry",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "peoplelooker",
+      "name": "PeopleLooker",
+      "domain": "peoplelooker.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.peoplelooker.com/privacy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.peoplelooker.com/svc/optout/search/",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "beenverified",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/optout redirects to /svc/optout/search/ (page behind a bot challenge on 2026-10-05; not re-read); a BeenVerified opt-out does not cover PeopleLooker (third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "clustrmaps",
+      "name": "ClustrMaps",
+      "domain": "clustrmaps.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://clustrmaps.com/bl/opt-out",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "lastVerifiedAt": "unknown",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "usatrace",
+      "name": "USATrace",
+      "domain": "usatrace.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "unknown",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "/optout returns 404; /your-privacy/ is an explainer, not a form (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "ussearch",
+      "name": "US Search",
+      "domain": "ussearch.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.ussearch.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.ussearch.com/people-search/{first}-{last}/",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://suppression.peopleconnect.us/login",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "peopleconnect",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "PeopleConnect Suppression Center (https://suppression.peopleconnect.us/login) read on 2026-10-05: one suppression covers the PeopleConnect family; email verification link required",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "publicdatausa",
+      "name": "PublicDataUSA",
+      "domain": "publicdatausa.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.publicdatausa.com/remove.php",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "lastVerifiedAt": "unknown",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "smartbackgroundchecks",
+      "name": "SmartBackgroundChecks",
+      "domain": "smartbackgroundchecks.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.smartbackgroundchecks.com/people/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.smartbackgroundchecks.com/remove",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email",
+          "full_name"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": true,
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "mississippi_tornado_alley",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/optout redirects to /remove; page read 2026-10-05: email + name + captcha, then an emailed link opens the opt-out form; search URL: pattern from indexed profile URLs; not live-verified (bot challenge)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "idtrue",
+      "name": "IDTrue",
+      "domain": "idtrue.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.idtrue.com/optout/",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "lastVerifiedAt": "unknown",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "voterrecords",
+      "name": "VoterRecords",
+      "domain": "voterrecords.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://voterrecords.com/privacy",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://voterrecords.com/voters/{first}-{last}/1",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "listing_url",
+          "full_name",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": true,
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": 14,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "No standalone opt-out URL: open the record, then 'record opt-out' at the bottom of the record page; email verification; only the house number / contact details are suppressed (third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05); search URL: pattern not live-verified (bot challenge)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "Voter-file data is a public record; the site suppresses some fields but not the record itself."
+    },
+    {
+      "id": "arrestfacts",
+      "name": "ArrestFacts",
+      "domain": "arrestfacts.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "unknown",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "arrestfacts.com now serves an 'nkreeger.com' records site and the old /ng/control/privacy path redirects to a 404 (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "mugshots",
+      "name": "Mugshots.com",
+      "domain": "mugshots.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://mugshots.com/privacy.html",
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://mugshots.com/search.html?q={full}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": null,
+        "email": "mugshots.com1@gmail.com",
+        "emailSource": "mugshots.com page footer (2026-10-05): content owners who do not want material published are told to email this address",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "site footer read 2026-10-05; guides describe free removal only for expunged/sealed records with court documents",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "busted",
+      "name": "BustedMugshots",
+      "domain": "bustedmugshots.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.bustedmugshots.com/removal",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "/removal returns a JS redirect page (2026-10-05); not re-verified",
+      "lastVerifiedAt": "unknown",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "privaterecords",
+      "name": "PrivateRecords.net",
+      "domain": "privaterecords.net",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.privaterecords.net/optOut/name/landing",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "full_name",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": true,
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "private_records",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "opt-out landing page loads (2026-10-05); flow per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "neighborwho",
+      "name": "NeighborWho",
+      "domain": "neighborwho.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.neighborwho.com/svc/optout/search/",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "beenverified",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/app/optout/search redirects to /svc/optout/search/ (page behind a bot challenge on 2026-10-05; not re-read)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "telephonedirectories",
+      "name": "TelephoneDirectories",
+      "domain": "telephonedirectories.us",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "defunct",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "domain transferred by court order — Atlas Data Privacy Corp. v. TelephoneDirectories.US, NJ Super. Ct., MER-L-000335-24 (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "Defunct: the broker no longer operates this domain. Kept so stored rows still resolve; never queued."
+    },
+    {
+      "id": "reversephonelookup",
+      "name": "Reverse Phone Lookup",
+      "domain": "reversephonelookup.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": "https://www.reversephonelookup.com/privacy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://suppression.peopleconnect.us/login",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "peopleconnect",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "PeopleConnect Suppression Center (https://suppression.peopleconnect.us/login) read on 2026-10-05: one suppression covers the PeopleConnect family; email verification link required; ReversePhoneLookup.com is listed under Intelius, LLC in the CPPA registry",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "411",
+      "name": "411.com",
+      "domain": "411.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.411.com/person-search/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.whitepages.com/suppression-requests",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "listing_url",
+          "phone"
+        ],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": true,
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "whitepages",
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "411.com is run by Whitepages and has no separate form; remove through the Whitepages suppression tool (third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05); /name/ search redirects to /person-search/ (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "yellowpages",
+      "name": "YellowPages",
+      "domain": "yellowpages.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": null,
+        "email": "dpo@thryv.com",
+        "emailSource": "https://www.thryv.com/privacy/ (2026-10-05)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "thryv",
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "yellowpages.com/about/ccpa-yp only offers a cookie-based ad opt-out (2026-10-05); deletion requests go to Thryv's DPO. yellowpagesoptout.com redirects to a third-party site and is not used",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "opencorporates",
+      "name": "OpenCorporates",
+      "domain": "opencorporates.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://opencorporates.com/privacy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "Company-register data republished from official registries; no consumer removal path. Request de-indexing instead.",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "No lawful removal path: request de-indexing instead."
+    },
+    {
+      "id": "peopleby",
+      "name": "PeopleByName",
+      "domain": "peoplebyname.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.peoplebyname.com/remove.php",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "carried over from the v1.3 catalog; not re-verified",
+      "lastVerifiedAt": "unknown",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "peoplesmart",
+      "name": "PeopleSmart",
+      "domain": "peoplesmart.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.peoplesmart.com/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": null,
+        "email": "privacy@ltvco.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — BeenVerified, LLC filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "beenverified",
+      "lawfulBasis": [
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "peoplesmart.com is now a professional-contact (B2B) site and /optout-go redirects to /help/ (2026-10-05); rights requests go to the BeenVerified, LLC privacy contact",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "peoplesearch123",
+      "name": "PeopleSearch123",
+      "domain": "peoplesearch123.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": "https://www.peoplesearch123.com/privacy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.peoplesearch123.com/optOut/name/landing",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "full_name",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": true,
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "private_records",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "opt-out landing page loads (2026-10-05); operator Private Records LLC per CPPA registry; flow per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "backgroundalert",
+      "name": "BackgroundAlert",
+      "domain": "backgroundalert.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.backgroundalert.com/optout/",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "lastVerifiedAt": "unknown",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "recordsfinder",
+      "name": "RecordsFinder",
+      "domain": "recordsfinder.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://recordsfinder.com/optout/",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/opt-out/ returns 404; /optout/ (named in the CPPA registry) loaded 2026-10-05. recordsfinder.com appears in two CPPA filings (InfoPay, Inc. and Globicom Inc), so no parent group is set",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "searchsystems",
+      "name": "SearchSystems",
+      "domain": "searchsystems.net",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": "https://searchsystems.net/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "Directory of links to official public-record sources (privacy page read 2026-10-05); it hosts no person listings. Request de-indexing instead.",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "No lawful removal path: request de-indexing instead."
+    },
+    {
+      "id": "councilon",
+      "name": "CounciLon",
+      "domain": "councilon.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": "https://www.councilon.com/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "councilon.com is now a research-guide site that states it provides no private profiles or background reports (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "zoominfo",
+      "name": "ZoomInfo",
+      "domain": "zoominfo.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.zoominfo.com/trust-center/your-privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://privacyrequest.zoominfo.com/remove/verify",
+        "email": "stateremoval@zoominfo.com",
+        "emailSource": "https://www.zoominfo.com/trust-center/your-privacy (2026-10-05)",
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "old /about/privacy/privacycenter returns 404; trust-center page read 2026-10-05",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "clearbit",
+      "name": "Clearbit",
+      "domain": "clearbit.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://clearbit.com/privacy-policy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": null,
+        "email": "privacy@hubspot.com",
+        "emailSource": "https://clearbit.com/privacy-policy (2026-10-05); also the HubSpot, Inc. CPPA filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "dashboard.clearbit.com/privacy returns 404 (2026-10-05); Clearbit is part of HubSpot",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "pdl",
+      "name": "PeopleDataLabs",
+      "domain": "peopledatalabs.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.peopledatalabs.com/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://privacy.peopledatalabs.com/",
+        "email": "privacy@peopledatalabs.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — People Data Labs filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/opt-out returns 404; the Privacy Center at privacy.peopledatalabs.com loads (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "pipl",
+      "name": "Pipl",
+      "domain": "pipl.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://pipl.com/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://pipl.com/personal-information-removal-request/",
+        "email": "privacy@pipl.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — Pipl, Inc. filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "removal request page loads (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "acxiom",
+      "name": "Acxiom",
+      "domain": "acxiom.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.acxiom.com/privacy/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://isapps.acxiom.com/optout/optout.aspx",
+        "email": "askprivacy@acxiom.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — Acxiom LLC filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "opt-out form loads (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "epsilon",
+      "name": "Epsilon / Conversant",
+      "domain": "epsilon.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.epsilon.com/us/privacy-policy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://legal.epsilon.com/dsr",
+        "email": "privacy@epsilon.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — Epsilon Data Management, LLC filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/us/privacy-policy/opt-out redirects to the Data Subject Request form at legal.epsilon.com/dsr (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "comscore",
+      "name": "Comscore",
+      "domain": "comscore.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.comscore.com/About/Privacy-Policy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.comscore.com/About/Privacy/Data-Subject-Rights",
+        "email": "DSR@comscore.com",
+        "emailSource": "https://www.comscore.com/About/Privacy/Data-Subject-Rights (2026-10-05)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "data-deletion (Data Subject Rights) page read 2026-10-05; the old panel opt-out URL returns 404 and only covered panel membership",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "towerdata",
+      "name": "AtData (formerly TowerData)",
+      "domain": "atdata.com",
+      "aliasDomains": [
+        "towerdata.com"
+      ],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://atdata.com/ccpa-form",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "towerdata.com redirects to atdata.com; atdata.com/ccpa-form redirects to a OneTrust privacy web form (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "lexisnexis",
+      "name": "LexisNexis Risk Solutions",
+      "domain": "lexisnexis.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://risk.lexisnexis.com/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://optout.lexisnexis.com/",
+        "email": "consumer.documents@lexisnexisrisk.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — LexisNexis Risk Solutions FL Inc. filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "optout.lexisnexis.com redirects to consumer.risk.lexisnexis.com/opt (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "veromi",
+      "name": "Veromi",
+      "domain": "veromi.net",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "defunct",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "veromi.net is a parked GoDaddy domain (2026-10-05); guides describe a former mail-only opt-out",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "Defunct: the broker no longer operates this domain. Kept so stored rows still resolve; never queued."
+    },
+    {
+      "id": "dobsearch",
+      "name": "DOBSearch",
+      "domain": "dobsearch.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "dobsearch.com search forms post to a BeenVerified affiliate link and the old removal path redirects to a blog post (2026-10-05); it hosts no listings — opt out at BeenVerified",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "checkr",
+      "name": "Checkr",
+      "domain": "checkr.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://checkr.com/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": null,
+        "email": "privacyofficer@checkr.com",
+        "emailSource": "https://checkr.com/legal/privacy-policy (2026-10-05)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "fcra",
+        "ccpa"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "/privacy/consumer returns 404 (2026-10-05); Checkr is a consumer reporting agency — FCRA file/dispute rights apply",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "backgroundcheck",
+      "name": "BackgroundCheck.run",
+      "domain": "backgroundcheck.run",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://backgroundcheck.run/optout",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "lastVerifiedAt": "unknown",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "gladiknow",
+      "name": "Glad I Know",
+      "domain": "gladiknow.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://gladiknow.com/?firstName={first}&lastName={last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://gladiknow.com/opt-out",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "/optout returns 404; /opt-out (Data Privacy Center) loaded 2026-10-05; search URL: GET search form on the home page",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "allpeople",
+      "name": "AllPeople",
+      "domain": "allpeople.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://allpeople.com/remove",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "allpeople.com is now a business-professional directory (2026-10-05); /remove behind a bot challenge",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "spydialer",
+      "name": "SpyDialer",
+      "domain": "spydialer.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.spydialer.com/do-not-sell",
+        "email": "info@spydialer.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — Spy Labs AdCo, LLC filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/optout returns 404; /do-not-sell (state privacy-law opt-out notice) read 2026-10-05; listing removal not confirmed",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "numlookup",
+      "name": "NumLookup",
+      "domain": "numlookup.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": null,
+        "email": "hello@numlookup.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — NumLookup LLC filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/opt-out returns 404 (2026-10-05); the registry contact is the only published route found",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "openpeoplesearch",
+      "name": "OpenPeopleSearch",
+      "domain": "openpeoplesearch.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "defunct",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "none",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "openpeoplesearch.com reads 'this service has been discontinued' (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "Defunct: the broker no longer operates this domain. Kept so stored rows still resolve; never queued."
+    },
+    {
+      "id": "peoplewhiz",
+      "name": "PeopleWhiz",
+      "domain": "peoplewhiz.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.peoplewhiz.com/privacy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.peoplewhiz.com/remove-my-info",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "'remove-my-info' linked from the peoplewhiz.com footer (2026-10-05); form itself behind a bot challenge",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "searchpeoplefree",
+      "name": "SearchPeopleFree",
+      "domain": "searchpeoplefree.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "guided_manual",
+        "searchUrlTemplate": "https://www.searchpeoplefree.com/find/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.searchpeoplefree.com/opt-out",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "mississippi_tornado_alley",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/opt-out read 2026-10-05: validate an email, then remove records within a 30-minute session",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "freepeopledirectory",
+      "name": "Free People Directory",
+      "domain": "freepeopledirectory.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "auto_fetch",
+        "searchUrlTemplate": "https://www.freepeopledirectory.com/name/{first}-{last}",
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.freepeopledirectory.com/optout",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": "spokeo",
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "freepeopledirectory.com/optout loaded 2026-10-05; Spokeo, Inc. CPPA filing lists FreePeopleDirectory",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "mugshotlook",
+      "name": "MugshotLook",
+      "domain": "mugshotlook.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.mugshotlook.com/optout",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy",
+        "ccpa"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/optout loads (JS app) (2026-10-05); operator Infomatics LLC per CPPA registry",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "publicrecordsnow",
+      "name": "PublicRecordsNow",
+      "domain": "publicrecordsnow.com",
+      "aliasDomains": [],
+      "type": "public_records",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "unknown",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "/optout is a redirect loop (TOO_MANY_REDIRECTS) and the home page is a JS app with no opt-out link found (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "contactout",
+      "name": "ContactOut",
+      "domain": "contactout.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://contactout.com/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://contactout.com/optout",
+        "email": "support@contactout.com",
+        "emailSource": "https://contactout.com/optout (2026-10-05)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/optout loads (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "seamless",
+      "name": "Seamless.AI",
+      "domain": "seamless.ai",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://seamless.ai/privacy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://preferences.seamless.ai/",
+        "email": "privacy@seamlessleads.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — Seamless Contacts, Inc. filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) names preferences.seamless.ai as the rights page (bot challenge on 2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "apollo",
+      "name": "Apollo.io",
+      "domain": "apollo.io",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "high",
+      "privacyUrl": "https://www.apollo.io/privacy-policy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.apollo.io/privacy-policy/remove",
+        "email": "dpo@apollo.io",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — Zenleads, Inc. (Apollo.io) filing",
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "/privacy-policy/remove linked from apollo.io/privacy-policy (2026-10-05); email confirmation per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "lusha",
+      "name": "Lusha",
+      "domain": "lusha.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.lusha.com/privacy-policy/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.lusha.com/privacy-center/request-removal/",
+        "email": "legal@lusha.com",
+        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — Lusha Systems, Inc filing",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "removal request linked from lusha.com/privacy-center/ (2026-10-05)",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "melissa",
+      "name": "Melissa Data",
+      "domain": "melissa.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": "https://www.melissa.com/california-privacy-notice",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://apps.melissa.com/user/consumerprivacy.aspx",
+        "email": "ConsumerRequest@melissa.com",
+        "emailSource": "https://www.melissa.com/california-privacy-notice (2026-10-05)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "ccpa",
+        "state_privacy",
+        "gdpr"
+      ],
+      "registries": [
+        "ca"
+      ],
+      "source": "curated",
+      "sourceNote": "California privacy notice read 2026-10-05",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
+    },
+    {
+      "id": "unitedstatesphonebook",
+      "name": "UnitedStatesPhonebook",
+      "domain": "unitedstatesphonebook.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "unknown",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "/opt-out returns 404 and the site is a static partner-link page (2026-10-05); no removal route found",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "revealphone",
+      "name": "RevealPhoneOwner",
+      "domain": "revealphoneowner.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "low",
+      "privacyUrl": "https://www.revealphoneowner.com/privacy",
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "web_form",
+        "url": "https://www.revealphoneowner.com/data-removal/",
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [
+          "full_name",
+          "phone",
+          "email"
+        ],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perListing"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "voluntary_policy"
+      ],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "/data-removal/ read 2026-10-05: name, phone, email, reason",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    },
+    {
+      "id": "zlookup",
+      "name": "ZLookup",
+      "domain": "zlookup.com",
+      "aliasDomains": [],
+      "type": "people_search",
+      "status": "active",
+      "estimatedReach": "medium",
+      "privacyUrl": null,
+      "detection": {
+        "mode": "serp_only",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "unknown",
+        "url": null,
+        "email": null,
+        "emailSource": null,
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "unknown"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [],
+      "registries": [],
+      "source": "curated",
+      "sourceNote": "/optout returns 404 (2026-10-05); no removal route found",
+      "lastVerifiedAt": "2026-10-05",
+      "jurisdictionNotes": null
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 "use client";
 
-import { Badge, Button } from "../ui";
+import { Badge, Button, InlineResult, type InlineResultView } from "../ui";
+import { latestResult } from "./useCaseMutations";
 import { safeHttpUrl } from "@/lib/ui/safe-url";
 import { humanize, itemStatusLabel } from "@/lib/ux/plain-status";
 
@@ -42,6 +43,8 @@ export function DeindexPhase({
   onCreate,
   onUpdate,
   onCopy,
+  results = {},
+  onRetry = () => {},
 }: {
   requests: DeindexRequest[];
   exposureCount: number;
@@ -53,6 +56,8 @@ export function DeindexPhase({
   onCreate: () => void;
   onUpdate: (requestId: string, action: DeindexAction) => void;
   onCopy: (text: string) => void;
+  results?: Record<string, InlineResultView>;
+  onRetry?: (key: string) => void;
 }) {
   const disabled = busy || casePaused;
   return (
@@ -117,7 +122,7 @@ export function DeindexPhase({
                 <pre className="mt-1 whitespace-pre-wrap rounded-lg border border-white/[0.06] bg-black/30 p-3 text-xs text-slate-300 [overflow-wrap:anywhere]">
                   {r.draftBody}
                 </pre>
-                <div className="mt-2 flex flex-wrap gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Button
                     variant="ghost"
                     size="sm"
@@ -150,6 +155,7 @@ export function DeindexPhase({
                       </Button>
                     </>
                   )}
+                  <RowResult id={r.id} results={results} onRetry={onRetry} />
                 </div>
               </li>
             );
@@ -158,4 +164,20 @@ export function DeindexPhase({
       )}
     </div>
   );
+}
+
+function RowResult({
+  id,
+  results,
+  onRetry,
+}: {
+  id: string;
+  results: Record<string, InlineResultView>;
+  onRetry: (key: string) => void;
+}) {
+  const latest = latestResult(
+    results,
+    (["submit", "resolve", "reject"] as const).map((a) => `deindex-${a}-${id}`),
+  );
+  return <InlineResult result={latest?.result} onRetry={latest ? () => onRetry(latest.key) : undefined} />;
 }

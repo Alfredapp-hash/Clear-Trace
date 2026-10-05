@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import { test, expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 async function registerAndCreateCase(page: Page, label: string) {
   const suffix = randomUUID().slice(0, 8);
