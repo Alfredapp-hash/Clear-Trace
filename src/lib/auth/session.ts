@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { db } from "@/lib/db";
@@ -87,11 +88,43 @@ export async function validateSessionToken(token: string): Promise<SessionPayloa
   return session;
 }
 
-export async function getSession(): Promise<SessionPayload | null> {
+/**
+ * The current request's session. Wrapped in React cache() so a server render that reads it
+ * from several places (page, layout, helpers) verifies the JWT and hits the DB once per
+ * request. Outside a React server render (route handlers, tests) cache() does not memoize.
+ */
+export const getSession = cache(async (): Promise<SessionPayload | null> => {
   const cookieStore = await cookies();
   const token = cookieStore.get(SESSION_COOKIE)?.value;
   if (!token) return null;
   return validateSessionToken(token);
+});
+
+/**
+ * Instance operator: DEVELOPER_MODE=1, or a global users.role of developer/admin (the
+ * Sentinel API's rule). Required to *run* developer tooling such as the release gate.
+ * The role is read from the DB so demotions apply before the JWT expires.
+ */
+export function isDeveloperOperator(session: SessionPayload): boolean {
+  if (process.env.DEVELOPER_MODE === "1") return true;
+  const user = db
+    .select({ role: users.role })
+    .from(users)
+    .where(eq(users.id, session.userId))
+    .get();
+  return user?.role === "developer" || user?.role === "admin";
+}
+
+/**
+ * Whether the Settings → Developer section (Skills registry, Sentinel) is shown:
+ * instance operators (see isDeveloperOperator) and organization owners/admins.
+ * Server-side only.
+ */
+export async function canAccessDeveloperTools(session: SessionPayload): Promise<boolean> {
+  if (isDeveloperOperator(session)) return true;
+  // Lazy import: org-role imports this module.
+  const { isOrgAdmin } = await import("./org-role");
+  return isOrgAdmin(session.userId, session.organizationId);
 }
 
 export async function setSessionCookie(token: string): Promise<void> {

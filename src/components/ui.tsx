@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { type ReactNode } from "react";
+import { shortStatusLabel } from "@/lib/ux/plain-status";
 
 type CardVariant = "default" | "elevated" | "accent" | "warning" | "danger";
 
@@ -48,7 +49,7 @@ export function buttonClasses({
   size = "md",
   className = "",
 }: { variant?: ButtonVariant; size?: ButtonSize; className?: string } = {}) {
-  return `inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]} ${className}`;
+  return `inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 disabled:cursor-not-allowed ${BUTTON_VARIANTS[variant]} ${BUTTON_SIZES[size]} ${className}`;
 }
 
 export function Button({
@@ -119,7 +120,7 @@ export function Input({
 }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-slate-100 shadow-inner shadow-black/20 placeholder:text-slate-500 transition focus:border-teal-500/50 focus:bg-black/40 focus:outline-none focus:ring-2 focus:ring-teal-500/20 ${className}`}
+      className={`w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-slate-100 shadow-inner shadow-black/20 placeholder:text-slate-500 transition focus:border-teal-500/50 focus:bg-black/40 focus:ring-2 focus:ring-teal-500/60 ${className}`}
       {...props}
     />
   );
@@ -135,7 +136,7 @@ export function Label({
   return (
     <label
       htmlFor={htmlFor}
-      className="mb-1.5 block text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400"
+      className="mb-1.5 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-300"
     >
       {children}
     </label>
@@ -158,7 +159,7 @@ export function Badge({
   };
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[11px] font-medium tracking-wide ${tones[tone]}`}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs font-medium tracking-wide ${tones[tone]}`}
     >
       {children}
     </span>
@@ -192,8 +193,8 @@ export function StatusBadge({ status }: { status: string }) {
           : "bg-sky-400";
   return (
     <Badge tone={tone}>
-      <span className={`h-1.5 w-1.5 rounded-full ${dot} shadow-[0_0_6px_currentColor]`} />
-      {status.replaceAll("_", " ")}
+      <span aria-hidden="true" className={`h-1.5 w-1.5 rounded-full ${dot} shadow-[0_0_6px_currentColor]`} />
+      {shortStatusLabel(status)}
     </Badge>
   );
 }
@@ -213,7 +214,7 @@ export function PageHeader({
     <div className="mb-10 flex flex-wrap items-end justify-between gap-6">
       <div className="max-w-2xl">
         {eyebrow && (
-          <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-teal-400/90">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-teal-300">
             {eyebrow}
           </p>
         )}
@@ -245,7 +246,7 @@ export function StatCard({
       variant={accent ? "accent" : "default"}
       className="ct-animate-in group transition duration-300 hover:border-white/15"
     >
-      <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">
         {label}
       </p>
       <p
@@ -253,7 +254,7 @@ export function StatCard({
       >
         {value}
       </p>
-      {hint && <p className="mt-1 text-xs text-slate-500">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-[var(--muted)]">{hint}</p>}
     </Card>
   );
 }
@@ -271,7 +272,7 @@ export function SectionTitle({
     <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
       <div>
         <h2 className="text-lg font-medium tracking-tight text-white">{children}</h2>
-        {subtitle && <p className="mt-0.5 text-sm text-slate-500">{subtitle}</p>}
+        {subtitle && <p className="mt-0.5 text-sm text-[var(--muted)]">{subtitle}</p>}
       </div>
       {action}
     </div>
@@ -314,7 +315,7 @@ export function ListRow({
   children: ReactNode;
   className?: string;
 }) {
-  const cls = `group flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3.5 transition duration-200 hover:border-white/12 hover:bg-white/[0.04] ${className}`;
+  const cls = `group flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3.5 transition duration-200 hover:border-white/12 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 ${className}`;
   if (href) {
     return (
       <Link href={href} className={cls}>
@@ -364,7 +365,7 @@ export function EmptyState({
         <span className="text-2xl opacity-60">◇</span>
       </div>
       <h3 className="text-lg font-medium text-white">{title}</h3>
-      <p className="mx-auto mt-2 max-w-sm text-sm text-slate-500">{description}</p>
+      <p className="mx-auto mt-2 max-w-sm text-sm text-[var(--muted)]">{description}</p>
       {action && <div className="mt-6">{action}</div>}
     </Card>
   );

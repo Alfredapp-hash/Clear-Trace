@@ -2,9 +2,10 @@ import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { identityClaims, verifiedExposures } from "@/lib/db/schema";
 import { safeFetchPublicPage, type SafeFetchResult } from "@/lib/tools/safe-fetch";
-import { extractVisibleText, redactExcerpt } from "@/lib/tools/text-extractor";
+import { extractVisibleTextDetailed, redactExcerpt } from "@/lib/tools/text-extractor";
 import { decryptValue } from "@/lib/crypto/encryption";
-import { matchContentAgainstClaims } from "./content-matcher";
+import type { MatchRange } from "@/lib/tools/match-normalize";
+import { matchContentAgainstClaims, onlyNameMatched } from "./content-matcher";
 
 /**
  * Outcome of a single live check.
@@ -12,7 +13,8 @@ import { matchContentAgainstClaims } from "./content-matcher";
  * - absent: 2xx page, enough text, claim values evaluated, none found, no conflicting signals
  * - gone: 404 / 410
  * - inconclusive: everything else (fetch error, 3xx final, 401/403/429/5xx, challenge
- *   page, near-empty text, conflicting signals). Never counts as removal or reappearance.
+ *   page, near-empty text, truncated text, conflicting signals, or a name-only match on
+ *   what looks like a "no results" page). Never counts as removal or reappearance.
  */
 export type LiveCheckOutcome = "present" | "absent" | "gone" | "inconclusive";
 
@@ -65,6 +67,60 @@ export function looksLikeChallengePage(rawBody: string, visibleText: string): bo
   );
 }
 
+/** Chars on each side of a name hit searched for "no results" wording. */
+export const NO_RESULTS_WINDOW_CHARS = 400;
+
+/** Wording search pages show when they have nothing for the query. */
+export const NO_RESULTS_PATTERN =
+  /no results|not found|0 results|no records|we couldn['\u2019]t find|we could not find|no matches/i;
+
+export const NO_RESULTS_SIGNAL = "page appears to be a no-results page";
+export const TRUNCATED_TEXT_SIGNAL = "visible text truncated";
+
+/**
+ * True when "no results" wording appears within ±NO_RESULTS_WINDOW_CHARS of any name
+ * hit. Only those windows are searched, so footer links ("opt out", "removed", "not
+ * found? contact us") far from the name never trigger it.
+ */
+export function nameHitsLookLikeNoResults(visibleText: string, nameHits: MatchRange[]): boolean {
+  return nameHits.some((hit) => {
+    const from = Math.max(0, hit.start - NO_RESULTS_WINDOW_CHARS);
+    const to = Math.min(visibleText.length, hit.end + NO_RESULTS_WINDOW_CHARS);
+    return NO_RESULTS_PATTERN.test(visibleText.slice(from, to));
+  });
+}
+
+/**
+ * Deterministic absence guard. It can ONLY move "present" to "inconclusive"; every
+ * other result is returned unchanged. It never yields "absent" or "gone", so it can
+ * never produce a removal (or a certificate entry).
+ *
+ * Applies when the page is 2xx, not a challenge page, and the only matched claims are
+ * names — e.g. "No results found for Jane Doe" echoes the searched name.
+ */
+export function applyNoResultsGuard(
+  result: LiveCheckResult,
+  input: {
+    visibleText: string;
+    nameHits: MatchRange[];
+    matchedClaimTypes: string[];
+    isChallenge: boolean;
+  },
+): LiveCheckResult {
+  if (result.outcome !== "present") return result;
+  if (result.statusCode < 200 || result.statusCode >= 300) return result;
+  if (input.isChallenge) return result;
+  if (!onlyNameMatched({ matchedClaimTypes: input.matchedClaimTypes })) return result;
+  if (!nameHitsLookLikeNoResults(input.visibleText, input.nameHits)) return result;
+  return {
+    ...result,
+    outcome: "inconclusive",
+    relevantContentPresent: null,
+    confidenceScore: 0.4,
+    conflictingSignals: [...new Set([...result.conflictingSignals, NO_RESULTS_SIGNAL])],
+  };
+}
+
 function hostOf(url: string): string | null {
   try {
     return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
@@ -114,25 +170,37 @@ export function evaluateFetchedPage(
     };
   }
 
-  const visibleText = extractVisibleText(fetchResult.body);
+  const extracted = extractVisibleTextDetailed(fetchResult.body);
+  const visibleText = extracted.text;
   const redactedExcerpt = redactExcerpt(visibleText.slice(0, 500), sensitiveTerms);
 
   const match = matchContentAgainstClaims(visibleText, claims);
+  const isChallenge = looksLikeChallengePage(fetchResult.body, visibleText);
 
-  // Any claim value visible → still exposed (conservative; never hides a live listing).
+  // Any claim value visible → still exposed (conservative; never hides a live listing),
+  // except a name-only match on a "no results" page, which the guard downgrades to
+  // inconclusive (never to absent).
   if (match.relevantContentPresent) {
-    return {
-      ...base,
-      outcome: "present",
-      relevantContentPresent: true,
-      confidenceScore: match.confidenceScore,
-      matchedSignals: match.matchedSignals,
-      conflictingSignals: match.conflictingSignals,
-      redactedExcerpt,
-    };
+    return applyNoResultsGuard(
+      {
+        ...base,
+        outcome: "present",
+        relevantContentPresent: true,
+        confidenceScore: match.confidenceScore,
+        matchedSignals: match.matchedSignals,
+        conflictingSignals: match.conflictingSignals,
+        redactedExcerpt,
+      },
+      {
+        visibleText,
+        nameHits: match.nameHits,
+        matchedClaimTypes: match.matchedClaimTypes,
+        isChallenge,
+      },
+    );
   }
 
-  if (looksLikeChallengePage(fetchResult.body, visibleText)) {
+  if (isChallenge) {
     return {
       ...base,
       outcome: "inconclusive",
@@ -155,6 +223,10 @@ export function evaluateFetchedPage(
   }
   if (fetchResult.truncated) {
     conflicting.push("page body truncated before full evaluation");
+  }
+  if (extracted.truncated || fetchResult.truncated) {
+    // Part of the page was never searched, so "not found" is not proof of absence.
+    conflicting.push(TRUNCATED_TEXT_SIGNAL);
   }
 
   if (conflicting.length > 0) {

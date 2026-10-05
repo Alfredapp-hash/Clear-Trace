@@ -4,6 +4,10 @@ import { getConnectorHealth } from "@/lib/connectors/service";
 import { getDiscoveryData } from "@/lib/discovery/service";
 import { getRemediationData } from "@/lib/remediation/service";
 import { getVerificationData } from "@/lib/verification/service";
+import {
+  getRecommendedSkillForCase,
+  isRemovalCertificateIssuable,
+} from "@/lib/coordinator/skill-runner";
 import { buildAllAgentPacks } from "./agent-packs";
 import { buildGlobalSetupMarkdown } from "./agent-setup-content";
 import {
@@ -21,15 +25,23 @@ export async function buildGuideInput(
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) return null;
 
-  const [authorization, claims, discovery, remediation, verification, connectorHealth] =
-    await Promise.all([
-      getLatestAuthorization(caseId),
-      getIdentityClaimsRedacted(caseId),
-      getDiscoveryData(caseId),
-      getRemediationData(caseId),
-      getVerificationData(caseId),
-      getConnectorHealth(session.organizationId),
-    ]);
+  const [
+    authorization,
+    claims,
+    discovery,
+    remediation,
+    verification,
+    connectorHealth,
+    certificateIssuable,
+  ] = await Promise.all([
+    getLatestAuthorization(caseId),
+    getIdentityClaimsRedacted(caseId),
+    getDiscoveryData(caseId),
+    getRemediationData(caseId),
+    getVerificationData(caseId),
+    getConnectorHealth(session.organizationId),
+    isRemovalCertificateIssuable(session, caseId),
+  ]);
 
   const scanScopes = JSON.parse(privacyCase.scanScopes) as string[];
   const exposures =
@@ -49,6 +61,7 @@ export async function buildGuideInput(
     draftCount: remediation.drafts.length,
     checkCount: verification.checks.length,
     connectorHealth,
+    certificateIssuable,
   };
 }
 
@@ -60,7 +73,11 @@ export async function buildCaseGuide(
   const input = await buildGuideInput(session, caseId);
   if (!input) return null;
 
-  const recommendedSkillId = resolveCurrentSkillId(input.caseStatus);
+  // Case-aware (e.g. partially_resolved with an allowed follow-up → follow-up-policy);
+  // falls back to the status-only rule.
+  const recommendedSkillId =
+    (await getRecommendedSkillForCase(session, caseId)) ??
+    resolveCurrentSkillId(input.caseStatus);
   const activeSkillId = skillIdOverride ?? recommendedSkillId ?? "intake-and-consent";
   const currentStep = buildStepGuide(activeSkillId, input);
 

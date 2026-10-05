@@ -20,14 +20,35 @@ export interface BillingStatus {
   canUpgrade: boolean;
 }
 
+const ACTIVE_SUBSCRIPTION_STATUSES = new Set(["active", "trialing"]);
+
+export function isActiveSubscriptionStatus(status: string | null | undefined): boolean {
+  return ACTIVE_SUBSCRIPTION_STATUSES.has(status ?? "");
+}
+
+/**
+ * customer.subscription.updated / .deleted guard. An org stores one subscription id; when it
+ * is on a different subscription that is active or trialing, an event for some other
+ * subscription (an old one being cancelled, a duplicate checkout expiring) must not
+ * downgrade it or swap its subscription id. The one exception: an event that makes the
+ * other subscription active, which legitimately replaces the current one.
+ */
+export function shouldIgnoreSubscriptionEvent(
+  org: { stripeSubscriptionId: string | null; subscriptionStatus: string | null },
+  subscription: { id: string; status: string },
+): boolean {
+  const current = org.stripeSubscriptionId;
+  if (!current || current === subscription.id) return false;
+  if (!isActiveSubscriptionStatus(org.subscriptionStatus)) return false;
+  return !isActiveSubscriptionStatus(subscription.status);
+}
+
 function effectivePlan(org: {
   plan: string | null;
   subscriptionStatus: string | null;
 }): PlanId {
   if (!isBillingConfigured()) return "pro";
-  if (org.subscriptionStatus === "active" || org.subscriptionStatus === "trialing") {
-    return "pro";
-  }
+  if (isActiveSubscriptionStatus(org.subscriptionStatus)) return "pro";
   return (org.plan === "pro" ? "pro" : "free") as PlanId;
 }
 

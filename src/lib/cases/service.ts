@@ -161,11 +161,15 @@ export async function recordAuthorization(
     createdAt: now,
   });
 
-  const nextStatus = status === "verified" ? "consent_verified" : "draft";
-  await db
-    .update(privacyCases)
-    .set({ status: nextStatus, updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
+  // Recording consent only moves a draft case forward. A case that is already further along
+  // (or paused/archived) keeps its status — finishing a missing authorization from the case
+  // page must never regress or resume it.
+  if (status === "verified") {
+    await db
+      .update(privacyCases)
+      .set({ status: "consent_verified", updatedAt: now })
+      .where(and(eq(privacyCases.id, caseId), eq(privacyCases.status, "draft")));
+  }
 
   await logAuditEvent({
     caseId,

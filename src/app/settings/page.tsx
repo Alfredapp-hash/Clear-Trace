@@ -1,139 +1,230 @@
-"use client";
-
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { eq } from "drizzle-orm";
+import { redirect } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { AgentBuilderKit } from "@/components/AgentBuilderKit";
 import { AgentSetupGuide } from "@/components/AgentSetupGuide";
-import { ConnectorSettings } from "@/components/ConnectorSettings";
+import { ConnectorSettings, type ConnectorSettingsData } from "@/components/ConnectorSettings";
 import { EnterpriseSettings } from "@/components/EnterpriseSettings";
+import { requireBillingFeature } from "@/lib/billing/service";
+import type { BillingFeature } from "@/lib/billing/plans";
+import { listApiKeys } from "@/lib/enterprise/api-keys";
+import { listEnterpriseWebhooks } from "@/lib/enterprise/webhooks";
+import { getFamilySeatLimit, listFamilyMembers } from "@/lib/family/service";
 import { FamilySettings } from "@/components/FamilySettings";
-import { Button, Card, Input, Label, PageHeader, SectionTitle } from "@/components/ui";
-import { callApi } from "@/lib/ui/call-api";
+import { PrivacyAiSection, WorkspaceSection } from "@/components/settings/PrivacyAiSection";
+import { Card, PageHeader } from "@/components/ui";
+import { canAccessDeveloperTools, getSession } from "@/lib/auth/session";
+import { isOrgAdmin } from "@/lib/auth/org-role";
+import { ensureDatabase } from "@/lib/db/init";
+import { db } from "@/lib/db";
+import { organizations } from "@/lib/db/schema";
+import {
+  getAgentDefaults,
+  getConnectorHealth,
+  getSetupGuide,
+  listOrgConnectors,
+} from "@/lib/connectors/service";
 
-export default function SettingsPage() {
-  const [retentionDays, setRetentionDays] = useState(365);
-  const [rateLimit, setRateLimit] = useState(100);
-  const [saveState, setSaveState] = useState<"idle" | "saving" | "saved">("idle");
-  const [saveError, setSaveError] = useState("");
-  const [loadError, setLoadError] = useState("");
-  const [userName, setUserName] = useState("");
-  const [orgName, setOrgName] = useState("");
+/** Sticky in-page navigation targets, in page order. */
+const SECTIONS = [
+  { id: "connections", label: "Search & email connections" },
+  { id: "privacy-ai", label: "Privacy & AI" },
+  { id: "household", label: "Household" },
+  { id: "api", label: "API & integrations" },
+  { id: "workspace", label: "Workspace" },
+] as const;
 
-  useEffect(() => {
-    const controller = new AbortController();
-    const { signal } = controller;
-    callApi<{ user?: { name?: string; organizationName?: string } }>("/api/auth/me", {
-      signal,
-    }).then((res) => {
-      if (signal.aborted || !res.ok) return;
-      setUserName(res.data.user?.name ?? "");
-      setOrgName(res.data.user?.organizationName ?? "");
-    });
-    callApi<{ retentionDays?: number; rateLimitPerHour?: number }>("/api/settings", {
-      signal,
-      errorMessage: "Could not load organization settings",
-    }).then((res) => {
-      if (signal.aborted) return;
-      if (!res.ok) {
-        setLoadError(res.error);
-        return;
-      }
-      if (res.data.retentionDays) setRetentionDays(res.data.retentionDays);
-      if (res.data.rateLimitPerHour) setRateLimit(res.data.rateLimitPerHour);
-    });
-    return () => controller.abort();
-  }, []);
+const DEVELOPER_SECTION = { id: "developer", label: "Developer" } as const;
 
-  useEffect(() => {
-    if (saveState !== "saved") return;
-    const timer = setTimeout(() => setSaveState("idle"), 2000);
-    return () => clearTimeout(timer);
-  }, [saveState]);
-
-  async function saveOrgSettings() {
-    setSaveState("saving");
-    setSaveError("");
-    const res = await callApi("/api/settings", {
-      method: "PATCH",
-      body: { retentionDays, rateLimitPerHour: rateLimit },
-      errorMessage: "Could not save organization settings",
-    });
-    if (!res.ok) {
-      setSaveError(res.error);
-      setSaveState("idle");
-      return;
-    }
-    setSaveState("saved");
+/**
+ * Same data as GET /api/settings/api-keys and /webhooks: only org owners/admins on a plan
+ * with the feature see rows (the routes answer 403 / 402 otherwise, which the client shows
+ * as an empty list).
+ */
+async function listIfAllowed<T>(
+  canManage: boolean,
+  orgId: string,
+  feature: BillingFeature,
+  load: () => Promise<T[]>,
+): Promise<T[]> {
+  if (!canManage) return [];
+  try {
+    await requireBillingFeature(orgId, feature);
+  } catch (error) {
+    if (error instanceof Error && error.message === "BILLING_UPGRADE_REQUIRED") return [];
+    throw error;
   }
+  return load();
+}
+
+function SectionHeading({ id, title, subtitle }: { id: string; title: string; subtitle?: string }) {
+  return (
+    <div className="mb-5">
+      <h2 id={`${id}-heading`} className="text-xl font-semibold tracking-tight text-white">
+        {title}
+      </h2>
+      {subtitle && <p className="mt-1 text-sm text-muted">{subtitle}</p>}
+    </div>
+  );
+}
+
+/**
+ * Settings is a Server Component: the session, connector status, agent defaults and org
+ * settings are read here and handed to the client islands as props, so the page needs no
+ * data requests after hydration for these sections.
+ */
+export default async function SettingsPage() {
+  ensureDatabase();
+  const session = await getSession();
+  if (!session) redirect("/login?from=/settings");
+
+  const orgId = session.organizationId;
+  const [connectors, health, agentDefaults, canManage, showDeveloper, org] = await Promise.all([
+    listOrgConnectors(orgId),
+    getConnectorHealth(orgId),
+    getAgentDefaults(orgId),
+    isOrgAdmin(session.userId, orgId),
+    canAccessDeveloperTools(session),
+    db.query.organizations.findFirst({ where: eq(organizations.id, orgId) }),
+  ]);
+
+  const [familyMembers, familySeatLimit, apiKeys, webhooks] = await Promise.all([
+    listFamilyMembers(orgId).then((rows) =>
+      rows.map(({ id, displayName, relationship, notes }) => ({ id, displayName, relationship, notes })),
+    ),
+    getFamilySeatLimit(orgId),
+    listIfAllowed(canManage, orgId, "api_keys", () => listApiKeys(orgId)),
+    listIfAllowed(canManage, orgId, "enterprise_webhooks", () => listEnterpriseWebhooks(orgId)),
+  ]);
+
+  const connectorData: ConnectorSettingsData = {
+    connectors,
+    health,
+    agentDefaults,
+    setupGuides: Object.fromEntries(connectors.map((c) => [c.type, getSetupGuide(c.type)])),
+    canManage,
+  };
+
+  const intelligenceOptions = connectors
+    .filter((c) => c.category === "intelligence")
+    .map((c) => ({ type: c.type, name: c.name }));
+
+  const sections = showDeveloper ? [...SECTIONS, DEVELOPER_SECTION] : [...SECTIONS];
 
   return (
-    <AppShell userName={userName || "User"} orgName={orgName || "Workspace"}>
+    <AppShell userName={session.name} orgName={session.organizationName}>
       <PageHeader
         eyebrow="Configuration"
         title="Settings"
-        description="Bring your own API keys and connectors. Agents run on your credentials — nothing is billed through us."
+        description="Connect your own search and email accounts, choose how AI is used, and manage your household and workspace."
       />
 
-      <ConnectorSettings />
+      <nav
+        aria-label="Settings sections"
+        className="sticky top-[6.5rem] z-40 -mx-2 mb-8 flex gap-1 overflow-x-auto rounded-xl border border-white/[0.06] bg-[#08090d]/90 p-1.5 backdrop-blur-xl md:top-[4.5rem]"
+      >
+        {sections.map((section) => (
+          <a
+            key={section.id}
+            href={`#${section.id}`}
+            className="shrink-0 rounded-lg px-3 py-1.5 text-sm font-medium text-slate-300 transition hover:bg-white/[0.06] hover:text-white"
+          >
+            {section.label}
+          </a>
+        ))}
+      </nav>
 
-      <EnterpriseSettings />
+      <div className="space-y-14">
+        <section id="connections" aria-labelledby="connections-heading" className="ct-anchor-section">
+          <SectionHeading
+            id="connections"
+            title="Search & email connections"
+            subtitle="Bring your own API keys. Agents run on your credentials; nothing is billed through us."
+          />
+          <ConnectorSettings initialData={connectorData} />
+        </section>
 
-      <FamilySettings />
+        <section id="privacy-ai" aria-labelledby="privacy-ai-heading" className="ct-anchor-section">
+          <SectionHeading
+            id="privacy-ai"
+            title="Privacy & AI"
+            subtitle="Decide whether any AI may run outside this machine."
+          />
+          <PrivacyAiSection
+            initialLocalOnly={agentDefaults.llmLocalOnly !== false}
+            initialIntelligence={agentDefaults.intelligence ?? null}
+            intelligenceOptions={intelligenceOptions}
+            canManage={canManage}
+          />
+        </section>
 
-      <AgentBuilderKit />
+        <section id="household" aria-labelledby="household-heading" className="ct-anchor-section">
+          <SectionHeading
+            id="household"
+            title="Household"
+            subtitle="People you are authorized to protect, such as a partner or child."
+          />
+          <FamilySettings initialMembers={familyMembers} initialSeatLimit={familySeatLimit} />
+        </section>
 
-      <AgentSetupGuide />
+        <section id="api" aria-labelledby="api-heading" className="ct-anchor-section">
+          <SectionHeading
+            id="api"
+            title="API & integrations"
+            subtitle="API keys, webhooks and hand-off kits for external AI agents."
+          />
+          <EnterpriseSettings initialKeys={apiKeys} initialWebhooks={webhooks} />
+          <AgentBuilderKit />
+          <AgentSetupGuide />
+        </section>
 
-      <Card variant="elevated" className="mt-8 max-w-lg">
-        <SectionTitle>Organization</SectionTitle>
-        <div className="space-y-5">
-          <div>
-            <Label htmlFor="retention">Data retention (days)</Label>
-            <Input
-              id="retention"
-              type="number"
-              min={30}
-              value={retentionDays}
-              onChange={(e) => setRetentionDays(e.target.valueAsNumber || 0)}
+        <section id="workspace" aria-labelledby="workspace-heading" className="ct-anchor-section">
+          <SectionHeading
+            id="workspace"
+            title="Workspace"
+            subtitle="How long case data is kept and how many API calls are allowed."
+          />
+          <WorkspaceSection
+            initialRetentionDays={org?.retentionDays ?? 365}
+            initialRateLimitPerHour={org?.rateLimitPerHour ?? 100}
+            canManage={canManage}
+          />
+        </section>
+
+        {showDeveloper && (
+          <section id="developer" aria-labelledby="developer-heading" className="ct-anchor-section">
+            <SectionHeading
+              id="developer"
+              title="Developer"
+              subtitle="Tools for the people who run and maintain this ClearTrace instance."
             />
-          </div>
-          <div>
-            <Label htmlFor="rate">API rate limit (per hour)</Label>
-            <Input
-              id="rate"
-              type="number"
-              min={10}
-              max={1000}
-              value={rateLimit}
-              onChange={(e) => setRateLimit(e.target.valueAsNumber || 0)}
-            />
-          </div>
-          {loadError && (
-            <p role="alert" className="text-sm text-rose-300">
-              {loadError}
-            </p>
-          )}
-          {saveError && (
-            <p role="alert" className="text-sm text-rose-300">
-              {saveError}
-            </p>
-          )}
-          <Button onClick={saveOrgSettings} disabled={saveState === "saving"}>
-            {saveState === "saving"
-              ? "Saving…"
-              : saveState === "saved"
-                ? "Saved ✓"
-                : "Save organization settings"}
-          </Button>
-        </div>
-      </Card>
-
-      <p className="mt-8 text-sm text-slate-500">
-        <Link href="/security" className="font-medium text-teal-400 hover:text-teal-300">
-          Sentinel security console →
-        </Link>
-      </p>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Card>
+                <h3 className="font-medium text-white">
+                  <Link href="/skills" className="text-teal-300 hover:text-teal-200">
+                    Skill registry →
+                  </Link>
+                </h3>
+                <p className="mt-1.5 text-sm text-slate-400">
+                  The workflow steps Autopilot can run, with their risk levels and allowed tools.
+                </p>
+              </Card>
+              <Card>
+                <h3 className="font-medium text-white">
+                  <Link href="/security" className="text-teal-300 hover:text-teal-200">
+                    Sentinel release gate →
+                  </Link>
+                </h3>
+                <p className="mt-1.5 text-sm text-slate-400">
+                  Checks request-safety protections, dependencies and secret configuration
+                  before a release.
+                </p>
+              </Card>
+            </div>
+          </section>
+        )}
+      </div>
     </AppShell>
   );
 }

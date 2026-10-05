@@ -1,0 +1,43 @@
+# Dependency update PRs. Security advisories open PRs immediately regardless of schedule;
+# the weekly runs keep version/digest drift small. CI (incl. `npm audit --omit=dev
+# --audit-level=high`) gates every PR.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 10
+    groups:
+      # next and eslint-config-next are pinned exactly and must move together.
+      next:
+        patterns: ["next", "eslint-config-next"]
+      # vitest and its coverage provider share an exact peer version.
+      vitest:
+        patterns: ["vitest", "@vitest/*"]
+      dev-minor-patch:
+        dependency-type: development
+        update-types: ["minor", "patch"]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Dockerfile (node base image) and docker-compose.yml (curl sidecar) are pinned by digest.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+
+  - package-ecosystem: docker-compose
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday

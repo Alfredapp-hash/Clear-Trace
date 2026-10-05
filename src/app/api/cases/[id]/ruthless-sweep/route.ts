@@ -1,7 +1,7 @@
 import { requireCaseAccess } from "@/lib/auth/case-access";
 import { ensureDatabase } from "@/lib/db/init";
 import { runRuthlessSweep } from "@/lib/ruthless/service";
-import { jsonError, jsonOk } from "@/lib/api";
+import { jsonError, jsonOk, workflowErrorResponse } from "@/lib/api";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 
 export async function POST(
@@ -29,7 +29,10 @@ export async function POST(
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("Ruthless mode requires Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "AUTHORIZATION_REQUIRED") return jsonError("Consent required", 403);
+    // runRuthlessSweep calls runDiscovery first, so the consent / paused gates surface here:
+    // NOT_CONSENTED -> 403, CASE_BLOCKED / INVALID_TRANSITION -> 409 (bodies carry `code`).
+    const workflow = workflowErrorResponse(msg);
+    if (workflow) return workflow;
     if (msg === "NO_SCAN_ENABLED_CLAIMS") return jsonError("No scan-enabled claims", 400);
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);

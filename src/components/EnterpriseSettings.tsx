@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Button, Card, Input, Label, SectionTitle } from "@/components/ui";
 import { callApi } from "@/lib/ui/call-api";
 
-interface ApiKeyRow {
+export interface ApiKeyRow {
   id: string;
   name: string;
   keyPrefix: string;
@@ -12,7 +12,7 @@ interface ApiKeyRow {
   createdAt: string;
 }
 
-interface WebhookRow {
+export interface WebhookRow {
   id: string;
   name: string;
   url: string;
@@ -29,9 +29,20 @@ async function loadAll(signal?: AbortSignal) {
   return { keysRes, whRes };
 }
 
-export function EnterpriseSettings() {
-  const [keys, setKeys] = useState<ApiKeyRow[]>([]);
-  const [webhooks, setWebhooks] = useState<WebhookRow[]>([]);
+/**
+ * When the server passes `initialKeys` / `initialWebhooks` (the settings page does),
+ * nothing is fetched on mount; lists are re-fetched only after a change.
+ */
+export function EnterpriseSettings({
+  initialKeys,
+  initialWebhooks,
+}: {
+  initialKeys?: ApiKeyRow[];
+  initialWebhooks?: WebhookRow[];
+} = {}) {
+  const hasInitial = initialKeys !== undefined && initialWebhooks !== undefined;
+  const [keys, setKeys] = useState<ApiKeyRow[]>(initialKeys ?? []);
+  const [webhooks, setWebhooks] = useState<WebhookRow[]>(initialWebhooks ?? []);
   const [keyName, setKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
   const [whName, setWhName] = useState("");
@@ -50,6 +61,7 @@ export function EnterpriseSettings() {
   }
 
   useEffect(() => {
+    if (hasInitial) return;
     const controller = new AbortController();
     loadAll(controller.signal).then(({ keysRes, whRes }) => {
       if (controller.signal.aborted) return;
@@ -57,7 +69,7 @@ export function EnterpriseSettings() {
       if (whRes.ok) setWebhooks(whRes.data.webhooks ?? []);
     });
     return () => controller.abort();
-  }, []);
+  }, [hasInitial]);
 
   async function mutate(
     key: string,

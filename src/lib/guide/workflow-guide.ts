@@ -1,5 +1,6 @@
 import { getRecommendedSkill, getWorkflowSteps } from "@/lib/coordinator/hermes";
-import { plainStatus } from "@/lib/ux/plain-status";
+import { COMPLETED_STATUS_SKILL } from "@/lib/skills/catalog";
+import { finishSetupHref, plainStatus } from "@/lib/ux/plain-status";
 import { getSkillById } from "@/lib/skills/registry";
 import { SKILL_CONNECTOR_REQUIREMENTS } from "@/lib/connectors/requirements";
 import { CONNECTOR_REGISTRY } from "@/lib/connectors/registry";
@@ -11,12 +12,25 @@ import type {
   StepGuide,
 } from "./types";
 
+/** User-facing name of the in-app automated runner (the coordinator, formerly "Hermes"). */
+export const AUTOPILOT_NAME = "Autopilot";
+/** Label of the button that runs the next automated step. */
+export const AUTOPILOT_ACTION_LABEL = "Do the next step for me";
+const AUTOPILOT_LOCATION = `Workflow → ${AUTOPILOT_ACTION_LABEL}`;
+
+/**
+ * Guide input. `certificateIssuable` must come from the real certificate rule
+ * (isRemovalCertificateIssuable in coordinator/skill-runner.ts); when it is absent the
+ * certificate steps are never shown as done.
+ */
+export type WorkflowGuideInput = GuideBuildInput & { certificateIssuable?: boolean };
+
 interface StepGuideTemplate {
   headline: string;
   summary: string;
-  buildChecklist: (ctx: GuideBuildInput) => GuideChecklistItem[];
-  buildActions: (ctx: GuideBuildInput) => GuideInAppAction[];
-  buildConnectors: (ctx: GuideBuildInput) => GuideConnectorHint[];
+  buildChecklist: (ctx: WorkflowGuideInput) => GuideChecklistItem[];
+  buildActions: (ctx: WorkflowGuideInput) => GuideInAppAction[];
+  buildConnectors: (ctx: WorkflowGuideInput) => GuideConnectorHint[];
   stuckHelp: string[];
 }
 
@@ -47,13 +61,13 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         done: ctx.scanScopes.length > 0,
       },
     ],
-    buildActions: () => [
+    buildActions: (ctx) => [
       {
         id: "intake",
-        label: "Open intake wizard",
-        description: "Create authorization and claims in one flow.",
-        location: "/cases/new",
-        href: "/cases/new",
+        label: "Finish setup for this case",
+        description: "Record authorization and claims for this case (no new case is created).",
+        // Resume THIS case (rendered as a link); a bare /cases/new would create a second case.
+        location: finishSetupHref(ctx.caseId),
       },
     ],
     buildConnectors: () => [],
@@ -79,22 +93,22 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         label: "Run discovery",
         description: "Execute demo or live discovery against your approved claims.",
         done: ctx.candidateCount > 0 || ctx.exposureCount > 0,
-        inAppHint: "Workflow panel → Run demo discovery",
+        inAppHint: "Workflow → Search for my information",
       },
       {
         id: "live-url",
         label: "Add known URLs (optional)",
-        description: "Paste a public URL you already found for SSRF-safe fetch.",
+        description: "Paste a public page you already found; ClearTrace fetches it safely (private network addresses are blocked).",
         done: false,
-        inAppHint: "Workflow panel → Add live URL",
+        inAppHint: "Workflow → Add a page I found",
       },
     ],
     buildActions: () => [
       {
         id: "discovery",
-        label: "Run demo discovery",
+        label: "Search for my information",
         description: "Populates sample candidates without external API keys.",
-        location: "Workflow → Phase 01 Discovery",
+        location: "Workflow → 1. Find your information",
       },
       {
         id: "connectors",
@@ -113,14 +127,14 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
   "intake-live-url": {
     headline: "Add a known public URL",
     summary:
-      "Paste a URL you already found. ClearTrace fetches it with SSRF protection and creates a reviewable candidate.",
+      "Paste a page you already found. ClearTrace fetches it safely (private network addresses are blocked) and creates a match for you to review.",
     buildChecklist: (ctx) => [
       {
         id: "url",
         label: "Submit public URL",
         description: "Must be http/https and reachable from the public internet.",
         done: ctx.candidateCount > 0,
-        inAppHint: "Workflow → Add live URL",
+        inAppHint: "Workflow → Add a page I found",
       },
       {
         id: "review",
@@ -132,9 +146,9 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
     buildActions: () => [
       {
         id: "live-url",
-        label: "Add live URL",
-        description: "SSRF-safe fetch from the case workflow panel.",
-        location: "Workflow → Add live URL",
+        label: "Add a page I found",
+        description: "Safe fetch (private network addresses blocked) from the case workflow.",
+        location: "Workflow → Add a page I found",
       },
     ],
     buildConnectors: () => [],
@@ -167,7 +181,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         id: "confirm",
         label: "Confirm matches",
         description: "Promotes confirmed candidates to exposures.",
-        location: "Workflow → Phase 01 → Confirm",
+        location: "Workflow → 1. Find your information → This is me",
       },
     ],
     buildConnectors: () => [],
@@ -190,15 +204,15 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
     ],
     buildActions: () => [
       {
-        id: "hermes",
-        label: "Run next Hermes step",
-        description: "Automated classification via in-app skill runner.",
-        location: "Workflow → Run next Hermes step",
+        id: "autopilot",
+        label: AUTOPILOT_ACTION_LABEL,
+        description: `${AUTOPILOT_NAME} classifies the exposure for you.`,
+        location: AUTOPILOT_LOCATION,
       },
     ],
     buildConnectors: () => [],
     stuckHelp: [
-      "Classification runs inline during Resolve controller — no separate Hermes step.",
+      `Classification runs inline during Resolve controller — no separate ${AUTOPILOT_NAME} step.`,
       "Optional LLM connectors can assist draft polish later, not classification.",
     ],
   },
@@ -220,7 +234,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         id: "resolve-btn",
         label: "Resolve controller",
         description: "Runs playbook lookup for the exposure URL.",
-        location: "Workflow → Phase 02",
+        location: "Workflow → 3. Removal requests",
       },
     ],
     buildConnectors: () => [],
@@ -242,10 +256,10 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
     ],
     buildActions: () => [
       {
-        id: "hermes",
-        label: "Run next Hermes step",
-        description: "Auto-routes remedy from classification.",
-        location: "Workflow → Run next Hermes step",
+        id: "autopilot",
+        label: AUTOPILOT_ACTION_LABEL,
+        description: `${AUTOPILOT_NAME} picks the removal path from the classification.`,
+        location: AUTOPILOT_LOCATION,
       },
     ],
     buildConnectors: () => [],
@@ -265,12 +279,12 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
       {
         id: "compliance",
         label: "Run compliance check",
-        description: "Hermes flags prohibited language and review items.",
+        description: `${AUTOPILOT_NAME} flags prohibited language and review items.`,
         done:
           ctx.caseStatus === "approved_to_send" ||
           ctx.caseStatus === "sent" ||
           ctx.checkCount > 0,
-        inAppHint: "Run next Hermes step or review amber warnings on draft",
+        inAppHint: `${AUTOPILOT_ACTION_LABEL}, or review the amber warnings on the draft`,
       },
       {
         id: "approve",
@@ -281,10 +295,10 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
     ],
     buildActions: () => [
       {
-        id: "hermes",
-        label: "Run compliance verify",
-        description: "Runs compliance-verify-draft skill.",
-        location: "Workflow → Run next Hermes step",
+        id: "autopilot",
+        label: "Run compliance check",
+        description: `${AUTOPILOT_NAME} checks the draft before you send it.`,
+        location: AUTOPILOT_LOCATION,
       },
     ],
     buildConnectors: () => [],
@@ -308,7 +322,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         id: "record",
         label: "Record as sent",
         description: "Updates case status for verification.",
-        location: "Workflow → Phase 02",
+        location: "Workflow → 3. Removal requests",
       },
     ],
     buildConnectors: () => [],
@@ -329,23 +343,23 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
       {
         id: "schedule",
         label: "Run schedule monitoring",
-        description: "Hermes creates a weekly verification rule.",
+        description: `${AUTOPILOT_NAME} creates a weekly verification rule.`,
         done: ctx.checkCount > 0 || ctx.caseStatus === "verification_due",
-        inAppHint: "Workflow → Run next Hermes step",
+        inAppHint: AUTOPILOT_LOCATION,
       },
     ],
     buildActions: () => [
       {
-        id: "hermes",
+        id: "autopilot",
         label: "Schedule weekly checks",
-        description: "Runs schedule-monitoring skill via Hermes.",
-        location: "Workflow → Run next Hermes step",
+        description: `${AUTOPILOT_NAME} schedules the checks for you.`,
+        location: AUTOPILOT_LOCATION,
       },
     ],
     buildConnectors: () => [],
     stuckHelp: [
-      "Monitoring uses SSRF-safe live checks — no discovery connector required.",
-      "You can also schedule checks manually from Phase 03.",
+      "Monitoring uses safe live checks (private network addresses blocked) — no discovery connector required.",
+      "You can also schedule checks manually from 5. Removal checks.",
     ],
   },
   "draft-removal-request": {
@@ -358,7 +372,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         label: "Create draft from template",
         description: "Pick a template or generate all variants.",
         done: ctx.draftCount > 0,
-        inAppHint: "Workflow → Phase 02 → template picker",
+        inAppHint: "Workflow → 3. Removal requests → template picker",
       },
       {
         id: "review",
@@ -378,7 +392,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         id: "templates",
         label: "Pick draft template",
         description: "13 templates for brokers, platforms, and hosts.",
-        location: "Workflow → Phase 02",
+        location: "Workflow → 3. Removal requests",
       },
       {
         id: "gmail",
@@ -406,12 +420,12 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         label: "Schedule verification",
         description: "Weekly checks track whether content reappears.",
         done: ctx.checkCount > 0,
-        inAppHint: "Workflow → Phase 03 → Schedule weekly check",
+        inAppHint: "Workflow → 5. Removal checks → Check weekly",
       },
       {
         id: "live",
         label: "Run live verification",
-        description: "SSRF-safe fetch of the exposure URL.",
+        description: "Safe fetch of the page (private network addresses blocked).",
         done: ctx.caseStatus === "removed_confirmed",
       },
     ],
@@ -420,12 +434,12 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         id: "live-verify",
         label: "Live verify",
         description: "Fetches the public page safely.",
-        location: "Workflow → Phase 03",
+        location: "Workflow → 5. Removal checks",
       },
       {
         id: "certificate",
         label: "Download certificate",
-        description: "Available after removal is confirmed.",
+        description: "Available once a live check confirms at least one removal.",
         location: "Next action card → Removal certificate",
       },
     ],
@@ -436,21 +450,28 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
     headline: "Follow up on no response",
     summary:
       "If the controller did not respond, generate a polite follow-up within policy limits.",
-    buildChecklist: (ctx) => [
+    buildChecklist: () => [
       {
         id: "followup",
-        label: "Create follow-up draft",
-        description: "Only when original request was sent and window elapsed.",
+        label: "Create follow-up drafts",
+        description:
+          "One per request whose page is still visible after a live check — only after the original request was sent and its waiting period has passed.",
         done: false,
-        inAppHint: "Workflow → Create follow-up draft",
+        inAppHint: "Workflow → Follow up on each still-visible page",
       },
     ],
     buildActions: () => [
       {
         id: "followup-btn",
         label: "Create follow-up draft",
-        description: "Generates a second notice from policy templates.",
-        location: "Workflow → Phase 02",
+        description: "Generates a follow-up notice for that request from policy templates.",
+        location: "Workflow → exposure card → Follow up",
+      },
+      {
+        id: "autopilot",
+        label: AUTOPILOT_ACTION_LABEL,
+        description: `${AUTOPILOT_NAME} drafts follow-ups for every request that is due.`,
+        location: AUTOPILOT_LOCATION,
       },
     ],
     buildConnectors: (ctx) => buildConnectorHints("follow-up-policy", ctx),
@@ -512,7 +533,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         id: "verify",
         label: "Run verification",
         description: "Live or simulate check on the exposure URL.",
-        location: "Workflow → Phase 03",
+        location: "Workflow → 5. Removal checks",
       },
     ],
     buildConnectors: () => [],
@@ -525,15 +546,17 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
     buildChecklist: (ctx) => [
       {
         id: "removed",
-        label: "Removal confirmed",
-        description: "Case must reach removed_confirmed status.",
-        done: ctx.caseStatus === "removed_confirmed",
+        label: "Removal confirmed by a live check",
+        description:
+          "At least one page must be confirmed removed by its most recent live check (simulated checks never count).",
+        done: ctx.certificateIssuable === true,
+        inAppHint: "Workflow → Check if it's gone",
       },
       {
         id: "cert",
-        label: "Download certificate",
+        label: "Certificate ready to download",
         description: "JSON certificate with audit references.",
-        done: ctx.caseStatus === "removed_confirmed",
+        done: ctx.certificateIssuable === true,
         inAppHint: "Next action card → Removal certificate",
       },
     ],
@@ -552,7 +575,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
     headline: "Export case packet",
     summary:
       "Download a redacted JSON packet for legal review, advocacy, or your own records.",
-    buildChecklist: (ctx) => [
+    buildChecklist: () => [
       {
         id: "packet",
         label: "Export packet",
@@ -605,7 +628,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         id: "template",
         label: "Legal escalation template",
         description: "Manual template — review with counsel before sending.",
-        location: "Workflow → Phase 02 → Templates",
+        location: "Workflow → 3. Removal requests → Templates",
       },
       {
         id: "export",
@@ -653,9 +676,9 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         location: "/settings",
       },
       {
-        id: "hermes",
+        id: "autopilot",
         label: "Run readiness check",
-        description: "Hermes skill reports configured connectors.",
+        description: `${AUTOPILOT_NAME} reports which connectors are configured.`,
         location: "Settings → Test connectors",
       },
     ],
@@ -668,7 +691,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
   "sentinel-security-auditor": {
     headline: "Security auditor (operators)",
     summary:
-      "Developer-only scans for ClearTrace configuration and SSRF policy. Not part of the case workflow.",
+      "Developer-only scans for ClearTrace configuration and outbound-request safety policy. Not part of the case workflow.",
     buildChecklist: () => [
       {
         id: "env",
@@ -681,8 +704,9 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
       {
         id: "sentinel",
         label: "Run security audit",
-        description: "Available at /security for signed-in operators.",
-        location: "/security",
+        description:
+          "Settings → Developer → Sentinel (organization owners/admins). Running the gate needs a developer/admin account or DEVELOPER_MODE=1.",
+        location: "Settings → Developer → Sentinel",
       },
     ],
     buildConnectors: () => [],
@@ -695,7 +719,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
 
 function buildConnectorHints(
   skillId: string,
-  ctx: GuideBuildInput,
+  ctx: WorkflowGuideInput,
 ): GuideConnectorHint[] {
   const req = SKILL_CONNECTOR_REQUIREMENTS[skillId];
   if (!req) return [];
@@ -729,7 +753,7 @@ function buildConnectorHints(
 
 export function buildStepGuide(
   skillId: string,
-  ctx: GuideBuildInput,
+  ctx: WorkflowGuideInput,
 ): StepGuide | null {
   const template = STEP_GUIDES[skillId];
   const skill = getSkillById(skillId);
@@ -747,8 +771,13 @@ export function buildStepGuide(
   };
 }
 
+/**
+ * Status-only recommendation for the guide. Matches getRecommendedSkillForCase except
+ * where the case's remediations are needed (partially_resolved → verify-removal here).
+ * removed_confirmed → generate-removal-certificate, never a follow-up.
+ */
 export function resolveCurrentSkillId(caseStatus: string): string | null {
-  return getRecommendedSkill(caseStatus);
+  return getRecommendedSkill(caseStatus) ?? COMPLETED_STATUS_SKILL[caseStatus] ?? null;
 }
 
 export function buildStatusSummary(caseStatus: string): string {

@@ -4,7 +4,7 @@ import { requireBillingFeature } from "@/lib/billing/service";
 import { ensureDatabase } from "@/lib/db/init";
 import { getDiscoveryData, reviewCandidate, runDiscovery } from "@/lib/discovery/service";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
-import { jsonError, jsonOk } from "@/lib/api";
+import { jsonError, jsonOk, workflowErrorResponse } from "@/lib/api";
 
 export async function GET(
   request: Request,
@@ -53,7 +53,8 @@ export async function POST(
       return jsonError("Live discovery requires Pro. Upgrade on Billing.", 402);
     }
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);
-    if (msg === "AUTHORIZATION_REQUIRED") return jsonError("Consent required", 403);
+    const workflow = workflowErrorResponse(msg);
+    if (workflow) return workflow;
     if (msg === "NO_SCAN_ENABLED_CLAIMS") return jsonError("No scan-enabled claims", 400);
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);
@@ -90,6 +91,8 @@ export async function PATCH(
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);
     if (msg === "CANDIDATE_NOT_FOUND") return jsonError("Candidate not found", 404);
+    const workflow = workflowErrorResponse(msg);
+    if (workflow) return workflow;
     const clientMsg = process.env.NODE_ENV === "production" ? "Internal server error" : msg;
     return jsonError(clientMsg, 500);
   }

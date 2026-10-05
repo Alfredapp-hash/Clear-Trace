@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { use, useEffect, useState } from "react";
 import { Button, Card, Input, Label } from "@/components/ui";
 import { callApi } from "@/lib/ui/call-api";
 import {
@@ -13,12 +13,24 @@ import {
 } from "@/lib/constants";
 import { RUTHLESS_ATTESTATION } from "@/lib/ruthless/config";
 
-export default function NewCasePage() {
+/** Case ids are UUIDs; anything else in ?caseId= is ignored (a fresh case is started). */
+const CASE_ID_PATTERN = /^[A-Za-z0-9-]{8,64}$/;
+
+export default function NewCasePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
   const router = useRouter();
-  const [step, setStep] = useState(1);
+  // ?caseId=… resumes setup for an existing case (from its "Finish setup" / "Record my
+  // consent" button): the case is never created twice, and intake starts at authorization.
+  const requested = use(searchParams).caseId;
+  const resumeCaseId =
+    typeof requested === "string" && CASE_ID_PATTERN.test(requested) ? requested : null;
+  const [step, setStep] = useState(resumeCaseId ? 2 : 1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
-  const [caseId, setCaseId] = useState<string | null>(null);
+  const [caseId, setCaseId] = useState<string | null>(resumeCaseId);
 
   const [title, setTitle] = useState("");
   const [caseType, setCaseType] = useState("personal_exposure");
@@ -155,7 +167,7 @@ export default function NewCasePage() {
           Intake wizard
         </p>
         <h1 className="mt-2 text-3xl font-semibold tracking-tight text-white">
-          New privacy case
+          {resumeCaseId ? "Finish setting up your case" : "New privacy case"}
         </h1>
         <p className="mt-2 text-sm text-slate-400">
           Step {step} of 3 — intake, authorization, and encrypted identity signals
@@ -279,6 +291,12 @@ export default function NewCasePage() {
 
           {step === 2 && (
             <div className="space-y-4">
+              {resumeCaseId && (
+                <p className="rounded-xl border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-400">
+                  Your case already exists. Record your authorization to continue — no new case
+                  is created.
+                </p>
+              )}
               <div>
                 <Label htmlFor="authority">Authority basis</Label>
                 <select
@@ -380,7 +398,7 @@ export default function NewCasePage() {
           <div className="mt-6 flex justify-between">
             <Button
               variant="ghost"
-              disabled={step === 1 || loading}
+              disabled={step === 1 || (resumeCaseId !== null && step === 2) || loading}
               onClick={() => setStep((s) => Math.max(1, s - 1))}
             >
               Back

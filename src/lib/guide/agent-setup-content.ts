@@ -42,7 +42,7 @@ ClearTrace case → Guide panel → Copy agent pack
        ↓
 External AI (research / draft polish)
        ↓
-You review → Update case in ClearTrace → Run next Hermes step
+You review → Update case in ClearTrace → Do the next step for me (Autopilot)
 \`\`\`
 
 ${SAFETY_BOUNDARIES}`;

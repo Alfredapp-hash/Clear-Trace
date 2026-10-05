@@ -98,6 +98,8 @@ export const privacyCases = sqliteTable("privacy_cases", {
   caseType: text("case_type").notNull(),
   targetRelationship: text("target_relationship").notNull(),
   status: text("status").notNull().default("draft"),
+  /** Status the case had when it was paused or archived; restored (and cleared) by resume. */
+  statusBeforePause: text("status_before_pause"),
   scanScopes: text("scan_scopes").notNull().default("[]"),
   ruthlessMode: integer("ruthless_mode", { mode: "boolean" }).notNull().default(false),
   familyMemberId: text("family_member_id").references(() => familyMembers.id),

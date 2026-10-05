@@ -1,5 +1,6 @@
 import bcrypt from "bcryptjs";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
+import { NextResponse } from "next/server";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import { users, organizations, memberships } from "@/lib/db/schema";
@@ -13,6 +14,15 @@ import { logAuditEvent } from "@/lib/audit/logger";
 import { jsonError, jsonOk } from "@/lib/api";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { getClientIp, normalizeEmailKey } from "@/lib/security/client-ip";
+import {
+  REGISTRATION_CLOSED,
+  REGISTRATION_CLOSED_MESSAGE,
+  REGISTRATION_INVITE_MESSAGE,
+  countUsers,
+  emailRateLimitKey,
+  getRegistrationMode,
+  registrationAllowed,
+} from "@/lib/auth/registration";
 
 const MIN_PASSWORD_LENGTH = 10;
 const MAX_PASSWORD_LENGTH = 72; // bcrypt truncates beyond 72 bytes
@@ -26,8 +36,27 @@ const REGISTER_LIMIT_PER_EMAIL = 5;
 const GENERIC_REGISTRATION_ERROR =
   "Unable to create an account with these details. If you already have an account, sign in instead.";
 
+function registrationClosed(mode: string) {
+  return NextResponse.json(
+    {
+      error: REGISTRATION_CLOSED,
+      message: mode === "invite" ? REGISTRATION_INVITE_MESSAGE : REGISTRATION_CLOSED_MESSAGE,
+    },
+    { status: 403 },
+  );
+}
+
+class RegistrationClosedError extends Error {}
+
 export async function POST(request: Request) {
   ensureDatabase();
+
+  // REGISTRATION_MODE gate first: a closed instance does no further work. first_user is
+  // re-checked inside the insert transaction so two racing first sign-ups cannot both win.
+  const mode = getRegistrationMode();
+  if (!registrationAllowed(mode, mode === "first_user" ? countUsers() : 0)) {
+    return registrationClosed(mode);
+  }
 
   const ip = getClientIp(request);
   const ipLimit = ip === "unknown" ? REGISTER_LIMIT_UNKNOWN_IP : REGISTER_LIMIT_PER_IP;
@@ -65,7 +94,10 @@ export async function POST(request: Request) {
   }
 
   const emailKey = normalizeEmailKey(email);
-  const emailResult = await checkRateLimit(`register:email:${emailKey}`, REGISTER_LIMIT_PER_EMAIL);
+  const emailResult = await checkRateLimit(
+    emailRateLimitKey("register:email", emailKey),
+    REGISTER_LIMIT_PER_EMAIL,
+  );
   if (!emailResult.allowed) {
     return jsonError("Too many requests", 429);
   }
@@ -91,30 +123,38 @@ export async function POST(request: Request) {
   const slug = `${slugBase || "org"}-${orgId.slice(0, 8)}`;
 
   try {
-    db.transaction((tx) => {
-      tx.insert(users).values({
-        id: userId,
-        email: emailKey,
-        name: name.trim(),
-        passwordHash,
-        role: "user",
-      }).run();
+    db.transaction(
+      (tx) => {
+        if (mode === "first_user") {
+          const row = tx.select({ n: sql<number>`count(*)` }).from(users).get();
+          if (Number(row?.n ?? 0) > 0) throw new RegistrationClosedError();
+        }
+        tx.insert(users).values({
+          id: userId,
+          email: emailKey,
+          name: name.trim(),
+          passwordHash,
+          role: "user",
+        }).run();
 
-      tx.insert(organizations).values({
-        id: orgId,
-        name: orgName,
-        slug,
-      }).run();
+        tx.insert(organizations).values({
+          id: orgId,
+          name: orgName,
+          slug,
+        }).run();
 
-      // The registering user founds the organization and owns it.
-      tx.insert(memberships).values({
-        id: membershipId,
-        userId,
-        organizationId: orgId,
-        role: "owner",
-      }).run();
-    });
-  } catch {
+        // The registering user founds the organization and owns it.
+        tx.insert(memberships).values({
+          id: membershipId,
+          userId,
+          organizationId: orgId,
+          role: "owner",
+        }).run();
+      },
+      { behavior: "immediate" },
+    );
+  } catch (err) {
+    if (err instanceof RegistrationClosedError) return registrationClosed(mode);
     // Most likely a concurrent registration for the same email (UNIQUE violation).
     return jsonError(GENERIC_REGISTRATION_ERROR, 400);
   }

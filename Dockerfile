@@ -1,15 +1,19 @@
-# syntax=docker/dockerfile:1
+# syntax=docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 # ClearTrace — self-hosted Docker image (the supported deploy target).
 # SQLite lives on the /app/data volume; never bake a database into the image.
+#
+# Base images are pinned by digest (multi-arch index) so a rebuild cannot silently pick up
+# a different image. Dependabot (docker ecosystem) proposes digest bumps; keep the three
+# FROM lines on the same digest.
 
-FROM node:22-alpine AS deps
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS deps
 WORKDIR /app
 # Toolchain for better-sqlite3's native addon when no musl prebuild matches.
 RUN apk add --no-cache python3 make g++ libc6-compat
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:22-alpine AS builder
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS builder
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY --from=deps /app/node_modules ./node_modules
@@ -18,7 +22,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # prebuild runs scripts/sync-skills.mjs, which fails the build if no skill pack is found.
 RUN npm run build
 
-FROM node:22-alpine AS runner
+FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS runner
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 ENV NODE_ENV=production \

@@ -82,4 +82,9 @@ export interface GuideBuildInput {
   draftCount: number;
   checkCount: number;
   connectorHealth: ConnectorHealthSummary;
+  /**
+   * True only when a removal certificate can actually be issued (a live check confirms the
+   * removal). Never inferred from case status; undefined/false keeps the checklist open.
+   */
+  certificateIssuable?: boolean;
 }

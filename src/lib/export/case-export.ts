@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import {
-  privacyCases,
   authorizationRecords,
   identityClaims,
   auditEvents,

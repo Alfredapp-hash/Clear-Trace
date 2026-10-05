@@ -9,7 +9,7 @@ import { logAuditEvent } from "@/lib/audit/logger";
 import { resolveDiscoveryConnector } from "@/lib/connectors/service";
 import type { SessionPayload } from "@/lib/auth/session";
 import { RUTHLESS_POLICY, RUTHLESS_SCAN_SCOPES } from "./config";
-import { isRuthlessModeForCase, isRuthlessModeForOrg } from "./resolve";
+import { isRuthlessModeForCase } from "./resolve";
 
 export { isRuthlessModeForCase, isRuthlessModeForOrg } from "./resolve";
 

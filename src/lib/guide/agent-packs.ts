@@ -60,7 +60,7 @@ function variantInstructions(variant: AgentPackVariant, skillId: string): string
 2. Paste the **User task** as your message.
 3. Review the agent's output — do not auto-send anything external.
 4. Copy findings back into ClearTrace (Workflow panel or case notes).
-5. Run **Run next Hermes step** in ClearTrace when ready for in-app automation.
+5. Run **Do the next step for me** (Autopilot) in ClearTrace when ready for in-app automation.
 
 Current skill: \`${skillId}\``;
     case "openai_agent":
@@ -80,7 +80,7 @@ Current skill: \`${skillId}\``;
 2. Open this case in ClearTrace; keep the Workflow panel visible for paste-back.
 3. In Cursor, paste **User task** as the agent prompt (add **System instructions** to rules if not already there).
 4. Let Cursor edit files in \`src/\` — run \`npm test\` after changes.
-5. Paste agent JSON output into case notes; click **Run next Hermes step** when ready.
+5. Paste agent JSON output into case notes; click **Do the next step for me** (Autopilot) when ready.
 
 Current skill: \`${skillId}\``;
     case "claude_code":
@@ -90,7 +90,7 @@ Current skill: \`${skillId}\``;
 2. Ensure \`skills/${skillId}/SKILL.md\` exists (sync from ClearTrace \`/skills\` page).
 3. Paste **User task** as your Claude Code prompt for this step.
 4. Review diffs before accepting; never auto-send outbound messages.
-5. Update the case in ClearTrace, then run the next Hermes step.
+5. Update the case in ClearTrace, then click **Do the next step for me** (Autopilot).
 
 Current skill: \`${skillId}\``;
     case "windsurf":
@@ -103,14 +103,14 @@ Current skill: \`${skillId}\``;
 
 Current skill: \`${skillId}\``;
     case "hermes":
-      return `## In-app automation (ClearTrace Hermes)
+      return `## In-app automation (ClearTrace Autopilot)
 
 1. Configure connectors in **Settings** if this step needs live SERP or LLM polish.
 2. Open the case **Workflow** panel.
-3. Click **Run next Hermes step** — ClearTrace runs \`${skillId}\` with audit logging.
+3. Click **Do the next step for me** (Autopilot) — ClearTrace runs \`${skillId}\` with audit logging.
 4. Review results in the timeline and workflow sections.
 
-Use external agents only when you need research Hermes cannot do in-app.`;
+Use external agents only when you need research Autopilot cannot do in-app.`;
     case "generic":
     default:
       return `## Generic AI assistant
@@ -192,7 +192,7 @@ ${userPrompt}
 
 1. Review all findings and drafts — you are legally responsible for outbound messages.
 2. Update the case in ClearTrace (confirm exposures, edit drafts, record sent).
-3. Click **Run next Hermes step** for in-app automation, or repeat with the next skill's handoff pack.
+3. Click **Do the next step for me** (Autopilot) for in-app automation, or repeat with the next skill's handoff pack.
 4. Configure connectors in ClearTrace **Settings** if live search or Gmail is needed.
 
 ${SAFETY_BOUNDARIES}`;
@@ -204,7 +204,7 @@ function buildPasteBackInstructions(skillId: string): string {
 • Edit drafts in Workflow → Phase 02
 • Record sent requests before verification
 
-Then run **Run next Hermes step** in ClearTrace for skill \`${skillId}\` or the recommended_next_action from the agent response.`;
+Then run **Do the next step for me** (Autopilot) in ClearTrace for skill \`${skillId}\` or the recommended_next_action from the agent response.`;
 }
 
 export function buildAgentPack(
@@ -212,7 +212,6 @@ export function buildAgentPack(
   skillId: string,
   variant: AgentPackVariant,
 ): AgentPack {
-  const skill = getSkillById(skillId);
   const systemPrompt = buildSystemPrompt(ctx, skillId);
   const userPrompt = buildUserPrompt(ctx, skillId);
 
@@ -223,7 +222,7 @@ export function buildAgentPack(
     claude_code: "Claude Code",
     windsurf: "Windsurf Cascade",
     generic: "Any AI assistant",
-    hermes: "ClearTrace Hermes (in-app)",
+    hermes: "ClearTrace Autopilot (in-app)",
   };
 
   const descriptions: Record<AgentPackVariant, string> = {
