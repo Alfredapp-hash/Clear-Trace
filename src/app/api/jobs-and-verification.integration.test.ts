@@ -21,6 +21,7 @@ import { GET as cronDigestGet } from "./cron/digest/route";
 import { GET as workerGet } from "./worker/run/route";
 import { POST as verificationPost } from "./cases/[id]/verification/route";
 import { runVerification } from "@/lib/verification/service";
+import { runBackgroundJobs } from "@/lib/worker/processor";
 
 function mockSessionCookie(token: string | null) {
   vi.mocked(cookies).mockResolvedValue({
@@ -63,6 +64,20 @@ describe("job endpoints", () => {
 
   it("GET /api/worker/run works with WORKER_SECRET", async () => {
     expect((await workerGet(get("/api/worker/run", WORKER_SECRET))).status).toBe(200);
+  });
+
+  it("/api/cron/verify and /api/worker/run share one code path (verifications + protection + retention)", async () => {
+    vi.mocked(runBackgroundJobs).mockClear();
+    await cronVerifyGet(get("/api/cron/verify", CRON_SECRET));
+    await cronVerifyPost(
+      new Request("http://localhost/api/cron/verify", {
+        method: "POST",
+        headers: { authorization: `Bearer ${CRON_SECRET}` },
+      }),
+    );
+    await workerGet(get("/api/worker/run", WORKER_SECRET));
+    expect(vi.mocked(runBackgroundJobs)).toHaveBeenCalledTimes(3);
+    for (const call of vi.mocked(runBackgroundJobs).mock.calls) expect(call).toEqual([]);
   });
 
   it("rejects missing / wrong bearer", async () => {

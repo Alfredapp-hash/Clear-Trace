@@ -143,6 +143,9 @@ All settings are environment variables; `.env.example` lists every one with comm
 | `INLINE_WORKER` | `1` always runs background jobs from dashboard loads (scheduled after the response, at most once per 5 minutes). `0` never does. Unset: only when `WORKER_SECRET` is unset (no cron sidecar). Leave unset (or `0`) when `worker-cron` or another scheduler calls `/api/worker/run`. |
 | `DEVELOPER_MODE` | `1` shows **Settings → Developer** (Skill registry, Sentinel) to every signed-in user and lets them run the Sentinel release gate. Without it, Developer is shown to organization owners/admins, and running the gate needs a `developer` or `admin` account role. |
 | `TRUST_PROXY` | `1` only behind a reverse proxy you control that sets `X-Forwarded-For`. Rate limits then use the client IP, and the login lockout is per email **and** IP (so failed attempts from one address do not lock the owner out elsewhere). |
+| `BACKUP_PASSPHRASE`, `BACKUP_KEEP` | Encrypted backups (`scripts/backup.mjs`): scrypt passphrase for AES-256-GCM, and how many backups to keep (default 7). See [backup-restore.md](./docs/self-hosting/backup-restore.md). |
+| `LOG_LEVEL` | `debug`, `info` (default), `warn`, `error` or `silent`. Logs are JSON lines with allowlisted fields only. |
+| `CLEARTRACE_URL` | Health URL `scripts/restore.mjs` probes to make sure the app is stopped (default `http://127.0.0.1:3000/api/health`). |
 | `SMTP_ALLOWED_HOSTS` | Comma-separated SMTP hostnames or IP literals that may resolve to private-LAN addresses (RFC 1918, CGNAT `100.64/10`, IPv6 ULA) — e.g. `relay.home.lan,192.168.1.25`. Every other SMTP host must resolve to a public IP. Loopback, link-local and cloud-metadata addresses (`169.254.169.254`, `100.100.100.200`, `metadata.google.internal`) are always refused. Applies to both the connector test and actual sends. |
 
 Signing out revokes every session for that account ("log out everywhere"); API keys are unaffected.
@@ -179,7 +182,10 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-- The SQLite database lives on the `cleartrace-data` volume at `/app/data/cleartrace.db`; back up that volume. No database is baked into the image.
+- The SQLite database lives on the `cleartrace-data` volume at `/app/data/cleartrace.db`. No database is baked into the image.
+- **Backups:** set `BACKUP_PASSPHRASE` and run `docker compose exec cleartrace node scripts/backup.mjs` (or enable the daily `backup` profile). Backups (`cleartrace-*.db.enc`) are AES-256-GCM encrypted in `/app/data/backups`; copy those files (not the whole folder) offsite with restic or rclone, and escrow `ENCRYPTION_KEY` separately — a backup is useless without it. Restore with `scripts/restore.mjs`, which refuses while the app runs or when the key does not match. See [docs/self-hosting/backup-restore.md](./docs/self-hosting/backup-restore.md).
+- **Upgrades:** schema migrations are versioned and take a `pre-migrate-v<N>-<ts>.db` snapshot first (encrypted to `.db.enc` when `BACKUP_PASSPHRASE` is set; pre-migrate and pre-restore snapshots are deleted after `BACKUP_SNAPSHOT_RETENTION_DAYS`, default 30); rollback = that snapshot + the previous image. See [docs/self-hosting/upgrade.md](./docs/self-hosting/upgrade.md).
+- **Logs** are JSON lines (`LOG_LEVEL`, default `info`) with an allowlist of fields (route, status, duration, counts, error code, version); emails, phone numbers, ciphertext and bearer tokens are scrubbed. Server errors log the route template and React digest only.
 - The container runs as a non-root user and exposes a `HEALTHCHECK` against `/api/health`.
 - **Network binding:** Compose publishes the app on `127.0.0.1:3000`, so by default it is reachable only from the Docker host itself. To use it from other devices on your LAN, or through a reverse proxy running on another machine, opt in by changing the port mapping in `docker-compose.yml` to `"3000:3000"` (all interfaces) or `"<lan-ip>:3000:3000"`, and set `NEXT_PUBLIC_APP_URL` to the address people will use. A reverse proxy on the same host can keep the loopback binding and proxy to `127.0.0.1:3000`.
 - **First account:** with the default `REGISTRATION_MODE=first_user`, the first person to open `/register` becomes the owner and registration then closes. Create your account right after `docker compose up`, before exposing the port anywhere else.
@@ -216,7 +222,7 @@ npm run lint
 npm run test:e2e    # Playwright (run `npx playwright install chromium` once first)
 ```
 
-The Vitest suite covers API route integration (including cross-tenant access checks), the Autopilot (Hermes) status machine, agent kit zip, connector SSRF guards, and workflow guides. CI (`.github/workflows/ci.yml`) runs `npm audit` (high and above), lint, typecheck, tests with a coverage gate, and a production build on every push and pull request. The Playwright e2e job and the Docker Compose smoke job are blocking too: a failing e2e run fails CI. The e2e server runs with `REGISTRATION_MODE=open` because the suite registers several accounts.
+The Vitest suite covers API route integration (including cross-tenant access checks), the Autopilot (Hermes) status machine, agent kit zip, connector SSRF guards, and workflow guides. CI (`.github/workflows/ci.yml`) runs `npm audit` (high and above), lint, typecheck, tests with a coverage gate, and a production build on every push and pull request. The Playwright e2e job and the Docker job are blocking too: a failing e2e run fails CI. The Docker job builds the production image, runs the smoke checks (including the `first_user` single-registration lock), takes an encrypted backup inside the container, wipes the volume (`down -v`), restores into a fresh volume, checks that the old session and an encrypted claim survive, and then runs the Playwright suite against the container (`PLAYWRIGHT_BASE_URL`, `REGISTRATION_MODE=open`). The e2e server runs with `REGISTRATION_MODE=open` because the suite registers several accounts. Specs that import `{ test, expect }` from `e2e/fixtures.ts` fail on any browser `console.error` or CSP violation.
 
 ## Legal & packaging
 

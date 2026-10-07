@@ -38,6 +38,17 @@ describe("draft builder", () => {
     expect(draft.reviewItems.length).toBeGreaterThan(0);
   });
 
+  it("flags a draft with no verified contact so the user adds the recipient", () => {
+    const draft = buildDraft(
+      { ...baseCtx, controller: { ...baseCtx.controller, contactMethod: "manual_research", contactValue: "" } },
+      "broker-optout-standard",
+    );
+    expect(draft.recipient).toBe("");
+    expect(draft.reviewItems[0]).toMatch(/No verified contact/);
+    // A draft with a verified contact carries no such item.
+    expect(buildDraft(baseCtx, "broker-optout-standard").reviewItems.join(" ")).not.toMatch(/No verified contact/);
+  });
+
   it("builds distinct search deindex template", () => {
     const draft = buildDraft(
       {

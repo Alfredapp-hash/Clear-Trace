@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildStepGuide } from "./workflow-guide";
+import { DROP_GUIDE_STEP_ID, buildStepGuide } from "./workflow-guide";
 import type { GuideBuildInput } from "./types";
 
 const OPERATIONAL_SKILLS = [
@@ -53,5 +53,40 @@ describe("intake guide", () => {
     const hrefs = guide?.inAppActions.map((a) => a.location) ?? [];
     expect(hrefs).toContain("/cases/new?caseId=case-1");
     expect(hrefs).not.toContain("/cases/new");
+  });
+});
+
+describe("California DROP guide step", () => {
+  const ids = (g: ReturnType<typeof buildStepGuide>) => g?.checklist.map((c) => c.id) ?? [];
+
+  it("a CA case shows the DROP step", () => {
+    const guide = buildStepGuide("draft-removal-request", {
+      ...fixture,
+      caseStatus: "remedy_selected",
+      jurisdictionState: "CA",
+    });
+    expect(ids(guide)).toContain(DROP_GUIDE_STEP_ID);
+    const step = guide?.checklist.find((c) => c.id === DROP_GUIDE_STEP_ID);
+    expect(step?.done).toBe(false);
+    expect(step?.description).toMatch(/yourself/);
+    expect(guide?.inAppActions.map((a) => a.id)).toContain(DROP_GUIDE_STEP_ID);
+  });
+
+  it("is done once the user recorded a filing", () => {
+    const guide = buildStepGuide("verify-removal", { ...fixture, jurisdictionState: "CA", dropFiled: true });
+    expect(guide?.checklist.find((c) => c.id === DROP_GUIDE_STEP_ID)?.done).toBe(true);
+  });
+
+  it("a non-CA (or unknown-state) case does not", () => {
+    for (const jurisdictionState of ["TX", null, undefined]) {
+      const guide = buildStepGuide("draft-removal-request", { ...fixture, jurisdictionState });
+      expect(ids(guide)).not.toContain(DROP_GUIDE_STEP_ID);
+      expect(guide?.inAppActions.map((a) => a.id)).not.toContain(DROP_GUIDE_STEP_ID);
+    }
+  });
+
+  it("operator-only guides never show it", () => {
+    const guide = buildStepGuide("sentinel-security-auditor", { ...fixture, jurisdictionState: "CA" });
+    expect(ids(guide)).not.toContain(DROP_GUIDE_STEP_ID);
   });
 });

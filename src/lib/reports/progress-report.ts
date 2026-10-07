@@ -27,6 +27,8 @@ export interface ProgressReport {
     removedCases: number;
     /** SLA deadlines that are missed (stored as "missed", or still "pending" past due). */
     overdueSlas: number;
+    /** SLA deadlines still open and not yet due. Met and superseded deadlines never count. */
+    pendingSlas: number;
   };
   casesByStatus: Record<string, number>;
   recentActivity: { action: string; caseId: string | null; at: string }[];
@@ -50,6 +52,8 @@ export async function buildProgressReportForOrg(
         })
       : [];
 
+  // Only "pending" and "missed" rows are read: met deadlines (including those resolved
+  // automatically by a live check or completed opt-outs) and superseded ones are excluded.
   const openOrMissedSlas = await db.query.slaDeadlines.findMany({
     where: and(
       eq(slaDeadlines.organizationId, organizationId),
@@ -57,9 +61,10 @@ export async function buildProgressReportForOrg(
     ),
   });
   const now = new Date();
-  const missedSlas = openOrMissedSlas.filter(
-    (d) => d.status === "missed" || slaStatusFromDueAt(d.dueAt, now) === "missed",
-  );
+  const isMissed = (d: { status: string; dueAt: string }) =>
+    d.status === "missed" || slaStatusFromDueAt(d.dueAt, now) === "missed";
+  const missedSlas = openOrMissedSlas.filter(isMissed);
+  const pendingSlas = openOrMissedSlas.filter((d) => !isMissed(d));
 
   const events = await db.query.auditEvents.findMany({
     where: eq(auditEvents.organizationId, organizationId),
@@ -89,6 +94,7 @@ export async function buildProgressReportForOrg(
       removedOrVerified,
       removedCases,
       overdueSlas: missedSlas.length,
+      pendingSlas: pendingSlas.length,
     },
     casesByStatus,
     // Event type only: the report is emailed, and legacy audit summaries may contain PII.
@@ -116,6 +122,7 @@ export async function buildProgressReportForOrg(
     `| Exposures verified removed | ${report.summary.removedOrVerified} |`,
     `| Cases fully removed | ${report.summary.removedCases} |`,
     `| Missed SLAs | ${report.summary.overdueSlas} |`,
+    `| Open SLA deadlines | ${report.summary.pendingSlas} |`,
     ``,
     `## Cases by status`,
     ``,

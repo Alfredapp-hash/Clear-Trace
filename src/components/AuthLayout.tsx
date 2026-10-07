@@ -1,10 +1,10 @@
 import Link from "next/link";
 import { type ReactNode } from "react";
-import { BROKER_UNIVERSE } from "@/lib/brokers/universe";
+import { CURATED_BROKER_COUNT } from "@/lib/brokers/count";
 
-/** Derived from the broker universe so the claim never drifts from what is actually covered. */
+/** Count kept in sync with the broker universe by count.test.ts (the catalog stays server-side). */
 const AUTH_BULLETS = [
-  `${BROKER_UNIVERSE.length}+ data brokers covered`,
+  `${CURATED_BROKER_COUNT}+ data brokers covered`,
   "Private by default — AI runs on your device",
   "Removal certificates with tamper-evident audit trail",
 ];

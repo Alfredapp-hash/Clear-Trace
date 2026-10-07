@@ -147,7 +147,7 @@ Goal: let users do all LLM work on a **local** model so PII never leaves their m
 - P2 Re-encrypt legacy ciphertext to v2 / re-hash legacy `value_hash` (both still readable).
 - P2 `createRemovalDraft` sets case to `draft_ready` regardless of current status.
 - P2 Certificate endpoint issues a certificate even with 0 verified removals (UI only links it when `removed_confirmed`).
-- P2 Seven broker entries have no real opt-out URL (TODO in `brokers/universe.ts`).
+- ~~P2 Seven broker entries have no real opt-out URL (TODO in `brokers/universe.ts`).~~ **Closed in Sprint 4 (v1.4.0).** The accurate count was 15 entries without an `optOutUrl` (only 7 carried the TODO comment). Each was researched and recorded in `src/lib/brokers/data/brokers.json` with method, URL or sourced email, `sourceNote` and `lastVerifiedAt`: 11 now have a route (web form or a published, sourced email), 3 have no removal path (`none`: OpenCorporates and SearchSystems → request de-indexing; Councilon no longer hosts profiles) and 1 is defunct (Veromi, parked domain). A wider link check found more stale URLs among the other 64 entries; the five still without a route are `unknown` (Sprint 4 not-done).
 - P2 Maskable PWA icon needs a padded asset; wizard checkboxes have accessible name "on".
 - P2 One remaining Turbopack "whole project traced" warning via `skills/registry.ts` (harmless: excludes keep data/src out).
 - Next sprint candidate: **Apple Foundation Models provider** (Swift localhost bridge speaking the Ollama `/api/chat` shape) for Mac users.

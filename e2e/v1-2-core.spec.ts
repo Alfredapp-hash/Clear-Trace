@@ -1,5 +1,6 @@
 import { randomUUID } from "crypto";
-import { test, expect, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { test, expect, browserGet } from "./fixtures";
 
 async function register(page: Page, label: string) {
   const suffix = randomUUID().slice(0, 8);
@@ -65,8 +66,9 @@ test("core workflow: discovery → draft → verification never reports a false 
   // Simulation is demo-only and must not change the real case status.
   await checks.getByRole("button", { name: "Demo: simulate removed" }).first().click();
   await expect(page.getByText(/simulated/i).first()).toBeVisible();
-  const status = await page.request.get(page.url().replace("/cases/", "/api/cases/"));
-  const body = await status.json();
+  const { body } = (await browserGet(page, new URL(page.url()).pathname.replace("/cases/", "/api/cases/"))) as {
+    body: { case?: { status?: string }; status?: string };
+  };
   expect(body.case?.status ?? body.status).not.toBe("removed_confirmed");
 });
 
@@ -77,12 +79,14 @@ test("logout revokes the session everywhere", async ({ page, browser }) => {
   // A second "device" with a copy of the same cookie.
   const other = await browser.newContext();
   await other.addCookies(cookies);
-  expect((await other.request.get("/api/auth/me")).status()).toBe(200);
+  const otherPage = await other.newPage();
+  await otherPage.goto("/manifest.json"); // any same-origin public page, to fetch from
+  expect((await browserGet(otherPage, "/api/auth/me")).status).toBe(200);
 
   await page.getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/login/);
 
-  expect((await other.request.get("/api/auth/me")).status()).toBe(401);
+  expect((await browserGet(otherPage, "/api/auth/me")).status).toBe(401);
   await other.close();
 });
 
@@ -95,7 +99,7 @@ test("another account cannot open someone else's case", async ({ page, browser }
   await register(p2, "Intruder");
   const res = await p2.goto(caseUrl);
   expect(res?.status()).toBe(404);
-  const api = await p2.request.get(caseUrl.replace("/cases/", "/api/cases/") + "/discovery");
-  expect(api.status()).toBe(404);
+  const api = await browserGet(p2, new URL(caseUrl).pathname.replace("/cases/", "/api/cases/") + "/discovery");
+  expect(api.status).toBe(404);
   await intruder.close();
 });

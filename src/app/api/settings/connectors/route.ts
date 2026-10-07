@@ -12,7 +12,10 @@ import {
   updateAgentDefaults,
 } from "@/lib/connectors/service";
 import { isOrgAdmin, requireOrgAdminSession } from "@/lib/auth/org-role";
-import type { ConnectorType } from "@/lib/connectors/types";
+import {
+  MAX_SCHEDULED_DISCOVERY_MONTHLY_QUERY_CAP,
+  type ConnectorType,
+} from "@/lib/connectors/types";
 import { getConnectorDefinition, listConnectorTypes } from "@/lib/connectors/registry";
 import {
   breachIntelConnectorTypes,
@@ -47,6 +50,15 @@ const agentDefaultsSchema = z
     weeklyDigest: z.boolean().optional(),
     weeklyDigestEmail: z.union([z.email().max(254), z.literal("")]).nullable().optional(),
     llmLocalOnly: z.boolean().optional(),
+    // Scheduled live discovery: off by default, per org, with a monthly query cap.
+    scheduledDiscovery: z.boolean().optional(),
+    scheduledDiscoveryMonthlyQueryCap: z
+      .number()
+      .int()
+      .min(0)
+      .max(MAX_SCHEDULED_DISCOVERY_MONTHLY_QUERY_CAP)
+      .nullable()
+      .optional(),
   })
   .strict();
 

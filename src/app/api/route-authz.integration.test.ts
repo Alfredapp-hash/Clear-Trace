@@ -43,13 +43,18 @@ const PUBLIC_ROUTES = new Set([
 /** Job endpoints: must reject a request without the job secret. */
 const JOB_ROUTES = new Set(["cron/digest", "cron/verify", "worker/run"]);
 
-/** Case-scoped routes: 401 unauthenticated, 404 for another tenant's case. */
+/**
+ * Case-scoped routes: 401 unauthenticated, 404 for another tenant's case. Handlers receive
+ * ctx { id } only, so a route with a second dynamic segment (e.g. [matchId]) must check case
+ * ownership before it reads that segment or the body.
+ */
 const CASE_ROUTES = new Set([
   "cases/[id]",
   "cases/[id]/authorization",
   "cases/[id]/batch",
   "cases/[id]/breach-scan",
   "cases/[id]/broker-sweep",
+  "cases/[id]/broker-sweep/matches/[matchId]",
   "cases/[id]/certificate",
   "cases/[id]/deindex",
   "cases/[id]/discovery",
@@ -60,10 +65,12 @@ const CASE_ROUTES = new Set([
   "cases/[id]/lifecycle",
   "cases/[id]/live-url",
   "cases/[id]/opt-out-dispatch",
+  "cases/[id]/protection",
   "cases/[id]/remediation",
   "cases/[id]/run-next-step",
   "cases/[id]/ruthless-sweep",
   "cases/[id]/sla",
+  "cases/[id]/statutory",
   "cases/[id]/verification",
 ]);
 

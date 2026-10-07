@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useState } from "react";
-import { Badge, Button } from "../ui";
+import { Badge, Button, InlineResult, type InlineResultView } from "../ui";
 import { isSampleUrl, itemStatusLabel, sourceTypeLabel } from "@/lib/ux/plain-status";
 
 export interface DiscoveryCandidate {
@@ -34,6 +34,23 @@ function isOpen(c: DiscoveryCandidate) {
   return c.matchStatus !== "confirmed_match" && c.matchStatus !== "rejected";
 }
 
+export type CandidateFilter = "pending" | "confirmed" | "rejected";
+
+const FILTERS: ReadonlyArray<{ id: CandidateFilter; label: string }> = [
+  { id: "pending", label: "Needs review" },
+  { id: "confirmed", label: "Confirmed" },
+  { id: "rejected", label: "Rejected" },
+];
+
+export function candidateFilterOf(c: DiscoveryCandidate): CandidateFilter {
+  if (c.matchStatus === "confirmed_match") return "confirmed";
+  if (c.matchStatus === "rejected") return "rejected";
+  return "pending";
+}
+
+/** "Confirm all above 90%" threshold. */
+export const BULK_CONFIRM_MIN = 0.9;
+
 /** Phase 1 — search, breach check, maximum sweep, add a page, review matches. */
 export function DiscoveryPhase({
   caseId,
@@ -51,6 +68,10 @@ export function DiscoveryPhase({
   onMaximumSweep,
   onReview,
   onAddPage,
+  onConfirmMany = () => {},
+  results = {},
+  onRetry = () => {},
+  initialFilter = "pending",
 }: {
   caseId: string;
   status: string;
@@ -70,6 +91,12 @@ export function DiscoveryPhase({
   onMaximumSweep: () => void;
   onReview: (candidateId: string, decision: "confirm" | "reject") => void;
   onAddPage: (url: string) => Promise<boolean>;
+  /** Confirm several matches at once (with Undo in the toast). */
+  onConfirmMany?: (candidateIds: string[]) => void;
+  results?: Record<string, InlineResultView>;
+  onRetry?: (key: string) => void;
+  /** Filter shown first (default "Needs review"). */
+  initialFilter?: CandidateFilter;
 }) {
   const [pageUrl, setPageUrl] = useState("");
   const [acknowledged, setAcknowledged] = useState<Record<string, boolean>>({});
@@ -79,8 +106,16 @@ export function DiscoveryPhase({
   const disabled = busy || noConsent || casePaused;
   // Reviewing matches already found does not run a new search, so it only needs an active case.
   const reviewDisabled = busy || casePaused;
+  const [filter, setFilter] = useState<CandidateFilter>(initialFilter);
   const pending = candidates.filter(isOpen);
-  const reviewed = candidates.filter((c) => !isOpen(c));
+  const shown = candidates.filter((c) => candidateFilterOf(c) === filter);
+  const filterCounts: Record<CandidateFilter, number> = { pending: 0, confirmed: 0, rejected: 0 };
+  for (const c of candidates) filterCounts[candidateFilterOf(c)]++;
+  // Bulk confirm skips sample pages on real cases (they need a per-row acknowledgement).
+  const highConfidence = pending.filter(
+    (c) =>
+      (c.confidenceScore ?? 0) >= BULK_CONFIRM_MIN && !(isSampleUrl(c.canonicalUrl) && !demoCase),
+  );
 
   async function submitPage() {
     if (!pageUrl.trim()) return;
@@ -146,6 +181,27 @@ export function DiscoveryPhase({
             >
               Not me
             </Button>
+            <InlineResult result={results[`review-${c.id}`]} onRetry={() => onRetry(`review-${c.id}`)} />
+          </div>
+        )}
+        {c.matchStatus === "rejected" && (!sample || demoCase) && (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {/* A "Not me" (or an Undo from an older release) is never final. */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onReview(c.id, "confirm")}
+              disabled={reviewDisabled}
+              aria-label={`This is me after all: ${c.title ?? c.canonicalUrl}`}
+            >
+              {loading === `review-${c.id}` ? "Saving…" : "This is me after all"}
+            </Button>
+            <InlineResult result={results[`review-${c.id}`]} onRetry={() => onRetry(`review-${c.id}`)} />
+          </div>
+        )}
+        {!isOpen(c) && c.matchStatus !== "rejected" && results[`review-${c.id}`] && (
+          <div className="mt-2">
+            <InlineResult result={results[`review-${c.id}`]} onRetry={() => onRetry(`review-${c.id}`)} />
           </div>
         )}
       </li>
@@ -247,27 +303,59 @@ export function DiscoveryPhase({
             {loading === "live-url" ? "Fetching…" : "Add a page I found"}
           </Button>
         </div>
+        <InlineResult result={results["live-url"]} onRetry={() => onRetry("live-url")} />
         <p id={`live-url-help-${caseId}`} className="text-xs text-[var(--muted)]">
           ClearTrace fetches the public page safely: private, local and internal network
           addresses are always blocked.
         </p>
       </form>
 
-      {pending.length > 0 && (
+      {candidates.length > 0 && (
         <div>
-          <h4 className="mb-2 text-sm font-medium text-slate-200">
-            Is this you? ({pending.length} to review)
-          </h4>
-          <ul className="space-y-2">{pending.map(renderCandidate)}</ul>
+          <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+            <div role="group" aria-label="Show matches" className="flex flex-wrap gap-1">
+              {FILTERS.map((f) => (
+                <button
+                  key={f.id}
+                  type="button"
+                  aria-pressed={filter === f.id}
+                  onClick={() => setFilter(f.id)}
+                  className={`rounded-lg border px-2.5 py-1 text-xs font-medium transition focus-visible:outline-2 focus-visible:outline-teal-300 ${
+                    filter === f.id
+                      ? "border-teal-400/50 bg-teal-400/10 text-teal-200"
+                      : "border-white/10 text-slate-300 hover:bg-white/[0.05]"
+                  }`}
+                >
+                  {f.label} ({filterCounts[f.id]})
+                </button>
+              ))}
+            </div>
+            {filter === "pending" && highConfidence.length > 1 && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => onConfirmMany(highConfidence.map((c) => c.id))}
+                disabled={reviewDisabled}
+              >
+                {loading === "confirm-many"
+                  ? "Confirming…"
+                  : `Confirm all above ${Math.round(BULK_CONFIRM_MIN * 100)}% (${highConfidence.length})`}
+              </Button>
+            )}
+          </div>
+          {filter === "pending" && pending.length > 0 && (
+            <h4 className="mb-2 text-sm font-medium text-slate-200">
+              Is this you? ({pending.length} to review)
+            </h4>
+          )}
+          {shown.length > 0 ? (
+            <ul className="space-y-2">{shown.map(renderCandidate)}</ul>
+          ) : (
+            <p className="text-xs text-[var(--muted)]">
+              {filter === "pending" ? "Nothing left to review." : "None yet."}
+            </p>
+          )}
         </div>
-      )}
-      {reviewed.length > 0 && (
-        <details className="rounded-xl border border-white/[0.06] p-3">
-          <summary className="cursor-pointer text-sm text-slate-300">
-            Already reviewed ({reviewed.length})
-          </summary>
-          <ul className="mt-3 space-y-2">{reviewed.map(renderCandidate)}</ul>
-        </details>
       )}
     </div>
   );

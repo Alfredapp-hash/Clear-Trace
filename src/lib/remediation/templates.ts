@@ -445,7 +445,7 @@ I understand you may require verification of my identity. Please indicate throug
 
 Under § 1798.105(d), please confirm within 45 days whether you have complied with this request, or provide the basis for any applicable exception.
 
-If you are a data broker registered with the California Privacy Protection Agency, note that I may separately submit a deletion request through the CPPA's authorized agent mechanism.`,
+If you are a data broker registered with the California Privacy Protection Agency, note that I may also submit a deletion request myself through the Delete Request and Opt-out Platform (DROP), the state's consumer self-service deletion platform.`,
       reviewItems: [
         "Confirm you are a California resident (CCPA/CPRA applies to CA residents)",
         "If the business has < $25M annual revenue, < 100K consumers' data, and derives < 50% revenue from data sales, CCPA may not apply",
@@ -551,4 +551,69 @@ export function listTemplateOptions(
   }
 
   return result;
+}
+
+/**
+ * Input for the Delete Act escalation memo. Deliberately not a DraftTemplate: the memo is a
+ * complaint the USER files with the California Privacy Protection Agency themselves, so it
+ * must never appear in a remediation's template list (where it could be sent to a broker).
+ */
+export interface DeleteActEscalationInput {
+  /** Registered broker names / hosts that still show the listing. */
+  listings: Array<{ brokerName: string; url: string }>;
+  /** Date the user filed their DROP request (YYYY-MM-DD). */
+  filedOn: string;
+  /** Date by which registered brokers should have processed it (YYYY-MM-DD). */
+  deletionDueOn: string;
+}
+
+/**
+ * "Delete Act escalation" — built on the legal-escalation (CPPA complaint) memo, for a
+ * registered California data broker that still shows the listing after the DROP processing
+ * window. ClearTrace never files it: the user submits it through the CPPA's own complaint
+ * process. Bracketed fields are for the user to complete.
+ */
+export function buildDeleteActEscalation(input: DeleteActEscalationInput): {
+  subject: string;
+  body: string;
+  reviewItems: string[];
+} {
+  const listingLines = input.listings
+    .map((l) => `- ${l.brokerName}: ${l.url}`)
+    .join("\n");
+  const hosts = [...new Set(input.listings.map((l) => l.brokerName))].join(", ");
+  return {
+    subject: `Delete Act complaint — DROP request not honored — ${hosts}`,
+    body: `ESCALATION MEMO — CALIFORNIA DELETE ACT (DROP)
+Prepared for a complaint to the California Privacy Protection Agency
+
+DATE:            [Insert date]
+DROP FILED ON:   ${input.filedOn}
+PROCESSING DUE:  ${input.deletionDueOn}
+
+SUMMARY
+I am a California resident. On ${input.filedOn} I submitted a deletion request through the Delete Request and Opt-out Platform (DROP). Registered data brokers must retrieve DROP requests at least every 45 days and process them within 45 days of retrieval. The following registered data broker listing(s) still display my personal information after ${input.deletionDueOn}:
+
+${listingLines}
+
+BASIS FOR COMPLAINT
+☐ Failure to process a DROP deletion request (Cal. Civ. Code § 1798.99.86)
+☐ Other: [describe]
+
+REQUESTED ACTION
+- Investigate the data broker(s) listed above
+- Require deletion of my personal information as requested through DROP
+
+ATTACHMENTS (to be prepared)
+☐ DROP request confirmation or status page (your own screenshot)
+☐ Screenshots of each listing, dated after ${input.deletionDueOn}
+
+This memo is for you to file with the CPPA through its own complaint process. ClearTrace does not file it, does not act as your authorized agent, and does not contact the CPPA or DROP on your behalf.`,
+    reviewItems: [
+      "Confirm each listing is still live on the date you file",
+      "Attach your own DROP confirmation — ClearTrace never accesses DROP",
+      "File through the CPPA's complaint process yourself",
+      "This memo is not a legal document — consult an attorney before filing in court",
+    ],
+  };
 }

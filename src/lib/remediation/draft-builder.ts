@@ -27,6 +27,10 @@ export function validateDraftText(text: string): string[] {
   return warnings;
 }
 
+/** Review item on a draft whose controller has no verified contact (empty recipient). */
+export const NO_VERIFIED_CONTACT_REVIEW_ITEM =
+  "No verified contact — find the site's own privacy or removal contact and enter it as the recipient (Edit)";
+
 export function buildDraft(
   ctx: DraftContext,
   templateId?: string,
@@ -57,6 +61,10 @@ export function buildDraft(
     body: tonedBody,
     recipient: ctx.controller.contactValue,
     reviewItems: [
+      // No verified contact (manual_research): ClearTrace never guesses an address.
+      ...(ctx.controller.contactValue.trim()
+        ? []
+        : [NO_VERIFIED_CONTACT_REVIEW_ITEM]),
       ...built.reviewItems,
       ...validationWarnings.map((w) => `Review: ${w}`),
       "Verify evidence anchor matches your situation before sending",

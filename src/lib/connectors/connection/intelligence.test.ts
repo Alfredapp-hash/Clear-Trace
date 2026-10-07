@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
-import { resolveIntelligenceConnection, type IntelligenceResolverDeps } from "./intelligence";
+import {
+  resolveIntelligenceConnection,
+  resolveLocalIntelligenceConnection,
+  type IntelligenceResolverDeps,
+} from "./intelligence";
 import { ConnectionHelper } from "./helper";
 import type { AgentDefaults, ConnectorCredentials, ConnectorType } from "../types";
 
@@ -204,5 +208,62 @@ describe("intelligence resolver — Apple Intelligence bridge", () => {
       deps({ intelligence: "openai", llmLocalOnly: false }, { apple_intelligence: APPLE }),
     );
     expect(r?.type).toBe("apple_intelligence");
+  });
+});
+
+describe("resolveLocalIntelligenceConnection (identity matching: local only)", () => {
+  const APPLE = { baseUrl: "http://127.0.0.1:11435" };
+
+  it.each(["openai", "anthropic", "openrouter"] as const)(
+    "never returns %s, even with llmLocalOnly=false and it preferred",
+    async (type) => {
+      const r = await resolveLocalIntelligenceConnection(
+        deps({ intelligence: type, llmLocalOnly: false }, ALL_CLOUD),
+      );
+      expect(r).toBeNull();
+    },
+  );
+
+  it("never returns Ollama Cloud, even when preferred, entitled and local-only is off", async () => {
+    const r = await resolveLocalIntelligenceConnection(
+      deps({ intelligence: "ollama", llmLocalOnly: false }, { ollama: CLOUD_OLLAMA }, true),
+    );
+    expect(r).toBeNull();
+  });
+
+  it("falls back from a preferred cloud provider to a connected local Ollama", async () => {
+    const r = await resolveLocalIntelligenceConnection(
+      deps({ intelligence: "openai", llmLocalOnly: false }, { ...ALL_CLOUD, ollama: LOCAL_OLLAMA }),
+    );
+    expect(r?.type).toBe("ollama");
+  });
+
+  it("returns the Apple bridge when it is the only local provider", async () => {
+    const r = await resolveLocalIntelligenceConnection(deps({}, { apple_intelligence: APPLE }));
+    expect(r?.type).toBe("apple_intelligence");
+  });
+
+  it("prefers the Apple bridge when it is the preferred provider", async () => {
+    const r = await resolveLocalIntelligenceConnection(
+      deps({ intelligence: "apple_intelligence" }, { ollama: LOCAL_OLLAMA, apple_intelligence: APPLE }),
+    );
+    expect(r?.type).toBe("apple_intelligence");
+  });
+
+  it("rules_only ⇒ null even with a local model connected", async () => {
+    const r = await resolveLocalIntelligenceConnection(
+      deps({ intelligence: "rules_only" }, { ollama: LOCAL_OLLAMA, apple_intelligence: APPLE }),
+    );
+    expect(r).toBeNull();
+  });
+
+  it("an unreadable settings row ⇒ null", async () => {
+    const r = await resolveLocalIntelligenceConnection({
+      getAgentDefaults: async () => {
+        throw new Error("db");
+      },
+      getOrgConnector: async () => null,
+    });
+    expect(r).toBeNull();
   });
 });

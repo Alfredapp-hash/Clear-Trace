@@ -8,7 +8,7 @@ import {
   privacyCases,
   controllerTargets,
 } from "@/lib/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { getRecommendedSkill } from "./hermes";
 import { COMPLETED_STATUS_SKILL, STATUS_INDEX } from "@/lib/skills/catalog";
 import { advanceCaseStatus, isBlockedCaseStatus } from "@/lib/cases/status-transitions";
@@ -23,6 +23,7 @@ import {
 import { getCaseForUser, getLatestAuthorization } from "@/lib/cases/service";
 import { runDiscovery } from "@/lib/discovery/service";
 import {
+  DRAFT_STATUS,
   resolveControllerForExposure,
   createRemovalDraft,
   createFollowUpDraft,
@@ -131,13 +132,26 @@ async function unstartedRemovalSkill(caseId: string): Promise<string | null> {
     db.query.remediationCases.findMany({ where: eq(remediationCases.caseId, caseId) }),
     db.query.messageDrafts.findMany({
       where: eq(messageDrafts.caseId, caseId),
-      columns: { remediationCaseId: true },
+      columns: { remediationCaseId: true, status: true },
     }),
   ]);
-  const undrafted = remediations.some(
-    (r) => openIds.has(r.exposureId) && !drafts.some((d) => d.remediationCaseId === r.id),
-  );
+  const undrafted = undraftedRemediations(remediations, drafts, openIds).length > 0;
   return undrafted ? "draft-removal-request" : null;
+}
+
+/**
+ * Open remediations with no live draft. A superseded variant does not count as a draft
+ * (its remediation always also has the sibling that was sent).
+ */
+function undraftedRemediations<R extends { id: string; exposureId: string }>(
+  remediations: R[],
+  drafts: Array<{ remediationCaseId: string; status: string }>,
+  openExposureIds: ReadonlySet<string>,
+): R[] {
+  const drafted = new Set(
+    drafts.filter((d) => d.status !== DRAFT_STATUS.superseded).map((d) => d.remediationCaseId),
+  );
+  return remediations.filter((r) => openExposureIds.has(r.exposureId) && !drafted.has(r.id));
 }
 
 /** Statuses at or past drafting, where status alone no longer says what is left to start. */
@@ -301,14 +315,31 @@ export async function runNextSkill(
       if (!remediations.length) throw new Error("NO_REMEDIATION_CASE");
       const drafts = await db.query.messageDrafts.findMany({
         where: eq(messageDrafts.caseId, caseId),
+        columns: { remediationCaseId: true, status: true },
       });
       const openIds = new Set((await openExposures(caseId)).map((e) => e.id));
-      const pending = remediations.filter(
-        (r) => openIds.has(r.exposureId) && !drafts.some((d) => d.remediationCaseId === r.id),
-      );
-      const targets = pending.length ? pending : remediations.slice(0, 1);
+      const pending = undraftedRemediations(remediations, drafts, openIds);
+      if (!pending.length) {
+        // Every open remediation already has a draft: never stack a duplicate. A case still
+        // at a pre-draft status catches up to draft_ready so the next step is the review.
+        const advanced = await advanceCaseStatus(caseId, "draft_ready", {
+          allowedFrom: ["confirmed_exposure", "controller_resolution", "remedy_selected"],
+          skipIfBlocked: true,
+        });
+        result = {
+          skillId,
+          status: "manual_review_required",
+          summary: "Nothing to draft — every open request already has a draft to review",
+          output: {
+            drafts: [],
+            case_status: advanced.status,
+            recommended_next_action: "compliance-verify-draft",
+          },
+        };
+        break;
+      }
       const created = [];
-      for (const remediation of targets) {
+      for (const remediation of pending) {
         created.push(await createRemovalDraft(session, caseId, remediation.id));
       }
       result = {
@@ -320,16 +351,23 @@ export async function runNextSkill(
       break;
     }
     case "compliance-verify-draft": {
-      // Check the draft that is actually waiting to be sent (fall back to any draft).
+      // Check the NEWEST draft that is actually waiting to be sent (fall back to the
+      // newest non-superseded draft).
+      const newestFirst = [desc(messageDrafts.createdAt), desc(sql`rowid`)];
       const draft =
         (await db.query.messageDrafts.findFirst({
           where: and(
             eq(messageDrafts.caseId, caseId),
-            eq(messageDrafts.status, "awaiting_user_approval"),
+            eq(messageDrafts.status, DRAFT_STATUS.awaitingApproval),
           ),
+          orderBy: newestFirst,
         })) ??
         (await db.query.messageDrafts.findFirst({
-          where: eq(messageDrafts.caseId, caseId),
+          where: and(
+            eq(messageDrafts.caseId, caseId),
+            ne(messageDrafts.status, DRAFT_STATUS.superseded),
+          ),
+          orderBy: newestFirst,
         }));
       if (!draft) throw new Error("NO_DRAFT");
       const warnings = validateDraftText(`${draft.subject}\n${draft.body}`);

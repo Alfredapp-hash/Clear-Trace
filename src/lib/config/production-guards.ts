@@ -1,4 +1,5 @@
 import { timingSafeEqual, createHash } from "crypto";
+import { log } from "@/lib/log";
 
 const DEV_SESSION_SECRET = "cleartrace-dev-session-secret";
 const DEV_ENCRYPTION_KEY = "cleartrace-dev-key-change-in-production";
@@ -69,9 +70,8 @@ export function isJobRequestAuthorized(request: Request): boolean {
     if (process.env.NODE_ENV === "production") return false;
     if (!warnedOpenJobs) {
       warnedOpenJobs = true;
-      console.warn(
-        "[cleartrace] CRON_SECRET/WORKER_SECRET not set — job endpoints are unauthenticated (development only).",
-      );
+      // CRON_SECRET/WORKER_SECRET not set: job endpoints are unauthenticated (development only).
+      log.warn("config.job_endpoints_unauthenticated", { errorCode: "JOB_SECRET_UNSET" });
     }
     return true;
   }

@@ -30,3 +30,8 @@ if (!process.env[TEST_DB_ENV]) {
 
 process.env.SESSION_SECRET ||= "vitest-session-secret-not-for-production-0123456789abcdef";
 process.env.ENCRYPTION_KEY ||= "vitest-encryption-key-not-for-production-0123456789abcdef";
+// Tests create many short-lived databases; the pre-migrate VACUUM INTO snapshot is exercised
+// explicitly (runMigrations({ snapshot: true })) in migrations.test.ts.
+process.env.CLEARTRACE_SKIP_PREMIGRATE_SNAPSHOT ||= "1";
+// Keep test output readable; log.test.ts sets LOG_LEVEL itself.
+process.env.LOG_LEVEL ||= "warn";

@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import { CIPHERTEXT_V2_PREFIX, decryptValue, encryptValue, hashValue } from "./encryption";
+import { log } from "@/lib/log";
 
 /**
  * One-shot, idempotent upgrade of data written before the v2 crypto scheme:
@@ -150,26 +151,25 @@ export async function runStartupCryptoBackfill(): Promise<BackfillResult | null>
     const { sqlite } = await import("@/lib/db");
     const result = backfillLegacyCrypto(sqlite);
     if (result.reencrypted || result.rehashed || result.failed) {
-      const detail = result.columns
-        .filter((c) => c.reencrypted || c.rehashed || c.failed)
-        .map(
-          (c) =>
-            `${c.table}.${c.column}: reencrypted=${c.reencrypted} rehashed=${c.rehashed} failed=${c.failed}`,
-        )
-        .join("; ");
-      console.info(`[crypto-backfill] ${detail}`);
+      for (const c of result.columns) {
+        if (!c.reencrypted && !c.rehashed && !c.failed) continue;
+        log.info("crypto.backfill", {
+          job: `${c.table}.${c.column}`,
+          counts: { reencrypted: c.reencrypted, rehashed: c.rehashed, failed: c.failed },
+        });
+      }
       if (result.failed) {
-        console.warn(
-          `[crypto-backfill] ${result.failed} row(s) could not be decrypted with the current ENCRYPTION_KEY and were left unchanged`,
-        );
+        // Rows that do not decrypt with the current ENCRYPTION_KEY were left unchanged.
+        log.warn("crypto.backfill_undecryptable", {
+          errorCode: "ENCRYPTION_KEY_MISMATCH",
+          counts: { failed: result.failed },
+        });
       }
     }
     return result;
   } catch (err) {
-    console.error(
-      "[crypto-backfill] skipped:",
-      err instanceof Error ? err.message : "unknown error",
-    );
+    const code = (err as { code?: unknown } | null)?.code;
+    log.error("crypto.backfill_skipped", { errorCode: typeof code === "string" ? code : "BACKFILL_FAILED" });
     return null;
   }
 }

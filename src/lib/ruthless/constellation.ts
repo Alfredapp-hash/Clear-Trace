@@ -1,9 +1,10 @@
 import type { ClaimNode } from "@/lib/discovery/constellation";
-import { buildConstellationQueries } from "@/lib/discovery/constellation";
+import { buildConstellationQueries, queryableClaims } from "@/lib/discovery/constellation";
 
 /** Extra high-coverage queries used only in Ruthless mode (approved public search). */
 export function buildRuthlessExtraQueries(claims: ClaimNode[]): string[] {
-  const byType = Object.fromEntries(claims.map((c) => [c.claimType, c.value]));
+  // Disambiguators (birth year, relatives, legacy DOB) never reach a query.
+  const byType = Object.fromEntries(queryableClaims(claims).map((c) => [c.claimType, c.value]));
   const name = byType.full_name;
   const city = byType.city_state;
   const email = byType.email;

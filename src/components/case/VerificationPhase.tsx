@@ -1,6 +1,7 @@
 "use client";
 
-import { Button } from "../ui";
+import { Button, InlineResult, type InlineResultView } from "../ui";
+import { latestResult } from "./useCaseMutations";
 import { formatDateTime, itemStatusLabel } from "@/lib/ux/plain-status";
 
 export interface VerificationExposure {
@@ -28,6 +29,8 @@ export function VerificationPhase({
   onSchedule,
   onCheck,
   onSimulate,
+  results = {},
+  onRetry = () => {},
 }: {
   exposures: VerificationExposure[];
   checks: VerificationCheck[];
@@ -39,6 +42,8 @@ export function VerificationPhase({
   onSchedule: (exposureId: string) => void;
   onCheck: (exposureId: string) => void;
   onSimulate: (exposureId: string, removed: boolean) => void;
+  results?: Record<string, InlineResultView>;
+  onRetry?: (key: string) => void;
 }) {
   const disabled = busy || casePaused;
   return (
@@ -54,29 +59,37 @@ export function VerificationPhase({
           never confirm a real removal.
         </p>
       )}
-      {exposures.map((exp) => (
-        <div key={exp.id} className="mb-4">
-          <p className="mb-2 text-xs text-[var(--muted)] break-all">{exp.canonicalUrl}</p>
-          <div className="flex flex-wrap gap-2">
-            <Button variant="secondary" onClick={() => onCheck(exp.id)} disabled={disabled}>
-              {loading === `live-verify-${exp.id}` ? "Checking…" : "Check if it's gone"}
-            </Button>
-            <Button variant="secondary" onClick={() => onSchedule(exp.id)} disabled={disabled}>
-              {loading === `schedule-${exp.id}` ? "Scheduling…" : "Check weekly"}
-            </Button>
-            {simulateAllowed && (
-              <>
-                <Button variant="ghost" onClick={() => onSimulate(exp.id, false)} disabled={disabled}>
-                  Demo: simulate still visible
-                </Button>
-                <Button variant="ghost" onClick={() => onSimulate(exp.id, true)} disabled={disabled}>
-                  Demo: simulate removed
-                </Button>
-              </>
-            )}
+      {exposures.map((exp) => {
+        const latest = latestResult(results, [
+          `live-verify-${exp.id}`,
+          `schedule-${exp.id}`,
+          `simulate-${exp.id}`,
+        ]);
+        return (
+          <div key={exp.id} className="mb-4">
+            <p className="mb-2 text-xs text-[var(--muted)] break-all">{exp.canonicalUrl}</p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button variant="secondary" onClick={() => onCheck(exp.id)} disabled={disabled}>
+                {loading === `live-verify-${exp.id}` ? "Checking…" : "Check if it's gone"}
+              </Button>
+              <Button variant="secondary" onClick={() => onSchedule(exp.id)} disabled={disabled}>
+                {loading === `schedule-${exp.id}` ? "Scheduling…" : "Check weekly"}
+              </Button>
+              {simulateAllowed && (
+                <>
+                  <Button variant="ghost" onClick={() => onSimulate(exp.id, false)} disabled={disabled}>
+                    Demo: simulate still visible
+                  </Button>
+                  <Button variant="ghost" onClick={() => onSimulate(exp.id, true)} disabled={disabled}>
+                    Demo: simulate removed
+                  </Button>
+                </>
+              )}
+              <InlineResult result={latest?.result} onRetry={latest ? () => onRetry(latest.key) : undefined} />
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
       {checks.length > 0 && (
         <ul className="mt-3 space-y-2" aria-label="Check history">
           {checks.map((c) => {

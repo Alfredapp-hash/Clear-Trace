@@ -370,3 +370,229 @@ export function EmptyState({
     </Card>
   );
 }
+/* ------------------------------------------------------------------------------------
+ * Feedback primitives. These stay hook-free (ui.tsx is also imported by server pages);
+ * state lives in the caller (see useToasts in components/case/useCaseMutations.ts).
+ * ---------------------------------------------------------------------------------- */
+
+export type ToastTone = "success" | "error" | "info";
+
+export interface ToastView {
+  id: number;
+  tone: ToastTone;
+  text: string;
+  /** Adds an inline link to /billing (402 responses). */
+  billing?: boolean;
+  /** One optional action, e.g. Undo. */
+  action?: { label: string; onClick: () => void };
+}
+
+const TOAST_TONES: Record<ToastTone, string> = {
+  success: "border-emerald-500/30 bg-slate-950/95 text-emerald-100",
+  info: "border-sky-500/30 bg-slate-950/95 text-slate-100",
+  error: "border-rose-500/40 bg-rose-950/95 text-rose-100",
+};
+
+function ToastItem({ toast, onDismiss }: { toast: ToastView; onDismiss: (id: number) => void }) {
+  return (
+    <div
+      data-toast-tone={toast.tone}
+      className={`pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-[0_12px_40px_-12px_rgba(0,0,0,0.7)] backdrop-blur ${TOAST_TONES[toast.tone]}`}
+    >
+      <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">
+        {toast.tone === "success" && <span aria-hidden="true">✓ </span>}
+        {toast.text}
+        {toast.billing && (
+          <>
+            {" "}
+            <Link href="/billing" className="font-medium underline underline-offset-2">
+              See plans on Billing
+            </Link>
+          </>
+        )}
+      </p>
+      {toast.action && (
+        <button
+          type="button"
+          onClick={toast.action.onClick}
+          className="shrink-0 rounded-md px-2 py-0.5 text-xs font-semibold underline underline-offset-2 hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-teal-300"
+        >
+          {toast.action.label}
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => onDismiss(toast.id)}
+        aria-label="Dismiss notification"
+        className="shrink-0 rounded-md px-1.5 text-xs opacity-70 hover:opacity-100 focus-visible:outline-2 focus-visible:outline-teal-300"
+      >
+        ✕
+      </button>
+    </div>
+  );
+}
+
+/**
+ * Fixed bottom notification region. Always rendered (live regions must exist before
+ * content is added): results are announced politely, errors assertively, and both are
+ * visible without scrolling, however long the page is.
+ */
+export function ToastRegion({
+  toasts,
+  onDismiss,
+}: {
+  toasts: ReadonlyArray<ToastView>;
+  onDismiss: (id: number) => void;
+}) {
+  const errors = toasts.filter((t) => t.tone === "error");
+  const others = toasts.filter((t) => t.tone !== "error");
+  return (
+    <div
+      data-testid="toast-region"
+      className="pointer-events-none fixed inset-x-0 bottom-0 z-50 flex flex-col items-center gap-2 px-4 pb-4 sm:items-end sm:px-6"
+    >
+      <div role="status" aria-live="polite" className="flex w-full flex-col items-center gap-2 sm:items-end">
+        {others.map((t) => (
+          <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
+        ))}
+      </div>
+      <div role="alert" aria-live="assertive" className="flex w-full flex-col items-center gap-2 sm:items-end">
+        {errors.map((t) => (
+          <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Opens a <dialog> modally once it mounts (a ref callback, so no hooks are needed). */
+function openModal(el: HTMLDialogElement | null) {
+  if (el && !el.open && typeof el.showModal === "function") el.showModal();
+}
+
+/**
+ * Accessible confirmation dialog (native <dialog>: focus is trapped, Escape cancels).
+ * Replaces window.confirm(). Render it with `open` from the caller's state.
+ */
+export function ConfirmDialog({
+  open,
+  id = "confirm-dialog",
+  title,
+  message,
+  confirmLabel,
+  cancelLabel = "Cancel",
+  tone = "danger",
+  onConfirm,
+  onCancel,
+}: {
+  open: boolean;
+  id?: string;
+  title: string;
+  message: ReactNode;
+  confirmLabel: string;
+  cancelLabel?: string;
+  tone?: "danger" | "primary";
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  if (!open) return null;
+  return (
+    <dialog
+      ref={openModal}
+      id={id}
+      aria-labelledby={`${id}-title`}
+      aria-describedby={`${id}-message`}
+      onCancel={(e) => {
+        e.preventDefault();
+        onCancel();
+      }}
+      className="m-auto w-[min(28rem,calc(100vw-2rem))] rounded-2xl border border-white/10 bg-slate-950 p-6 text-slate-100 shadow-2xl backdrop:bg-black/60"
+    >
+      <h2 id={`${id}-title`} className="text-base font-semibold text-white">
+        {title}
+      </h2>
+      <div id={`${id}-message`} className="mt-2 text-sm leading-relaxed text-slate-300">
+        {message}
+      </div>
+      <div className="mt-6 flex flex-wrap justify-end gap-2">
+        <Button variant="ghost" onClick={onCancel} autoFocus>
+          {cancelLabel}
+        </Button>
+        <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm}>
+          {confirmLabel}
+        </Button>
+      </div>
+    </dialog>
+  );
+}
+
+/** Result of the last action on one row, keyed by the mutation's loading key. */
+export type InlineResultView =
+  | { kind: "saved"; at: number }
+  | { kind: "error"; text: string; at: number };
+
+/**
+ * Per-row outcome next to the control that caused it: a "Saved" check, or the error with
+ * a Retry button. Announcement happens in the toast region; this keeps the result in place.
+ */
+export function InlineResult({
+  result,
+  onRetry,
+}: {
+  result: InlineResultView | undefined;
+  onRetry?: () => void;
+}) {
+  if (!result) return null;
+  if (result.kind === "saved") {
+    return (
+      <span data-inline-result="saved" className="inline-flex items-center gap-1 text-xs text-emerald-300">
+        <span aria-hidden="true">✓</span> Saved
+      </span>
+    );
+  }
+  return (
+    <span
+      data-inline-result="error"
+      className="inline-flex flex-wrap items-center gap-2 text-xs text-rose-300 [overflow-wrap:anywhere]"
+    >
+      <span>{result.text}</span>
+      {onRetry && (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="rounded-md border border-rose-400/30 px-2 py-0.5 font-medium text-rose-100 hover:bg-rose-500/10 focus-visible:outline-2 focus-visible:outline-teal-300"
+        >
+          Retry
+        </button>
+      )}
+    </span>
+  );
+}
+
+/** "12 of 34 brokers done" with a bar. */
+export function ProgressMeter({
+  done,
+  total,
+  label,
+}: {
+  done: number;
+  total: number;
+  label: string;
+}) {
+  const pct = total > 0 ? Math.round((done / total) * 100) : 0;
+  return (
+    <div>
+      <p className="text-sm font-medium text-slate-200">{label}</p>
+      <div
+        role="progressbar"
+        aria-label={label}
+        aria-valuemin={0}
+        aria-valuemax={total}
+        aria-valuenow={done}
+        className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-white/[0.06]"
+      >
+        <div className="h-full rounded-full bg-teal-400 transition-[width]" style={{ width: `${pct}%` }} />
+      </div>
+    </div>
+  );
+}

@@ -23,6 +23,7 @@ import { getActionItems, getDashboardStats, type ActionItem } from "@/lib/dashbo
 import { getConnectorHealth } from "@/lib/connectors/service";
 import { getExposureRadar, getVictoryStats } from "@/lib/dashboard/radar";
 import { maybeRunBackgroundJobs, shouldRunInlineWorker } from "@/lib/worker/processor";
+import { log } from "@/lib/log";
 
 const ACTION_LABEL: Record<ActionItem["type"], string> = {
   verification_due: "Check if it's gone",
@@ -53,7 +54,10 @@ export default async function DashboardPage() {
       try {
         await maybeRunBackgroundJobs();
       } catch (err) {
-        console.error("[worker] inline background run failed", err);
+        log.error("worker.inline_run_failed", {
+          job: "background_jobs",
+          errorCode: err instanceof Error && /^[A-Z0-9_:]{2,64}$/.test(err.message) ? err.message : "WORKER_FAILED",
+        });
       }
     });
   }

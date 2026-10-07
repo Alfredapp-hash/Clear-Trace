@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type ReactNode } from "react";
-import { Card } from "./ui";
+import { Card, ToastRegion } from "./ui";
 import { useCaseActions } from "./case/useCaseMutations";
 import { NextStepHero } from "./case/NextStepHero";
 import { PhaseSection, usePhaseDisclosure } from "./case/PhaseSection";
@@ -18,6 +17,7 @@ import {
 } from "./case/RemediationPhase";
 import { DeindexPhase, type DeindexRequest } from "./case/DeindexPhase";
 import { VerificationPhase, type VerificationCheck } from "./case/VerificationPhase";
+import type { BrokerChecklistView } from "@/lib/brokers/checklist";
 import {
   buildCaseProgress,
   getActivePhase,
@@ -55,6 +55,8 @@ export interface CaseWorkflowProps {
   breachFindings: BreachFinding[];
   optOutDispatches: OptOutDispatch[];
   deindexRequests: DeindexRequest[];
+  /** Latest broker sweep as a checklist; null/undefined before the first sweep. */
+  brokerChecklist?: BrokerChecklistView | null;
 }
 
 /**
@@ -98,7 +100,7 @@ export function CaseWorkflow(props: CaseWorkflowProps) {
         ? `${base}/export`
         : undefined;
 
-  const common = { casePaused, loading: a.loading, busy: a.busy };
+  const common = { casePaused, loading: a.loading, busy: a.busy, results: a.results, onRetry: a.retry };
   const bodies: Record<PhaseId, ReactNode> = {
     discovery: (
       <DiscoveryPhase
@@ -115,6 +117,7 @@ export function CaseWorkflow(props: CaseWorkflowProps) {
         onMaximumSweep={a.maximumSweep}
         onReview={a.review}
         onAddPage={a.addPage}
+        onConfirmMany={a.confirmMany}
       />
     ),
     broker: (
@@ -122,9 +125,14 @@ export function CaseWorkflow(props: CaseWorkflowProps) {
         {...common}
         status={status}
         dispatches={props.optOutDispatches}
+        checklist={props.brokerChecklist ?? null}
         onBrokerSweep={a.brokerSweep}
         onQueue={a.queueOptOuts}
         onDispatchAction={a.optOutAction}
+        onApproveAll={a.approveAll}
+        onMarkNotListed={a.markNotListed}
+        onClearCheck={a.clearCheck}
+        onFoundListing={a.foundListing}
         onCopy={a.copyText}
       />
     ),
@@ -175,73 +183,61 @@ export function CaseWorkflow(props: CaseWorkflowProps) {
   };
 
   return (
-    <Card variant="elevated">
-      <div data-testid="case-workflow" className="space-y-5">
-        <NextStepHero
-          step={step}
-          primaryHref={primaryHref}
-          primaryLoading={a.loading !== "" && a.loading === primaryKey[step.action?.kind ?? ""]}
-          busy={a.busy}
-          onPrimary={onPrimary}
-          onAutopilot={() =>
-            a.autopilot((d) =>
-              setLastRun(`${stepLabel(String(d.skillId ?? ""), "Step")} — ${String(d.summary ?? "done")}`),
-            )
-          }
-          autopilotLoading={a.loading === "next-step"}
-          autopilotDisabled={casePaused}
-          lastAutopilotRun={lastRun}
-        />
-        {a.error && (
-          <p
-            role="alert"
-            className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-200 [overflow-wrap:anywhere]"
-          >
-            {a.error.text}
-            {a.error.billing && (
-              <>
-                {" "}
-                <Link href="/billing" className="font-medium underline underline-offset-2">
-                  See plans on Billing
-                </Link>
-              </>
+    <>
+      <Card variant="elevated">
+        <div data-testid="case-workflow" className="space-y-5">
+          <NextStepHero
+            step={step}
+            primaryHref={primaryHref}
+            primaryLoading={a.loading !== "" && a.loading === primaryKey[step.action?.kind ?? ""]}
+            busy={a.busy}
+            onPrimary={onPrimary}
+            onAutopilot={() =>
+              a.autopilot((d) =>
+                setLastRun(`${stepLabel(String(d.skillId ?? ""), "Step")} — ${String(d.summary ?? "done")}`),
+              )
+            }
+            autopilotLoading={a.loading === "next-step"}
+            autopilotDisabled={casePaused}
+            lastAutopilotRun={lastRun}
+          />
+          <div>
+            {phases.map((phase) => (
+              <PhaseSection
+                key={phase.id}
+                phase={phase}
+                expanded={isOpen(phase.id)}
+                onToggle={() => toggle(phase.id)}
+              >
+                {bodies[phase.id]}
+              </PhaseSection>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-4 border-t border-white/[0.06] pt-4 text-sm font-medium">
+            <a href={`${base}/exposure-report?format=markdown`} className="text-teal-300 hover:text-teal-200">
+              Exposure report →
+            </a>
+            <a href={`${base}/export`} className="text-teal-300 hover:text-teal-200">
+              Export case packet →
+            </a>
+            {status === "removed_confirmed" && (
+              <button
+                type="button"
+                onClick={a.downloadCertificate}
+                disabled={a.busy}
+                className="text-emerald-300 hover:text-emerald-200 disabled:opacity-60"
+              >
+                {a.loading === "certificate" ? "Preparing certificate…" : "Removal certificate →"}
+              </button>
             )}
-          </p>
-        )}
-        <div aria-live="polite">
-          {a.message && <p className="text-sm text-teal-300 [overflow-wrap:anywhere]">{a.message}</p>}
+          </div>
         </div>
-        <div>
-          {phases.map((phase) => (
-            <PhaseSection
-              key={phase.id}
-              phase={phase}
-              expanded={isOpen(phase.id)}
-              onToggle={() => toggle(phase.id)}
-            >
-              {bodies[phase.id]}
-            </PhaseSection>
-          ))}
-        </div>
-        <div className="flex flex-wrap gap-4 border-t border-white/[0.06] pt-4 text-sm font-medium">
-          <a href={`${base}/exposure-report?format=markdown`} className="text-teal-300 hover:text-teal-200">
-            Exposure report →
-          </a>
-          <a href={`${base}/export`} className="text-teal-300 hover:text-teal-200">
-            Export case packet →
-          </a>
-          {status === "removed_confirmed" && (
-            <button
-              type="button"
-              onClick={a.downloadCertificate}
-              disabled={a.busy}
-              className="text-emerald-300 hover:text-emerald-200 disabled:opacity-60"
-            >
-              {a.loading === "certificate" ? "Preparing certificate…" : "Removal certificate →"}
-            </button>
-          )}
-        </div>
-      </div>
-    </Card>
+      </Card>
+      {/*
+        Results and errors: fixed at the bottom of the viewport and announced to screen readers.
+        Outside the Card: its backdrop-filter would make it the containing block of a fixed child.
+      */}
+      <ToastRegion toasts={a.toasts} onDismiss={a.dismissToast} />
+    </>
   );
 }

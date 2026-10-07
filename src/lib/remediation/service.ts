@@ -1,4 +1,4 @@
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, ne, sql } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import {
@@ -18,6 +18,7 @@ import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
 import { advanceCaseStatus, assertCaseNotBlocked } from "@/lib/cases/status-transitions";
 import { workflowErrorMessage } from "@/lib/api";
+import { log } from "@/lib/log";
 import {
   hasPendingFollowUpDraft,
   listFollowUpEligibleRemediations,
@@ -69,9 +70,18 @@ export function caseStatusAfterDraftCreated(currentStatus: string): string {
  */
 const FOLLOW_UP_DRAFT_FROM: readonly string[] = ["follow_up_eligible"];
 
-/** Draft status that may be approved / sent (see messageDrafts.status default). */
-const DRAFT_AWAITING_APPROVAL = "awaiting_user_approval";
-const DRAFT_SENT = "approved_sent";
+/**
+ * Draft statuses. `superseded` marks a sibling variant (create_all_variants) that can no
+ * longer be sent because another initial request for the same remediation went out.
+ */
+export const DRAFT_STATUS = {
+  awaitingApproval: "awaiting_user_approval",
+  sent: "approved_sent",
+  superseded: "superseded",
+} as const;
+const DRAFT_AWAITING_APPROVAL = DRAFT_STATUS.awaitingApproval;
+const DRAFT_SENT = DRAFT_STATUS.sent;
+const DRAFT_SUPERSEDED = DRAFT_STATUS.superseded;
 
 async function loadDraftContext(
   caseId: string,
@@ -408,6 +418,13 @@ export async function createRemovalDraft(
     remediationCaseId,
   );
   let built = buildDraft(ctx, templateId);
+  const isFollowUp = built.remedyType.startsWith("follow_up");
+  // Only one initial request per remediation may ever go out. Once it has, a new initial
+  // draft could never be sent (claimDraftForSend refuses it) and nothing would supersede it,
+  // so refuse it up front (and again inside the insert transaction below).
+  if (!isFollowUp && remediationAlreadySent(db, remediationCaseId, "")) {
+    throw new Error("REMEDIATION_ALREADY_SENT");
+  }
   let llmPolished = false;
   try {
     const polished = await optionalPolishDraft(
@@ -427,33 +444,46 @@ export async function createRemovalDraft(
   const draftId = uuid();
   const now = new Date().toISOString();
 
-  await db.insert(messageDrafts).values({
-    id: draftId,
-    caseId,
-    remediationCaseId,
-    subject: built.subject,
-    recipient: built.recipient,
-    body: built.body,
-    status: "awaiting_user_approval",
-    templateId: built.templateId,
-    templateLabel: built.templateLabel,
-    remedyType: built.remedyType,
-    reviewItemsJson: JSON.stringify(built.reviewItems),
-    isFollowUp: built.remedyType.startsWith("follow_up"),
-    currentVersion: 1,
-    createdAt: now,
-    updatedAt: now,
-  });
-
-  await db.insert(messageVersions).values({
-    id: uuid(),
-    draftId,
-    version: 1,
-    subject: built.subject,
-    body: built.body,
-    editedBy: session.userId,
-    createdAt: now,
-  });
+  // The sent-check and the insert share one IMMEDIATE transaction, so a send that lands
+  // while this draft was being built (e.g. during LLM polish) is still seen.
+  db.transaction(
+    (tx) => {
+      if (!isFollowUp && remediationAlreadySent(tx, remediationCaseId, draftId)) {
+        throw new Error("REMEDIATION_ALREADY_SENT");
+      }
+      tx.insert(messageDrafts)
+        .values({
+          id: draftId,
+          caseId,
+          remediationCaseId,
+          subject: built.subject,
+          recipient: built.recipient,
+          body: built.body,
+          status: "awaiting_user_approval",
+          templateId: built.templateId,
+          templateLabel: built.templateLabel,
+          remedyType: built.remedyType,
+          reviewItemsJson: JSON.stringify(built.reviewItems),
+          isFollowUp,
+          currentVersion: 1,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .run();
+      tx.insert(messageVersions)
+        .values({
+          id: uuid(),
+          draftId,
+          version: 1,
+          subject: built.subject,
+          body: built.body,
+          editedBy: session.userId,
+          createdAt: now,
+        })
+        .run();
+    },
+    { behavior: "immediate" },
+  );
 
   // Only pre-draft statuses advance to draft_ready; later statuses are never regressed.
   await advanceCaseStatus(caseId, "draft_ready", {
@@ -566,6 +596,10 @@ export async function createAllDraftVariants(
     where: eq(remedyRoutes.id, remediation.remedyRouteId),
   });
   if (!remedy) throw new Error("REMEDY_NOT_FOUND");
+  // Variants are alternative INITIAL requests: none could be sent once one has gone out.
+  if (remediationAlreadySent(db, remediationCaseId, "")) {
+    throw new Error("REMEDIATION_ALREADY_SENT");
+  }
 
   const ctx = await loadDraftContext(
     caseId,
@@ -600,24 +634,39 @@ export async function updateDraft(
   draftId: string,
   subject: string,
   body: string,
+  /** Optional new recipient (an email address or an http(s) form link). Omit to keep it. */
+  recipient?: string,
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
   // Paused / archived cases take no new work (and keep their retention clock).
   assertCaseNotBlocked(privacyCase);
+  const nextRecipient = recipient === undefined ? undefined : normalizeRecipient(recipient);
 
   const draft = await db.query.messageDrafts.findFirst({
     where: and(eq(messageDrafts.id, draftId), eq(messageDrafts.caseId, caseId)),
   });
   if (!draft) throw new Error("DRAFT_NOT_FOUND");
+  // Only a draft still awaiting approval may change: a sent draft is the evidence of what
+  // went out, and a superseded variant is retired.
+  if (draft.status !== DRAFT_AWAITING_APPROVAL) throw new Error("DRAFT_NOT_EDITABLE");
 
   const newVersion = draft.currentVersion + 1;
   const now = new Date().toISOString();
 
-  await db
+  const updated = db
     .update(messageDrafts)
-    .set({ subject, body, currentVersion: newVersion, updatedAt: now })
-    .where(eq(messageDrafts.id, draftId));
+    .set({
+      subject,
+      body,
+      ...(nextRecipient !== undefined ? { recipient: nextRecipient } : {}),
+      currentVersion: newVersion,
+      updatedAt: now,
+    })
+    .where(and(eq(messageDrafts.id, draftId), eq(messageDrafts.status, DRAFT_AWAITING_APPROVAL)))
+    .run();
+  // Sent (or superseded) between the read and the write.
+  if (updated.changes !== 1) throw new Error("DRAFT_NOT_EDITABLE");
 
   await db.insert(messageVersions).values({
     id: uuid(),
@@ -635,20 +684,61 @@ export async function updateDraft(
     userId: session.userId,
     eventType: "draft_edited",
     summary: `Draft updated to version ${newVersion}`,
-    detail: { draftId, version: newVersion },
+    detail: {
+      draftId,
+      version: newVersion,
+      ...(nextRecipient !== undefined && nextRecipient !== draft.recipient ? { recipientChanged: true } : {}),
+    },
   });
 
   return { version: newVersion };
+}
+
+const RECIPIENT_EMAIL_RE = /^[^\s@<>()",;:]+@[^\s@<>()",;:]+\.[^\s@<>()",;:]+$/;
+
+/**
+ * A user-entered recipient: an email address or an http(s) link to the site's removal
+ * form. Anything else is refused with INVALID_RECIPIENT (never a guessed address).
+ */
+function normalizeRecipient(raw: string): string {
+  const value = raw.trim();
+  if (value.length === 0 || value.length > 2048) throw new Error("INVALID_RECIPIENT");
+  if (RECIPIENT_EMAIL_RE.test(value)) return value;
+  try {
+    const url = new URL(value);
+    if (url.protocol === "https:" || url.protocol === "http:") return url.toString();
+  } catch {
+    // fall through
+  }
+  throw new Error("INVALID_RECIPIENT");
+}
+
+/** A draft with no recipient (no verified contact yet) cannot be sent or pushed to a mailbox. */
+function assertHasRecipient(draft: { recipient: string }) {
+  if (!draft.recipient.trim()) throw new Error("DRAFT_NO_RECIPIENT");
+}
+
+export interface RecordOutboundResult {
+  recorded: boolean;
+  /** Set when the message was recorded but its SLA deadlines could not be created. */
+  slaError?: string;
 }
 
 /**
  * Record an outbound message for a draft that has ALREADY been claimed as sent
  * (draft.status === approved_sent). Idempotent: at most one outbound row per draft.
  *
+ * In one transaction: the outbound row, the remediation's sent status / message count and,
+ * for an initial (non follow-up) request, superseding the remediation's other
+ * awaiting-approval initial drafts (create_all_variants siblings) so none can go out too.
+ *
  * Case status goes through advanceCaseStatus: `sent` only replaces draft_ready,
  * user_review or approved_to_send, so a partially_resolved / follow_up_eligible /
  * reopened case keeps its exposure-derived status. A sent follow-up increments the
  * remediation's followUpCount atomically and never past its maximum.
+ *
+ * SLA deadlines (removal_verification + follow_up, tied to the exposure) are created and
+ * awaited; a failure there does not undo the send — it is logged and returned as slaError.
  */
 async function recordOutbound(
   session: SessionPayload,
@@ -662,26 +752,53 @@ async function recordOutbound(
   sentVia: "manual_copy" | "mailto" | "connected_email",
   notes: string | null,
   now: string,
-): Promise<{ recorded: boolean }> {
-  const existing = await db.query.outboundMessages.findFirst({
-    where: eq(outboundMessages.draftId, draft.id),
-  });
-  if (existing) return { recorded: false };
+): Promise<RecordOutboundResult> {
+  const outcome = db.transaction(
+    (tx) => {
+      const existing = tx
+        .select({ id: outboundMessages.id })
+        .from(outboundMessages)
+        .where(eq(outboundMessages.draftId, draft.id))
+        .get();
+      if (existing) return { recorded: false, superseded: 0 };
 
-  await db.insert(outboundMessages).values({
-    id: uuid(),
-    caseId,
-    draftId: draft.id,
-    sentVia,
-    sentAt: now,
-    notes,
-    createdAt: now,
-  });
+      tx.insert(outboundMessages)
+        .values({
+          id: uuid(),
+          caseId,
+          draftId: draft.id,
+          sentVia,
+          sentAt: now,
+          notes,
+          createdAt: now,
+        })
+        .run();
 
-  await db
-    .update(remediationCases)
-    .set({ status: "sent", messageCount: sql`${remediationCases.messageCount} + 1` })
-    .where(eq(remediationCases.id, draft.remediationCaseId));
+      tx.update(remediationCases)
+        .set({ status: "sent", messageCount: sql`${remediationCases.messageCount} + 1` })
+        .where(eq(remediationCases.id, draft.remediationCaseId))
+        .run();
+
+      let superseded = 0;
+      if (!draft.isFollowUp) {
+        superseded = tx
+          .update(messageDrafts)
+          .set({ status: DRAFT_SUPERSEDED, updatedAt: now })
+          .where(
+            and(
+              eq(messageDrafts.remediationCaseId, draft.remediationCaseId),
+              eq(messageDrafts.status, DRAFT_AWAITING_APPROVAL),
+              eq(messageDrafts.isFollowUp, false),
+              ne(messageDrafts.id, draft.id),
+            ),
+          )
+          .run().changes;
+      }
+      return { recorded: true, superseded };
+    },
+    { behavior: "immediate" },
+  );
+  if (!outcome.recorded) return { recorded: false };
 
   if (draft.isFollowUp) {
     incrementFollowUpCount(draft.remediationCaseId);
@@ -701,26 +818,31 @@ async function recordOutbound(
       sentVia,
       templateId: draft.templateId,
       isFollowUp: draft.isFollowUp,
+      supersededDrafts: outcome.superseded,
     },
   });
 
-  void import("@/lib/enterprise/sla-service")
-    .then(({ createSlaDeadlinesForSentMessage }) =>
-      createSlaDeadlinesForSentMessage({
-        organizationId: session.organizationId,
-        caseId,
-        remediationCaseId: draft.remediationCaseId,
-        sentAt: now,
-      }),
-    )
-    .catch((error: unknown) => {
-      console.error(
-        "[remediation] SLA deadline creation failed:",
-        error instanceof Error ? error.message : error,
-      );
+  let slaError: string | undefined;
+  try {
+    const remediation = await db.query.remediationCases.findFirst({
+      where: eq(remediationCases.id, draft.remediationCaseId),
+      columns: { exposureId: true },
     });
+    const { createSlaDeadlinesForSentMessage } = await import("@/lib/enterprise/sla-service");
+    await createSlaDeadlinesForSentMessage({
+      organizationId: session.organizationId,
+      caseId,
+      remediationCaseId: draft.remediationCaseId,
+      exposureId: remediation?.exposureId ?? null,
+      sentAt: now,
+      isFollowUp: draft.isFollowUp,
+    });
+  } catch (error) {
+    slaError = error instanceof Error ? error.message : "SLA_CREATE_FAILED";
+    log.error("remediation.sla_create_failed", { errorCode: slaError });
+  }
 
-  return { recorded: true };
+  return slaError ? { recorded: true, slaError } : { recorded: true };
 }
 
 /**
@@ -756,14 +878,59 @@ async function loadSendableDraft(caseId: string, draftId: string) {
   return { draft, remediation };
 }
 
-/** Atomically move a draft awaiting approval → approved_sent. Returns false if already claimed. */
-function claimDraftForSend(draftId: string, now: string): boolean {
-  const res = db
-    .update(messageDrafts)
-    .set({ status: DRAFT_SENT, updatedAt: now })
-    .where(and(eq(messageDrafts.id, draftId), eq(messageDrafts.status, DRAFT_AWAITING_APPROVAL)))
-    .run();
-  return res.changes === 1;
+/**
+ * Atomically move a draft awaiting approval → approved_sent.
+ * - "lost": another request already claimed this draft;
+ * - "remediation_sent": an initial (non follow-up) draft whose remediation already has an
+ *   outbound message or another claimed initial draft — only one initial request per
+ *   remediation may ever go out (create_all_variants makes several to choose from).
+ * The checks and the claim share one IMMEDIATE transaction, so two variants sent at the
+ * same moment cannot both be claimed.
+ */
+function claimDraftForSend(
+  draft: { id: string; remediationCaseId: string; isFollowUp: boolean },
+  now: string,
+): "claimed" | "lost" | "remediation_sent" {
+  return db.transaction(
+    (tx) => {
+      if (!draft.isFollowUp && remediationAlreadySent(tx, draft.remediationCaseId, draft.id)) {
+        return "remediation_sent";
+      }
+      const res = tx
+        .update(messageDrafts)
+        .set({ status: DRAFT_SENT, updatedAt: now })
+        .where(and(eq(messageDrafts.id, draft.id), eq(messageDrafts.status, DRAFT_AWAITING_APPROVAL)))
+        .run();
+      return res.changes === 1 ? "claimed" : "lost";
+    },
+    { behavior: "immediate" },
+  );
+}
+
+type DbOrTx = Pick<typeof db, "select">;
+
+/** True when the remediation already has an outbound message or another claimed initial draft. */
+function remediationAlreadySent(conn: DbOrTx, remediationCaseId: string, exceptDraftId: string) {
+  const outbound = conn
+    .select({ id: outboundMessages.id })
+    .from(outboundMessages)
+    .innerJoin(messageDrafts, eq(outboundMessages.draftId, messageDrafts.id))
+    .where(eq(messageDrafts.remediationCaseId, remediationCaseId))
+    .get();
+  if (outbound) return true;
+  const claimed = conn
+    .select({ id: messageDrafts.id })
+    .from(messageDrafts)
+    .where(
+      and(
+        eq(messageDrafts.remediationCaseId, remediationCaseId),
+        eq(messageDrafts.status, DRAFT_SENT),
+        eq(messageDrafts.isFollowUp, false),
+        ne(messageDrafts.id, exceptDraftId),
+      ),
+    )
+    .get();
+  return Boolean(claimed);
 }
 
 export async function approveAndRecordSent(
@@ -782,19 +949,24 @@ export async function approveAndRecordSent(
 
   if (draft.status === DRAFT_SENT) {
     // Idempotent re-record: make sure the outbound row exists, never duplicate it.
-    const { recorded } = await recordOutbound(session, caseId, draft, sentVia, notes ?? null, now);
-    return { ok: true, alreadyRecorded: !recorded };
+    const { recorded, slaError } = await recordOutbound(
+      session, caseId, draft, sentVia, notes ?? null, now,
+    );
+    return { ok: true, alreadyRecorded: !recorded, ...(slaError ? { slaError } : {}) };
   }
+  if (draft.status === DRAFT_SUPERSEDED) throw new Error("REMEDIATION_ALREADY_SENT");
   if (draft.status !== DRAFT_AWAITING_APPROVAL) throw new Error("DRAFT_NOT_APPROVABLE");
   if (remediation.doNotContact) throw new Error("DO_NOT_CONTACT");
 
-  if (!claimDraftForSend(draftId, now)) {
+  const claim = claimDraftForSend(draft, now);
+  if (claim === "remediation_sent") throw new Error("REMEDIATION_ALREADY_SENT");
+  if (claim === "lost") {
     // Lost a race with a concurrent approve/send — the winner records the outbound row.
     return { ok: true, alreadyRecorded: true };
   }
 
-  await recordOutbound(session, caseId, draft, sentVia, notes ?? null, now);
-  return { ok: true, alreadyRecorded: false };
+  const { slaError } = await recordOutbound(session, caseId, draft, sentVia, notes ?? null, now);
+  return { ok: true, alreadyRecorded: false, ...(slaError ? { slaError } : {}) };
 }
 
 export async function pushDraftToGmail(
@@ -811,6 +983,9 @@ export async function pushDraftToGmail(
     where: and(eq(messageDrafts.id, draftId), eq(messageDrafts.caseId, caseId)),
   });
   if (!draft) throw new Error("DRAFT_NOT_FOUND");
+  // A superseded variant must not reach a mailbox where it could still be sent.
+  if (draft.status === DRAFT_SUPERSEDED) throw new Error("REMEDIATION_ALREADY_SENT");
+  assertHasRecipient(draft);
 
   const result = await createGmailDraft(session.organizationId, {
     subject: draft.subject,
@@ -834,15 +1009,13 @@ export async function pushDraftToGmail(
  * Send a draft through the org's email connector. Requires the draft to be awaiting
  * approval and the remediation not flagged doNotContact. The draft is claimed
  * atomically before sending (so a double click cannot send twice) and the outbound
- * message is ALWAYS recorded after a successful send.
- *
- * @param _recordAfterSend deprecated — recording is now unconditional.
+ * message is ALWAYS recorded after a successful send. An initial (non follow-up) draft
+ * whose remediation already sent a request is refused with REMEDIATION_ALREADY_SENT.
  */
 export async function sendDraftViaConnector(
   session: SessionPayload,
   caseId: string,
   draftId: string,
-  _recordAfterSend?: boolean,
 ) {
   const privacyCase = await getCaseForUser(caseId, session);
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
@@ -850,11 +1023,15 @@ export async function sendDraftViaConnector(
 
   const { draft, remediation } = await loadSendableDraft(caseId, draftId);
   if (draft.status === DRAFT_SENT) throw new Error("DRAFT_ALREADY_SENT");
+  if (draft.status === DRAFT_SUPERSEDED) throw new Error("REMEDIATION_ALREADY_SENT");
   if (draft.status !== DRAFT_AWAITING_APPROVAL) throw new Error("DRAFT_NOT_APPROVABLE");
   if (remediation.doNotContact) throw new Error("DO_NOT_CONTACT");
+  assertHasRecipient(draft);
 
   const now = new Date().toISOString();
-  if (!claimDraftForSend(draftId, now)) throw new Error("DRAFT_ALREADY_SENT");
+  const claim = claimDraftForSend(draft, now);
+  if (claim === "remediation_sent") throw new Error("REMEDIATION_ALREADY_SENT");
+  if (claim === "lost") throw new Error("DRAFT_ALREADY_SENT");
 
   let sent: Awaited<ReturnType<typeof sendRemovalEmail>>;
   try {
@@ -883,7 +1060,7 @@ export async function sendDraftViaConnector(
     detail: { draftId, provider: sent.provider, messageId: sent.messageId },
   });
 
-  await recordOutbound(
+  const { slaError } = await recordOutbound(
     session,
     caseId,
     draft,
@@ -892,7 +1069,7 @@ export async function sendDraftViaConnector(
     new Date().toISOString(),
   );
 
-  return sent;
+  return slaError ? { ...sent, slaError } : sent;
 }
 
 export function listAllTemplateCatalog() {

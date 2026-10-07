@@ -28,6 +28,22 @@ export const WORKFLOW_ERRORS: Record<string, [string, number]> = {
   ],
   FOLLOW_UP_BLOCKED: ["A follow-up isn't allowed for this request yet", 409],
   CONFLICT: ["This case changed while you were working on it. Refresh and try again.", 409],
+  CANDIDATE_IN_USE: [
+    "Work has already started on this listing, so its review can't be undone",
+    409,
+  ],
+  REMEDIATION_ALREADY_SENT: [
+    "A request for this listing was already sent. Use a follow-up instead.",
+    409,
+  ],
+  DRAFT_NOT_EDITABLE: ["Only a draft that is still awaiting approval can be edited", 409],
+  DRAFT_NO_RECIPIENT: [
+    "No verified contact yet — edit the request and enter the site's privacy contact first",
+    409,
+  ],
+  INVALID_RECIPIENT: ["Enter an email address or a link to the site's removal form", 400],
+  STATUTORY_NOT_APPLICABLE: ["California DROP only applies to California residents", 409],
+  BROKER_DOMAIN_MISMATCH: ["That page isn't on this broker's website", 400],
 };
 
 export type WorkflowErrorCode = keyof typeof WORKFLOW_ERRORS;

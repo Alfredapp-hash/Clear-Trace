@@ -25,4 +25,24 @@ describe("ruthless mode", () => {
     expect(RUTHLESS_POLICY.maxFollowUps).toBeGreaterThan(2);
     expect(RUTHLESS_POLICY.monitoringSchedule).toBe("daily");
   });
+
+  it("never puts disambiguator values in ruthless queries", () => {
+    const queries = buildRuthlessDiscoveryQueries([
+      { claimType: "full_name", value: "Jane Doe" },
+      { claimType: "city_state", value: "Austin TX" },
+      { claimType: "birth_year", value: "1991" },
+      { claimType: "relative_name", value: "Robertina Zyxwvut" },
+      { claimType: "date_of_birth", value: "1991-04-02" },
+    ]);
+    for (const q of queries) {
+      expect(q).not.toContain("1991");
+      expect(q).not.toContain("Zyxwvut");
+    }
+  });
+
+  it("reserves part of the shared query budget for grouped broker queries", () => {
+    expect(RUTHLESS_POLICY.standardBrokerGroupQueryLimit).toBeLessThan(RUTHLESS_POLICY.standardSerpQueryLimit);
+    expect(RUTHLESS_POLICY.brokerGroupQueryLimit).toBeLessThan(RUTHLESS_POLICY.serpQueryLimit);
+  });
 });
+

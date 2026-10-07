@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { test, expect } from "@playwright/test";
+import { test, expect } from "./fixtures";
 
 test("settings loads its data on the server: no /api requests after hydration", async ({ page }) => {
   const suffix = randomUUID().slice(0, 8);

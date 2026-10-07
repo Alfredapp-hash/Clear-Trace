@@ -66,6 +66,15 @@ describe("ensureDatabase", () => {
     expect(missing).toEqual([]);
   });
 
+  it("opens the app database with WAL, FKs, busy_timeout, synchronous=FULL and secure_delete", () => {
+    expect(sqlite.pragma("journal_mode", { simple: true })).toBe("wal");
+    expect(sqlite.pragma("foreign_keys", { simple: true })).toBe(1);
+    expect(sqlite.pragma("busy_timeout", { simple: true })).toBe(5000);
+    // Owner decision (legal-evidence durability): FULL = 2. Never lower it.
+    expect(sqlite.pragma("synchronous", { simple: true })).toBe(2);
+    expect(sqlite.pragma("secure_delete", { simple: true })).toBe(1);
+  });
+
   it("only swallows duplicate-column migration errors", () => {
     expect(isIgnorableMigrationError(new Error("duplicate column name: role"))).toBe(true);
     expect(isIgnorableMigrationError(new Error("no such table: foo"))).toBe(false);
@@ -109,6 +118,8 @@ describe("verified_exposures dedupe migration", () => {
   function seedLegacyFixture(conn: Database.Database) {
     initializeSchema(conn);
     conn.exec(`DROP INDEX ${VERIFIED_EXPOSURE_URL_INDEX}`);
+    // A pre-1.4 database has no user_version: the next initializeSchema re-runs v1 (dedupe).
+    conn.pragma("user_version = 0");
     conn.exec(`
       INSERT INTO users (id, email, name, password_hash) VALUES ('u1', 'u1@test.local', 'U', 'x');
       INSERT INTO organizations (id, name, slug) VALUES ('o1', 'O', 'o1');
@@ -219,6 +230,8 @@ describe("verified_exposures dedupe migration", () => {
   function seedPair(conn: Database.Database, caseStatus: string, statusA: string, statusB: string, extra = "") {
     initializeSchema(conn);
     conn.exec(`DROP INDEX ${VERIFIED_EXPOSURE_URL_INDEX}`);
+    // A pre-1.4 database has no user_version: the next initializeSchema re-runs v1 (dedupe).
+    conn.pragma("user_version = 0");
     conn.exec(`
       INSERT INTO users (id, email, name, password_hash) VALUES ('u1', 'u1@test.local', 'U', 'x');
       INSERT INTO organizations (id, name, slug) VALUES ('o1', 'O', 'o1');

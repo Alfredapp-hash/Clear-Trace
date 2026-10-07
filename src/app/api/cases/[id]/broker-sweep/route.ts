@@ -1,7 +1,6 @@
-import { authRateKey, authUserId } from "@/lib/auth/resolve-auth";
+import { authRateKey } from "@/lib/auth/resolve-auth";
 import { requireCaseAccess } from "@/lib/auth/case-access";
 import { requireBillingFeature } from "@/lib/billing/service";
-import { logAuditEvent } from "@/lib/audit/logger";
 import { ensureDatabase } from "@/lib/db/init";
 import { getLatestBrokerSweep, runBrokerSweep } from "@/lib/enterprise/broker-sweep";
 import { jsonError, jsonOk } from "@/lib/api";
@@ -53,20 +52,8 @@ export async function POST(
 
   try {
     await requireBillingFeature(session.organizationId, "broker_sweep");
+    // runBrokerSweep audits "Checked X / in scope N, found Y" itself (also on scheduled runs).
     const result = await runBrokerSweep(session, id);
-
-    await logAuditEvent({
-      caseId: id,
-      organizationId: session.organizationId,
-      userId: authUserId(auth),
-      eventType: "broker_sweep_completed",
-      summary: `Broker sweep found ${result.matchCount} potential broker matches`,
-      detail: {
-        sweepRunId: result.sweepRunId,
-        matchCount: result.matchCount,
-        brokerCount: result.brokerCount,
-      },
-    });
 
     return jsonOk(result, 201);
   } catch (error) {

@@ -4,6 +4,9 @@ import {
   brandCopy,
   caseTypeLabel,
   buildCaseProgress,
+  deadlineTypeLabel,
+  RELISTED_LABEL,
+  resubmissionLabel,
   emptyProgress,
   formatDate,
   getActivePhase,
@@ -405,5 +408,36 @@ describe("finishing setup resumes the same case", () => {
     expect(step.label).toBe("Authorization needed");
     expect(step.action).toEqual({ kind: "link", href: "/cases/new?caseId=abc-123" });
     expect(step.actionLabel).toBeTruthy();
+  });
+});
+
+describe("Sprint 4 labels", () => {
+  it("labels superseded drafts and checklist outcomes without raw ids", () => {
+    expect(itemStatusLabel("superseded")).toBe("Superseded");
+    expect(itemStatusLabel("not_found")).toBe("Not listed");
+    expect(itemStatusLabel("blocked")).toBe("Needs a manual check");
+    expect(itemStatusLabel("to_check")).toBe("To check");
+  });
+
+  it("labels relisted and re-submitted opt-outs", () => {
+    expect(RELISTED_LABEL).toBe("Relisted");
+    expect(resubmissionLabel(1)).toBe("Re-submission");
+    expect(resubmissionLabel(3)).toBe("Re-submission 3");
+  });
+
+  it("has a plain label for every SLA and statutory deadline type", () => {
+    for (const type of [
+      "initial_response",
+      "removal_verification",
+      "follow_up",
+      "broker_opt_out",
+      "statutory_first_pull",
+      "statutory_deletion_due",
+    ]) {
+      const label = deadlineTypeLabel(type);
+      expect(label, type).not.toContain("_");
+      expect(label, type).not.toBe(type);
+    }
+    expect(deadlineTypeLabel("statutory_deletion_due")).toMatch(/DROP/);
   });
 });

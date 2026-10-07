@@ -8,12 +8,21 @@ describe("workflowErrorResponse", () => {
     ["FOLLOW_UP_BLOCKED", 409],
     ["INVALID_TRANSITION", 409],
     ["DO_NOT_CONTACT", 403],
+    ["REMEDIATION_ALREADY_SENT", 409],
+    ["DRAFT_NOT_EDITABLE", 409],
+    ["STATUTORY_NOT_APPLICABLE", 409],
+    ["BROKER_DOMAIN_MISMATCH", 400],
   ])("maps %s to %i with a code", async (code, status) => {
     const res = workflowErrorResponse(code);
     expect(res?.status).toBe(status);
     const body = (await res!.json()) as { error: string; code: string };
     expect(body.code).toBe(code);
     expect(body.error.length).toBeGreaterThan(5);
+  });
+
+  it("BROKER_DOMAIN_MISMATCH uses the agreed message", async () => {
+    const body = (await workflowErrorResponse("BROKER_DOMAIN_MISMATCH")!.json()) as { error: string };
+    expect(body.error).toBe("That page isn't on this broker's website");
   });
 
   it("CASE_BLOCKED uses the agreed message", async () => {

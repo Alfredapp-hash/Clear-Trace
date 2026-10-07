@@ -1,6 +1,14 @@
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, notInArray } from "drizzle-orm";
 import { db, sqlite } from "@/lib/db";
-import { memberships, users } from "@/lib/db/schema";
+import {
+  memberships,
+  optOutDispatches,
+  privacyCases,
+  protectionSchedules,
+  users,
+} from "@/lib/db/schema";
+import { PROTECTION_EXCLUDED_CASE_STATUSES } from "@/lib/protection/schedules";
+import { parseDbTime } from "@/lib/protection/time";
 import { parseAgentDefaults } from "@/lib/connectors/service";
 import { sendNotificationEmail, isDigestEmailSendEnabled } from "@/lib/connectors/email-send";
 import { buildProgressReportForOrg } from "./progress-report";
@@ -52,6 +60,68 @@ function claimDigestSlot(organizationId: string, now: Date): { previous: string 
   return claim.immediate();
 }
 
+/** Absolute link to a case when NEXT_PUBLIC_APP_URL is set, else an app-relative path. */
+export function caseLink(caseId: string): string {
+  const base = process.env.NEXT_PUBLIC_APP_URL?.trim().replace(/\/+$/, "") ?? "";
+  return `${base}/cases/${caseId}`;
+}
+
+const OPEN_DISPATCH = new Set(["pending_approval", "approved", "submitted"]);
+
+/**
+ * Ongoing-protection section of the digest: relists found since the last digest,
+ * re-submissions waiting for the user, and the next automatic scan. Broker names and case
+ * links only — no claim values, no listing URLs, no case titles. Null when there is nothing
+ * to report (no schedules and no relist / re-submission items).
+ */
+export async function buildProtectionDigestSection(
+  organizationId: string,
+  since: string | null,
+  now: Date = new Date(),
+): Promise<string | null> {
+  const dispatches = await db.query.optOutDispatches.findMany({
+    where: eq(optOutDispatches.organizationId, organizationId),
+  });
+  const sinceMs = since ? parseDbTime(since) : now.getTime() - DIGEST_MIN_INTERVAL_MS;
+  const relists = dispatches.filter(
+    (d) => d.relistedFromId && parseDbTime(d.createdAt) > sinceMs,
+  );
+  const resubmissions = dispatches.filter(
+    (d) => OPEN_DISPATCH.has(d.status) && (d.resubmitCount > 0 || !!d.relistedFromId),
+  );
+
+  const schedules = db
+    .select({ caseId: protectionSchedules.caseId, nextRunAt: protectionSchedules.nextRunAt })
+    .from(protectionSchedules)
+    .innerJoin(privacyCases, eq(privacyCases.id, protectionSchedules.caseId))
+    .where(
+      and(
+        eq(protectionSchedules.organizationId, organizationId),
+        eq(protectionSchedules.kind, "broker_sweep"),
+        eq(protectionSchedules.enabled, true),
+        notInArray(privacyCases.status, [...PROTECTION_EXCLUDED_CASE_STATUSES]),
+      ),
+    )
+    .all()
+    .sort((a, b) => parseDbTime(a.nextRunAt) - parseDbTime(b.nextRunAt));
+
+  if (!relists.length && !resubmissions.length && !schedules.length) return null;
+
+  const caseRef = (caseId: string) => `[case ${caseId.slice(0, 8)}…](${caseLink(caseId)})`;
+  const lines = [``, `## Ongoing protection`, ``];
+  lines.push(`- **Relists found this week:** ${relists.length}`);
+  for (const d of relists) lines.push(`  - ${d.brokerName} — ${caseRef(d.caseId)}`);
+  lines.push(`- **Re-submissions due:** ${resubmissions.length}`);
+  for (const d of resubmissions) lines.push(`  - ${d.brokerName} — ${caseRef(d.caseId)}`);
+  const next = schedules[0];
+  lines.push(
+    next
+      ? `- **Next broker scan:** ${next.nextRunAt.slice(0, 10)} — ${caseRef(next.caseId)}`
+      : `- **Next broker scan:** none scheduled`,
+  );
+  return lines.join("\n");
+}
+
 function releaseDigestSlot(organizationId: string, previous: string | null) {
   sqlite
     .prepare("UPDATE organizations SET last_digest_sent_at = ? WHERE id = ?")
@@ -100,10 +170,11 @@ export async function runWeeklyDigests(now: Date = new Date()): Promise<DigestRu
 
     try {
       const report = await buildProgressReportForOrg(org.id, org.name);
+      const protection = await buildProtectionDigestSection(org.id, claim.previous, now);
       await sendNotificationEmail(org.id, {
         to,
         subject: `ClearTrace weekly progress — ${org.name}`,
-        body: report.markdown,
+        body: protection ? `${report.markdown}\n${protection}` : report.markdown,
       });
       emailsSent++;
     } catch (e) {

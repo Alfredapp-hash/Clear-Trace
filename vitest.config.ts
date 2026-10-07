@@ -21,13 +21,14 @@ export default defineConfig({
       // No html reporter: its generated .js would be picked up by `npm run lint`.
       reporter: ["text-summary", "json-summary"],
       reportsDirectory: "./coverage",
-      // Thresholds sit at the baseline measured during Sprint 3 (v1.3.0), rounded down
-      // with ~2 points of slack (measured with all lanes in: src/lib 72.2/64.4/70.3/74.8,
-      // src/app/api 50.8/35.6/70.3/52.9 for statements/branches/functions/lines).
+      // Thresholds sit at the baseline measured during Sprint 4 (v1.4.0), rounded down with
+      // ~3 points of slack (measured 2026-10-05 with every lane's work in the tree:
+      // src/lib 80.8/71.9/80.4/83.3, src/app/api 56.4/42.2/73.3/59.1 for
+      // statements/branches/functions/lines; Sprint 3 gates were 70/62/68/72 and 48/33/68/50).
       // Raise them as coverage improves; never lower them to get a PR through.
       thresholds: {
-        "src/lib/**": { statements: 70, branches: 62, functions: 68, lines: 72 },
-        "src/app/api/**": { statements: 48, branches: 33, functions: 68, lines: 50 },
+        "src/lib/**": { statements: 77, branches: 68, functions: 77, lines: 80 },
+        "src/app/api/**": { statements: 53, branches: 39, functions: 70, lines: 56 },
       },
     },
   },

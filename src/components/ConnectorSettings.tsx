@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Badge, Button, Card, Input, Label, SectionTitle } from "./ui";
+import { Badge, Button, Card, ConfirmDialog, Input, Label, SectionTitle } from "./ui";
 import { CopyBlock } from "./CopyBlock";
 import { itemStatusLabel } from "@/lib/ux/plain-status";
 import type {
@@ -116,6 +116,9 @@ export function ConnectorSettings({ initialData }: { initialData: ConnectorSetti
   const [ollamaModels, setOllamaModels] = useState<string[]>([]);
   const [loading, setLoading] = useState("");
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [pendingRemove, setPendingRemove] = useState<{ type: ConnectorType; name: string } | null>(
+    null,
+  );
 
   const noticeFor = (scope: NoticeScope) =>
     notice && notice.scope === scope ? <NoticeLine notice={notice} /> : null;
@@ -197,15 +200,15 @@ export function ConnectorSettings({ initialData }: { initialData: ConnectorSetti
     }
   }
 
-  async function removeConnector(type: ConnectorType, name: string) {
-    // Native confirm for now; a custom dialog arrives with the shared dialog component.
-    if (
-      !window.confirm(
-        `Remove ${name}? Its saved credentials are deleted and agents stop using it.`,
-      )
-    ) {
-      return;
-    }
+  /** Asks first (ConfirmDialog); the removal runs from confirmRemove. */
+  function removeConnector(type: ConnectorType, name: string) {
+    setPendingRemove({ type, name });
+  }
+
+  async function confirmRemove() {
+    if (!pendingRemove) return;
+    const { type, name } = pendingRemove;
+    setPendingRemove(null);
     setLoading(`remove-${type}`);
     setNotice(null);
     try {
@@ -696,6 +699,16 @@ export function ConnectorSettings({ initialData }: { initialData: ConnectorSetti
           </Button>
         </div>
       </Card>
+
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        id="remove-connector-dialog"
+        title={pendingRemove ? `Remove ${pendingRemove.name}?` : "Remove connector?"}
+        message="Its saved credentials are deleted and agents stop using it."
+        confirmLabel="Remove"
+        onConfirm={() => void confirmRemove()}
+        onCancel={() => setPendingRemove(null)}
+      />
     </div>
   );
 }

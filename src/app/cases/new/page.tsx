@@ -7,9 +7,12 @@ import { Button, Card, Input, Label } from "@/components/ui";
 import { callApi } from "@/lib/ui/call-api";
 import {
   AUTHORITY_BASES,
+  BIRTH_YEAR_PATTERN,
   CASE_TYPES,
   CLAIM_TYPES,
+  CLAIM_TYPE_HELP,
   SCAN_SCOPES,
+  defaultScanEnabled,
 } from "@/lib/constants";
 import { RUTHLESS_ATTESTATION } from "@/lib/ruthless/config";
 
@@ -39,9 +42,11 @@ export default function NewCasePage({
   const [userAttestation, setUserAttestation] = useState(false);
   const [ruthlessMode, setRuthlessMode] = useState(false);
   const [ruthlessAttestation, setRuthlessAttestation] = useState(false);
-  const [claims, setClaims] = useState([
-    { claimType: "full_name", value: "", scanEnabled: true },
-  ]);
+  const [claims, setClaims] = useState([{ claimType: "full_name", value: "" }]);
+  // Disambiguators: help tell the subject apart from same-name people.
+  const [previousCityState, setPreviousCityState] = useState("");
+  const [birthYear, setBirthYear] = useState("");
+  const [relativeName, setRelativeName] = useState("");
   const [familyMembers, setFamilyMembers] = useState<
     { id: string; displayName: string; relationship: string }[]
   >([]);
@@ -102,7 +107,22 @@ export default function NewCasePage({
   }
 
   async function submitClaims(id: string) {
-    const validClaims = claims.filter((c) => c.value.trim());
+    const extra = [
+      { claimType: "previous_city_state", value: previousCityState },
+      { claimType: "birth_year", value: birthYear.trim() },
+      { claimType: "relative_name", value: relativeName },
+    ];
+    const validClaims = [...claims, ...extra]
+      .filter((c) => c.value.trim())
+      // birth_year / relative_name are stored with scanning off: never searched.
+      .map((c) => ({ ...c, scanEnabled: defaultScanEnabled(c.claimType) }));
+    const badYear = validClaims.find(
+      (c) => c.claimType === "birth_year" && !BIRTH_YEAR_PATTERN.test(c.value.trim()),
+    );
+    if (badYear) {
+      setError("Birth year must be a four-digit year only (for example 1991), not a full date.");
+      return false;
+    }
     if (!validClaims.length) return true;
     const res = await callApi(`/api/cases/${id}/identity-claims`, {
       method: "POST",
@@ -370,22 +390,81 @@ export default function NewCasePage({
                         setClaims(next);
                       }}
                       placeholder="Encrypted on save"
+                      aria-describedby={
+                        CLAIM_TYPE_HELP[claim.claimType] ? `claim-help-${index}` : undefined
+                      }
                     />
                   </div>
+                  {CLAIM_TYPE_HELP[claim.claimType] && (
+                    <p id={`claim-help-${index}`} className="text-xs text-slate-500 sm:col-span-2">
+                      {CLAIM_TYPE_HELP[claim.claimType]}
+                    </p>
+                  )}
                 </div>
               ))}
               <Button
                 type="button"
                 variant="secondary"
                 onClick={() =>
-                  setClaims([
-                    ...claims,
-                    { claimType: "email", value: "", scanEnabled: true },
-                  ])
+                  setClaims([...claims, { claimType: "email", value: "" }])
                 }
               >
                 Add another claim
               </Button>
+              <fieldset className="space-y-3 rounded-xl border border-white/[0.08] bg-white/[0.02] p-4">
+                <legend className="px-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
+                  Tell you apart (optional)
+                </legend>
+                <p className="text-sm text-slate-400">
+                  Many people share a name. These details help ClearTrace tell your listings
+                  from someone else&apos;s. Birth year and relative&apos;s name are used only
+                  to tell people apart — they are never searched or sent to a search provider.
+                </p>
+                <div>
+                  <Label htmlFor="previous-city-state">Previous city / state</Label>
+                  <Input
+                    id="previous-city-state"
+                    value={previousCityState}
+                    onChange={(e) => setPreviousCityState(e.target.value)}
+                    placeholder="e.g. Austin, TX"
+                    aria-describedby="previous-city-state-help"
+                  />
+                  <p id="previous-city-state-help" className="mt-1 text-xs text-slate-500">
+                    {CLAIM_TYPE_HELP.previous_city_state}
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="birth-year">Birth year</Label>
+                  <Input
+                    id="birth-year"
+                    value={birthYear}
+                    onChange={(e) => setBirthYear(e.target.value)}
+                    placeholder="e.g. 1991"
+                    inputMode="numeric"
+                    maxLength={4}
+                    pattern="(19|20)[0-9]{2}"
+                    autoComplete="off"
+                    aria-describedby="birth-year-help"
+                  />
+                  <p id="birth-year-help" className="mt-1 text-xs text-slate-500">
+                    {CLAIM_TYPE_HELP.birth_year} Never enter your full date of birth.
+                  </p>
+                </div>
+                <div>
+                  <Label htmlFor="relative-name">Relative&apos;s name</Label>
+                  <Input
+                    id="relative-name"
+                    value={relativeName}
+                    onChange={(e) => setRelativeName(e.target.value)}
+                    placeholder="e.g. a parent or sibling"
+                    autoComplete="off"
+                    aria-describedby="relative-name-help"
+                  />
+                  <p id="relative-name-help" className="mt-1 text-xs text-slate-500">
+                    {CLAIM_TYPE_HELP.relative_name}
+                  </p>
+                </div>
+              </fieldset>
             </div>
           )}
 

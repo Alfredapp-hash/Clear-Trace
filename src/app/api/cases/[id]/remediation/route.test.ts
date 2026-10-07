@@ -165,4 +165,26 @@ describe("/api/cases/[id]/remediation — status integrity", () => {
       stopConditions: [],
     });
   });
+
+  it("update_draft on an approved_sent draft → 409 DRAFT_NOT_EDITABLE", async () => {
+    const { caseId, draftId } = await caseWithDraft("draft_ready");
+    const sent = await post(caseId, { action: "record_sent", draftId, sentVia: "manual_copy" });
+    expect(sent.status).toBe(200);
+    const res = await post(caseId, { action: "update_draft", draftId, subject: "S", body: "B" });
+    expect(res.status).toBe(409);
+    expect(await readJson(res)).toMatchObject({ code: "DRAFT_NOT_EDITABLE" });
+  });
+
+  it("record_sent on a sibling of a sent variant → 409 REMEDIATION_ALREADY_SENT", async () => {
+    const { caseId, draftId, remediationId } = await caseWithDraft("draft_ready");
+    const sibling = await createRemovalDraft(fixture.session, caseId, remediationId);
+    expect((await post(caseId, { action: "record_sent", draftId, sentVia: "manual_copy" })).status).toBe(200);
+    const res = await post(caseId, {
+      action: "record_sent",
+      draftId: sibling.draftId,
+      sentVia: "manual_copy",
+    });
+    expect(res.status).toBe(409);
+    expect(await readJson(res)).toMatchObject({ code: "REMEDIATION_ALREADY_SENT" });
+  });
 });

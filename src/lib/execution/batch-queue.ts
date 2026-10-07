@@ -1,4 +1,4 @@
-import { and, eq } from "drizzle-orm";
+import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import {
@@ -11,6 +11,7 @@ import { logAuditEvent } from "@/lib/audit/logger";
 import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
 import {
+  DRAFT_STATUS,
   resolveControllerForExposure,
   createRemovalDraft,
 } from "@/lib/remediation/service";
@@ -109,18 +110,38 @@ export async function processBatch(
         });
         const rem = remediations.find((r) => r.exposureId === item.exposureId);
         if (!rem) throw new Error("NO_REMEDIATION");
-        resultJson = await createRemovalDraft(session, caseId, rem.id);
+        // Re-running a batch never stacks drafts: a remediation that already has a live
+        // (non-superseded) draft is skipped.
+        const existing = await db.query.messageDrafts.findFirst({
+          where: and(
+            eq(messageDrafts.remediationCaseId, rem.id),
+            ne(messageDrafts.status, DRAFT_STATUS.superseded),
+          ),
+          columns: { id: true },
+        });
+        resultJson = existing
+          ? { skipped: true, reason: "draft_exists", draftId: existing.id }
+          : await createRemovalDraft(session, caseId, rem.id);
       } else if (item.step === "gmail_draft") {
         const emailConnector = await resolveEmailConnector(session.organizationId);
         if (emailConnector !== "gmail") throw new Error("GMAIL_CONNECTOR_REQUIRED");
-        const remediations = await db.query.remediationCases.findMany({
-          where: eq(remediationCases.caseId, caseId),
+        const rem = await db.query.remediationCases.findFirst({
+          where: and(
+            eq(remediationCases.caseId, caseId),
+            eq(remediationCases.exposureId, item.exposureId),
+          ),
         });
-        const drafts = await db.query.messageDrafts.findMany({
-          where: eq(messageDrafts.caseId, caseId),
-        });
-        const rem = remediations.find((r) => r.exposureId === item.exposureId);
-        const draft = drafts.find((d) => d.remediationCaseId === rem?.id);
+        // The newest draft still awaiting approval — never a sent or superseded one.
+        const draft = rem
+          ? await db.query.messageDrafts.findFirst({
+              where: and(
+                eq(messageDrafts.caseId, caseId),
+                eq(messageDrafts.remediationCaseId, rem.id),
+                eq(messageDrafts.status, DRAFT_STATUS.awaitingApproval),
+              ),
+              orderBy: [desc(messageDrafts.createdAt), desc(sql`rowid`)],
+            })
+          : undefined;
         if (!draft) throw new Error("NO_DRAFT");
         resultJson = await createGmailDraft(session.organizationId, {
           subject: draft.subject,

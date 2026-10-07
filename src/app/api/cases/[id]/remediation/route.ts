@@ -68,7 +68,6 @@ export async function POST(
     body?: string;
     sentVia?: "manual_copy" | "mailto" | "connected_email";
     notes?: string;
-    recordAfterSend?: boolean;
   };
 
   if (action === "send_email") {
@@ -93,7 +92,8 @@ export async function POST(
       return jsonOk(await createAllDraftVariants(session, id, body.remediationCaseId), 201);
     }
     if (action === "update_draft" && body.draftId && body.subject && body.body) {
-      return jsonOk(await updateDraft(session, id, body.draftId, body.subject, body.body));
+      const recipient = typeof body.recipient === "string" ? body.recipient : undefined;
+      return jsonOk(await updateDraft(session, id, body.draftId, body.subject, body.body, recipient));
     }
     if (action === "record_sent" && body.draftId && body.sentVia) {
       return jsonOk(await approveAndRecordSent(session, id, body.draftId, body.sentVia, body.notes));
@@ -102,9 +102,9 @@ export async function POST(
       return jsonOk(await pushDraftToGmail(session, id, body.draftId));
     }
     if (action === "send_email" && body.draftId) {
-      return jsonOk(
-        await sendDraftViaConnector(session, id, body.draftId, body.recordAfterSend ?? false),
-      );
+      // Recording after a connector send is unconditional; a legacy `recordAfterSend`
+      // field in the body is ignored.
+      return jsonOk(await sendDraftViaConnector(session, id, body.draftId));
     }
     return jsonError("Invalid action or missing parameters");
   } catch (error) {
