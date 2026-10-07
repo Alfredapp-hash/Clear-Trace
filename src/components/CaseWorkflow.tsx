@@ -134,6 +134,7 @@ export function CaseWorkflow(props: CaseWorkflowProps) {
         onMarkNotListed={a.markNotListed}
         onClearCheck={a.clearCheck}
         onFoundListing={a.foundListing}
+        onAddPlace={a.addPlace}
         onCopy={a.copyText}
       />
     ),

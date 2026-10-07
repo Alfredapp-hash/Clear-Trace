@@ -43,6 +43,11 @@ describe("StatutoryPhase", () => {
     expect(html).toContain('rel="noopener noreferrer"');
     expect(html).toMatch(/never files for you/);
     expect(html).toContain("Date of birth");
+    expect(html).toContain("Vehicle identification number (VIN)");
+    expect(html).toContain("(needed to submit)");
+    expect(html).toContain("(optional)");
+    expect(html).toContain('href="https://privacy.ca.gov/drop/how-drop-works/"');
+    expect(html).not.toMatch(/guarantee(d|s)? (removal|deletion)/i);
     expect(html).toContain('type="date"');
     expect(html).not.toContain("Delete Act escalation memo");
     // No fetch while rendering.

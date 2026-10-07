@@ -35,8 +35,8 @@ jobs:
         run: npm run lint
       - name: Typecheck
         run: npx tsc --noEmit
-      - name: CPPA registry JSON matches the checked-in snapshot
-        run: npx tsx scripts/import-cppa-registry.ts --check
+      - name: Data broker registry JSON (CPPA, Oregon, Texas) matches the checked-in snapshots
+        run: npx tsx scripts/import-cppa-registry.ts --check && npx tsx scripts/import-state-registries.ts --check
       - name: Unit + integration tests with coverage gate
         run: npm run test:coverage
       - name: Coverage summary

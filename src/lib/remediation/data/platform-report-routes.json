@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "routes": [
+    {
+      "id": "facebook",
+      "name": "Facebook",
+      "domains": ["facebook.com", "fb.com", "fb.watch"],
+      "reportUrl": "https://www.facebook.com/help/contact/1478481359703190",
+      "reportLabel": "Report a Violation of your Privacy on Facebook",
+      "scope": "Meta's form covers photos or videos of you that violate your privacy. Text posts that expose personal information are reported with the Report link on the post or profile.",
+      "requiresAccount": "unknown",
+      "policyUrl": "https://www.facebook.com/help/428478523862899",
+      "verifiedOn": "2026-10-07",
+      "verifiedVia": "Loaded in a browser: the help article 'Report a photo or video on Facebook that violates my privacy' (help/327689333983073) links help/contact/516343134409068, which redirects to help/contact/1478481359703190, titled 'Report a Violation of your Privacy on Facebook'. The previously circulated form IDs 144059062408922 and 143363852478561 returned Not Found.",
+      "sources": [
+        "https://www.facebook.com/help/428478523862899",
+        "https://www.facebook.com/help/327689333983073"
+      ]
+    },
+    {
+      "id": "instagram",
+      "name": "Instagram / Threads",
+      "domains": ["instagram.com", "instagr.am", "threads.net", "threads.com"],
+      "reportUrl": "https://help.instagram.com/contact/1024543072377373",
+      "reportLabel": "Report a Violation of your Privacy on Instagram or Threads",
+      "scope": "Meta's form covers photos or videos of you on Instagram or Threads. You need the link to the content. Other exposed private information is reported from the post or profile.",
+      "requiresAccount": "unknown",
+      "policyUrl": "https://help.instagram.com/122717417885747",
+      "verifiedOn": "2026-10-07",
+      "verifiedVia": "Loaded in a browser: the help article 'Exposed Private Information' (122717417885747) links contact/512241091300432 ('report it to us'), which redirects to contact/1024543072377373, titled 'Report a Violation of your Privacy on Instagram or Threads'.",
+      "sources": [
+        "https://help.instagram.com/122717417885747"
+      ]
+    },
+    {
+      "id": "x",
+      "name": "X (Twitter)",
+      "domains": ["x.com", "twitter.com"],
+      "reportUrl": "https://help.x.com/en/forms/safety-and-sensitive-content/private-information",
+      "reportLabel": "X private information report form",
+      "scope": "X's private information policy: private information or private media shared without permission. X may need to hear from the person the information belongs to (or an authorized representative).",
+      "requiresAccount": "unknown",
+      "policyUrl": "https://help.x.com/en/rules-and-policies/personal-information",
+      "verifiedOn": "2026-10-07",
+      "verifiedVia": "Loaded in a browser: page titled 'Private Information' on help.x.com renders a report form ('The content being shared on X belongs to'). Policy page 'Private information policy | X Help Center' loaded.",
+      "sources": [
+        "https://help.x.com/en/rules-and-policies/personal-information"
+      ]
+    },
+    {
+      "id": "linkedin",
+      "name": "LinkedIn",
+      "domains": ["linkedin.com"],
+      "reportUrl": "https://www.linkedin.com/help/linkedin/ask/TSO-DPO",
+      "reportLabel": "Contact LinkedIn's Data Protection Officer",
+      "scope": "LinkedIn's form for personal-data and privacy concerns (including data subject rights). Fake or impersonating profiles are reported from the profile; see LinkedIn Help 'Report fake profiles' (answer/a1338436).",
+      "requiresAccount": false,
+      "policyUrl": "https://www.linkedin.com/legal/privacy-policy",
+      "verifiedOn": "2026-10-07",
+      "verifiedVia": "Loaded in a browser while signed out: 'Contact form | LinkedIn Help', heading 'Contacting LinkedIn's Data Protection Officer', for 'matters related to your personal LinkedIn data and privacy concerns'.",
+      "sources": [
+        "https://www.linkedin.com/help/linkedin/ask/TSO-DPO",
+        "https://www.linkedin.com/help/linkedin/answer/a1338436"
+      ]
+    },
+    {
+      "id": "tiktok",
+      "name": "TikTok",
+      "domains": ["tiktok.com"],
+      "reportUrl": "https://www.tiktok.com/legal/report/privacy",
+      "reportLabel": "TikTok privacy request / report a privacy violation",
+      "scope": "TikTok's privacy request page: ask about your data, report a privacy violation, or raise a specific privacy issue. Continue leads to the request form.",
+      "requiresAccount": "unknown",
+      "policyUrl": "https://www.tiktok.com/legal/privacy-policy",
+      "verifiedOn": "2026-10-07",
+      "verifiedVia": "Fetched (HTTP 200): page heading 'Request privacy information', offering 'report a privacy violation'.",
+      "sources": [
+        "https://www.tiktok.com/legal/report/privacy"
+      ]
+    },
+    {
+      "id": "youtube",
+      "name": "YouTube",
+      "domains": ["youtube.com", "youtu.be"],
+      "reportUrl": "https://support.google.com/youtube/contact/privacy_complaint",
+      "reportLabel": "YouTube privacy complaint (Report a privacy issue)",
+      "scope": "YouTube's privacy complaint process: you must be uniquely identifiable in the content. Only URLs and timestamps are shared with the uploader.",
+      "requiresAccount": "unknown",
+      "policyUrl": "https://support.google.com/youtube/answer/142443",
+      "verifiedOn": "2026-10-07",
+      "verifiedVia": "Fetched (HTTP 200): page titled 'Report a privacy issue - YouTube Help'; linked from the 'Privacy Complaint Process' help article.",
+      "sources": [
+        "https://support.google.com/youtube/answer/142443"
+      ]
+    },
+    {
+      "id": "reddit",
+      "name": "Reddit",
+      "domains": ["reddit.com", "redd.it"],
+      "reportUrl": "https://www.reddit.com/report",
+      "reportLabel": "Reddit Rules violation report form",
+      "scope": "Reddit's report form for Reddit Rules violations, including posting someone's private or personal information. Reddit says this form is for people with a Reddit account; without one, use the Reddit Help 'Submit a request' page.",
+      "requiresAccount": true,
+      "policyUrl": "https://redditinc.com/policies/reddit-rules",
+      "verifiedOn": "2026-10-07",
+      "verifiedVia": "Fetched (HTTP 200); linked as 'this report form' from Reddit Help 'Submit a request' (support.reddithelp.com/hc/en-us/requests/new), which was loaded in a browser.",
+      "sources": [
+        "https://support.reddithelp.com/hc/en-us/requests/new"
+      ]
+    },
+    {
+      "id": "pinterest",
+      "name": "Pinterest",
+      "domains": ["pinterest.com", "pin.it"],
+      "reportUrl": "https://help.pinterest.com/contact",
+      "reportLabel": "Pinterest Help contact form (Report policy violation → Report exposed personal information)",
+      "scope": "Pinterest's Non-User Notice points people to this form (report policy violation; report exposed personal information) to ask for removal of a personal image or exposed information.",
+      "requiresAccount": false,
+      "policyUrl": "https://policy.pinterest.com/en/non-user-notice",
+      "verifiedOn": "2026-10-07",
+      "verifiedVia": "Loaded in a browser: Pinterest 'Non-User Notice' links 'form' to help.pinterest.com/contact; that URL returns HTTP 200 ('Contact Pinterest support | Pinterest Help').",
+      "sources": [
+        "https://policy.pinterest.com/en/non-user-notice"
+      ]
+    }
+  ]
+}

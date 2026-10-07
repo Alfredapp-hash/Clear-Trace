@@ -30,7 +30,8 @@ export function isVerifiedPlaybookContact(r: ControllerResolution | null): boole
 
 function describeBroker(b: CatalogBroker): string {
   const reach = b.estimatedReach === "unknown" ? "" : ` (${b.estimatedReach} reach)`;
-  const source = b.source === "cppa_registry" ? "CPPA registry" : "Broker playbook";
+  const source =
+    b.source === "cppa_registry" ? "CPPA registry" : b.source === "state_registry" ? "State data broker registry" : "Broker playbook";
   return `${source}: ${b.name}${reach}.`;
 }
 

@@ -1,0 +1,3339 @@
+{
+  "jurisdiction": "or",
+  "registryName": "Oregon DCBS data broker registry",
+  "sourcePage": "https://dfr.oregon.gov/business/licensing/data-broker-registry/Pages/index.aspx",
+  "sourceUrl": "https://www4.cbs.state.or.us/ex/shared/downtemp/dfcs_db_optout.csv",
+  "retrievedAt": "2026-10-07",
+  "snapshotFile": "or-registry-snapshot.csv",
+  "complete": true,
+  "completenessNote": "all 390 rows of the official opt-out methods report (390 licences).",
+  "brokers": [
+    {
+      "id": "or_33across_inc",
+      "name": "33ACROSS INC",
+      "domain": "udp.33across.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://udp.33across.com/udp_opt_out",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://udp.33across.com/udp_opt_out",
+        "email": "privacy@33across.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by 33ACROSS INC (registration DATA-00261)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00261 \"33ACROSS INC\" (DBA: 33ACROSS INC), updated 12/18/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_5x5_us_llc",
+      "name": "5X5 US LLC",
+      "domain": "5x5coop.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://5x5coop.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://5x5coop.com/",
+        "email": "privacy@5x5coop.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by 5X5 US LLC (registration DATA-00279)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00279 \"5X5 US LLC\" (DBA: 5x5 US LLC), updated 12/30/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_accurate_append_inc",
+      "name": "ACCURATE APPEND INC",
+      "domain": "clients.accurateappend.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://clients.accurateappend.com/public/optout/capture",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://clients.accurateappend.com/public/optout/capture",
+        "email": "Optout@accurateappend.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by ACCURATE APPEND INC (registration DATA-00387)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00387 \"ACCURATE APPEND INC\" (DBA: ACCURATE APPEND INC), updated 07/25/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_accurate_append_inc."
+    },
+    {
+      "id": "or_acremaps_llc",
+      "name": "Acres (ACREMAPS LLC)",
+      "domain": "acres.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.acres.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.acres.com/",
+        "email": "support@acres.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by ACREMAPS LLC (registration DATA-00428)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00428 \"ACREMAPS LLC\" (DBA: Acres), updated 01/28/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_advertise4sales_inc",
+      "name": "4LegalLeads (ADVERTISE4SALES INC)",
+      "domain": "4legalleads.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://4legalleads.com/removal/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://4legalleads.com/removal/",
+        "email": "ccpa@4legalleads.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by ADVERTISE4SALES INC (registration DATA-00246)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00246 \"ADVERTISE4SALES INC\" (DBA: 4LegalLeads), updated 11/05/2024",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_anchor_computer_inc",
+      "name": "ANCHOR COMPUTER INC",
+      "domain": "ecom2.anchorcomputer.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://ecom2.anchorcomputer.com/ccpa",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://ecom2.anchorcomputer.com/ccpa",
+        "email": "privacyteam@anchorcomputer.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by ANCHOR COMPUTER INC (registration DATA-00081)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00081 \"ANCHOR COMPUTER INC\" (DBA: ANCHOR COMPUTER INC), updated 09/24/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_applovin_corporation",
+      "name": "APPLOVIN CORPORATION",
+      "domain": "max.applovin.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://max.applovin.com/p/how-applovin-shows-you-ads",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://max.applovin.com/p/how-applovin-shows-you-ads",
+        "email": "dataprotection@applovin.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by APPLOVIN CORPORATION (registration DATA-00491)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00491 \"APPLOVIN CORPORATION\" (DBA: APPLOVIN CORPORATION), updated 09/10/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_atdata_llc",
+      "name": "ATDATA LLC",
+      "domain": "instantdata.atdata.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://instantdata.atdata.com/optout",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://instantdata.atdata.com/optout",
+        "email": "privacy@atdata.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by ATDATA LLC (registration DATA-00162)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00162 \"ATDATA LLC\" (DBA: ATDATA LLC), updated 06/20/2024",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_austin_consolidated_holdings_inc",
+      "name": "AUSTIN CONSOLIDATED HOLDINGS INC",
+      "domain": "myprivacy.equifax.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://myprivacy.equifax.com/opt-in-opt-out/personal-info",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://myprivacy.equifax.com/opt-in-opt-out/personal-info",
+        "email": "usprivacy@equifax.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by AUSTIN CONSOLIDATED HOLDINGS INC (registration DATA-00115)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00115 \"AUSTIN CONSOLIDATED HOLDINGS INC\" (DBA: AUSTIN CONSOLIDATED HOLDINGS INC), updated 05/22/2024",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_awl_holdings_llc",
+      "name": "AWL HOLDINGS LLC",
+      "domain": "awl.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://awl.com/privacy/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://awl.com/privacy/",
+        "email": "dncrequest@awl.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by AWL HOLDINGS LLC (registration DATA-00369)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00369 \"AWL HOLDINGS LLC\" (DBA: AWL HOLDINGS LLC), updated 06/03/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_businessentitysearch_com_llc",
+      "name": "Business Registry (BUSINESSENTITYSEARCH.COM LLC)",
+      "domain": "businessregistry.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://businessregistry.com/opt-out",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://businessregistry.com/opt-out",
+        "email": "optout@businessregistry.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by BUSINESSENTITYSEARCH.COM LLC (registration DATA-00489)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00489 \"BUSINESSENTITYSEARCH.COM LLC\" (DBA: Business Registry), updated 09/01/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_choreograph_llc",
+      "name": "CHOREOGRAPH LLC",
+      "domain": "cpp.choreograph.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://cpp.choreograph.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://cpp.choreograph.com/",
+        "email": "privacy@choreograph.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by CHOREOGRAPH LLC (registration DATA-00041)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00041 \"CHOREOGRAPH LLC\" (DBA: CHOREOGRAPH LLC), updated 02/16/2024",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_common_room_inc",
+      "name": "COMMON ROOM INC",
+      "domain": "app.commonroom.io",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://app.commonroom.io/remove-my-info",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://app.commonroom.io/remove-my-info",
+        "email": "support@commonroom.io",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by COMMON ROOM INC (registration DATA-00492)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00492 \"COMMON ROOM INC\" (DBA: COMMON ROOM INC), updated 09/18/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_compact_information_systems_llc",
+      "name": "AccuData Integrated Marketing (Compact Information Systems LLC)",
+      "domain": "accudata.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.accudata.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.accudata.com/",
+        "email": "privacy.compliance@accudata.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by Compact Information Systems LLC (registration DATA-00021)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00021 \"Compact Information Systems LLC\" (DBA: AccuData Integrated Marketing), updated 12/02/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_accudata_integrated_marketing_llc."
+    },
+    {
+      "id": "or_connatix_native_exchange_inc",
+      "name": "CONNATIX NATIVE EXCHANGE INC",
+      "domain": "connatix.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.connatix.com/optout",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.connatix.com/optout",
+        "email": "privacy@connatix.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by CONNATIX NATIVE EXCHANGE INC (registration DATA-00425)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00425 \"CONNATIX NATIVE EXCHANGE INC\" (DBA: CONNATIX NATIVE EXCHANGE INC), updated 01/28/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_ctam_leadshare_corp",
+      "name": "CTAM LEADSHARE CORP",
+      "domain": "ctam.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.ctam.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.ctam.com/",
+        "email": "compliance@ctam.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by CTAM LEADSHARE CORP (registration DATA-00094)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00094 \"CTAM LEADSHARE CORP\" (DBA: CTAM LEADSHARE CORP), updated 11/10/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_ctam_leadshare_corp."
+    },
+    {
+      "id": "or_datarate_llc",
+      "name": "DATARATE LLC",
+      "domain": "datarate.ai",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://datarate.ai/my-privacy-choices",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://datarate.ai/my-privacy-choices",
+        "email": "privacy@datarate.ai",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by DATARATE LLC (registration DATA-00486)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00486 \"DATARATE LLC\" (DBA: DATARATE LLC), updated 08/19/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_date_detective_inc",
+      "name": "Date Detective (DATE DETECTIVE INC)",
+      "domain": "mobile.date-detective.app",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://mobile.date-detective.app/investigate-opt-out",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://mobile.date-detective.app/investigate-opt-out",
+        "email": "privacy@date-detective.app",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by DATE DETECTIVE INC (registration DATA-00337)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00337 \"DATE DETECTIVE INC\" (DBA: Date Detective), updated 02/16/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_date_detective_inc."
+    },
+    {
+      "id": "or_db_sub_llc",
+      "name": "DB SUB, LLC",
+      "domain": "partech.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://partech.com/dbsubllc/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://partech.com/dbsubllc/",
+        "email": "privacy@partech.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by DB SUB, LLC (registration DATA-00421)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00421 \"DB SUB, LLC\" (DBA: DB SUB, LLC), updated 01/21/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_electronic_voice_services_inc",
+      "name": "ELECTRONIC VOICE SERVICES INC",
+      "domain": "evs7.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.evs7.com/personal-information-request",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.evs7.com/personal-information-request",
+        "email": "sales@evs7.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by ELECTRONIC VOICE SERVICES INC (registration DATA-00192)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00192 \"ELECTRONIC VOICE SERVICES INC\" (DBA: Electronic Voice Services, Inc.), updated 01/24/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_experian_marketing_solutions_llc",
+      "name": "EXPERIAN MARKETING SOLUTIONS LLC",
+      "domain": "consumerprivacy.experian.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://consumerprivacy.experian.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://consumerprivacy.experian.com/",
+        "email": "optout@experian.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by EXPERIAN MARKETING SOLUTIONS LLC (registration DATA-00016)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00016 \"EXPERIAN MARKETING SOLUTIONS LLC\" (DBA: EXPERIAN MARKETING SOLUTIONS LLC), updated 12/02/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_facteus_inc",
+      "name": "FACTEUS, INC.",
+      "domain": "facteus.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.facteus.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.facteus.com/",
+        "email": "info@facteus.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by FACTEUS, INC. (registration DATA-00457)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00457 \"FACTEUS, INC.\" (DBA: FACTEUS, INC.), updated 06/15/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_fideo_intelligence_inc",
+      "name": "FIDEO INTELLIGENCE INC",
+      "domain": "app.fideo.ai",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://app.fideo.ai/your-privacy-choices",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://app.fideo.ai/your-privacy-choices",
+        "email": "privacy@fideo.ai",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by FIDEO INTELLIGENCE INC (registration DATA-00110)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00110 \"FIDEO INTELLIGENCE INC\" (DBA: FIDEO INTELLIGENCE INC), updated 11/05/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_first_direct_inc",
+      "name": "FIRST DIRECT (FIRST DIRECT INC)",
+      "domain": "compliance.firstdirectmarketing.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://compliance.firstdirectmarketing.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://compliance.firstdirectmarketing.com/",
+        "email": "privacy@firstdirectmarketing.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by FIRST DIRECT INC (registration DATA-00309)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00309 \"FIRST DIRECT INC\" (DBA: FIRST DIRECT), updated 02/03/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_getemails_llc",
+      "name": "GETEMAILS LLC",
+      "domain": "app.retention.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://app.retention.com/optout/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://app.retention.com/optout/",
+        "email": "support@retention.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by GETEMAILS LLC (registration DATA-00238)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00238 \"GETEMAILS LLC\" (DBA: Retention.com, RB2B), updated 12/26/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_hireteammate_inc",
+      "name": "HIRETEAMMATE INC",
+      "domain": "app.hireez.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://app.hireez.com/ownyourdata",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://app.hireez.com/ownyourdata",
+        "email": "privacy@hireez.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by HIRETEAMMATE INC (registration DATA-00153)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00153 \"HIRETEAMMATE INC\" (DBA: HIRETEAMMATE INC), updated 12/03/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_hireteammate_inc."
+    },
+    {
+      "id": "or_innovative_data_services_inc",
+      "name": "Specialists Marketing Solutions (INNOVATIVE DATA SERVICES INC)",
+      "domain": "specialistsdata.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.specialistsdata.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.specialistsdata.com/",
+        "email": "privacy@specialistsdata.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by INNOVATIVE DATA SERVICES INC (registration DATA-00480)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00480 \"INNOVATIVE DATA SERVICES INC\" (DBA: Specialists Marketing Solutions), updated 08/04/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_j2_martech_corp",
+      "name": "J2 MARTECH CORP",
+      "domain": "dsar.ziffdavis.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://dsar.ziffdavis.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://dsar.ziffdavis.com/",
+        "email": "privacy@ziffdavis.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by J2 MARTECH CORP (registration DATA-00254)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00254 \"J2 MARTECH CORP\" (DBA: J2 MARTECH CORP), updated 12/16/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_loopme_ltd",
+      "name": "LOOPME LTD",
+      "domain": "legal.loopme.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://legal.loopme.com/privacy-center/loopme-opt-out",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://legal.loopme.com/privacy-center/loopme-opt-out",
+        "email": "privacy@loopme.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by LOOPME LTD (registration DATA-00347)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00347 \"LOOPME LTD\" (DBA: LOOPME LTD), updated 04/02/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_maxmind_inc",
+      "name": "MAXMIND INC",
+      "domain": "support.maxmind.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://support.maxmind.com/hc/en-us/articles/4409074791195-Data-Privacy-Requests",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://support.maxmind.com/hc/en-us/articles/4409074791195-Data-Privacy-Requests",
+        "email": "privacy@maxmind.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by MAXMIND INC (registration DATA-00151)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00151 \"MAXMIND INC\" (DBA: MaxMind, Inc.), updated 01/02/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_maxmind_inc."
+    },
+    {
+      "id": "or_media_resource_group_llc",
+      "name": "MEDIA RESOURCE GROUP LLC",
+      "domain": "mrginc.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://mrginc.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://mrginc.com/",
+        "email": "info@mrginc.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by MEDIA RESOURCE GROUP LLC (registration DATA-00338)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00338 \"MEDIA RESOURCE GROUP LLC\" (DBA: Media Resource Group LLC), updated 11/03/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_nexxa_group_inc",
+      "name": "NA (NEXXA GROUP INC)",
+      "domain": "nexxagroup.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.nexxagroup.com/consumer-optout/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.nexxagroup.com/consumer-optout/",
+        "email": "consumerchoice@nexxagroup.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by NEXXA GROUP INC (registration DATA-00206)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00206 \"NEXXA GROUP INC\" (DBA: NA), updated 11/06/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_postie_inc",
+      "name": "POSTIE INC",
+      "domain": "optout.postie.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://optout.postie.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://optout.postie.com/",
+        "email": "info@postie.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by POSTIE INC (registration DATA-00173)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00173 \"POSTIE INC\" (DBA: POSTIE INC), updated 07/25/2024",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_postie_inc."
+    },
+    {
+      "id": "or_rampedup",
+      "name": "RAMPEDUP",
+      "domain": "basic.rampedup.io",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://basic.rampedup.io/app/donotsell",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://basic.rampedup.io/app/donotsell",
+        "email": "contact@rampedup.io",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by RAMPEDUP (registration DATA-00344)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00344 \"RAMPEDUP\" (DBA: RAMPEDUP), updated 03/27/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_rampedup."
+    },
+    {
+      "id": "or_sharethrough_usa_inc",
+      "name": "Sharethrough (SHARETHROUGH USA INC)",
+      "domain": "privacy-center.sharethrough.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://privacy-center.sharethrough.com/en/user-rights/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://privacy-center.sharethrough.com/en/user-rights/",
+        "email": "dataprotection@sharethrough.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by SHARETHROUGH USA INC (registration DATA-00378)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00378 \"SHARETHROUGH USA INC\" (DBA: Sharethrough), updated 07/03/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_sharethrough."
+    },
+    {
+      "id": "or_sheerid_inc",
+      "name": "SheerID (SHEERID INC)",
+      "domain": "lp.sheerid.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://lp.sheerid.com/Preference-Center.html",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://lp.sheerid.com/Preference-Center.html",
+        "email": "privacy@sheerid.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by SHEERID INC (registration DATA-00100)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00100 \"SHEERID INC\" (DBA: SheerID), updated 11/03/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_sheerid_inc."
+    },
+    {
+      "id": "or_swipejobs_llc",
+      "name": "SWIPEJOBS LLC",
+      "domain": "swipejobs.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.swipejobs.com/privacy-center",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.swipejobs.com/privacy-center",
+        "email": "privacy@swipejobs.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by SWIPEJOBS LLC (registration DATA-00481)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00481 \"SWIPEJOBS LLC\" (DBA: SWIPEJOBS LLC), updated 08/10/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_sync_me_ltd",
+      "name": "SYNC.ME LTD.",
+      "domain": "sync.me",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://sync.me/unsubscribe/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://sync.me/unsubscribe/",
+        "email": "support@sync.me",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by SYNC.ME LTD. (registration DATA-00405)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00405 \"SYNC.ME LTD.\" (DBA: SYNC.ME LTD.), updated 12/02/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_throtle_inc",
+      "name": "THROTLE INC",
+      "domain": "throtle.io",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.throtle.io/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.throtle.io/",
+        "email": "privacy@throtle.io",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by THROTLE INC (registration DATA-00040)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00040 \"THROTLE INC\" (DBA: THROTLE INC), updated 12/29/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_trending_family_inc",
+      "name": "Creator Wizard (TRENDING FAMILY INC)",
+      "domain": "creatorwizard.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.creatorwizard.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.creatorwizard.com/",
+        "email": "support@creatorwizard.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by TRENDING FAMILY INC (registration DATA-00485)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00485 \"TRENDING FAMILY INC\" (DBA: Creator Wizard), updated 08/19/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_truedata_solutions_inc",
+      "name": "TRUEDATA SOLUTIONS INC",
+      "domain": "info-prod.truedata.co",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://info-prod.truedata.co/access-delete-request",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://info-prod.truedata.co/access-delete-request",
+        "email": "privacy@truedata.co",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by TRUEDATA SOLUTIONS INC (registration DATA-00384)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00384 \"TRUEDATA SOLUTIONS INC\" (DBA: TrueData Solutions, Inc.), updated 07/16/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_tunnl_llc",
+      "name": "TUNNL LLC",
+      "domain": "privacy.tunnldata.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://privacy.tunnldata.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://privacy.tunnldata.com/",
+        "email": "notice@tunnldata.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by TUNNL LLC (registration DATA-00364)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00364 \"TUNNL LLC\" (DBA: TUNNL LLC), updated 05/13/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that. The same registration also names catalog broker(s): cppa_tunnl_llc."
+    },
+    {
+      "id": "or_unify_ai_business_corporation",
+      "name": "UNIFY AI BUSINESS CORPORATION",
+      "domain": "privacy.unifygtm.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://privacy.unifygtm.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://privacy.unifygtm.com/",
+        "email": "privacy@unifygtm.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by UNIFY AI BUSINESS CORPORATION (registration DATA-00458)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00458 \"UNIFY AI BUSINESS CORPORATION\" (DBA: UNIFY AI BUSINESS CORPORATION), updated 06/23/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_v_p_data_llc",
+      "name": "Valpak Intelligence (V P DATA LLC)",
+      "domain": "valpakintelligence.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://valpakintelligence.com/privacy-policy",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://valpakintelligence.com/privacy-policy",
+        "email": "privacy@valpakintelligence.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by V P DATA LLC (registration DATA-00462)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00462 \"V P DATA LLC\" (DBA: Valpak Intelligence), updated 07/01/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_venpath_inc",
+      "name": "VENPATH INC",
+      "domain": "venpath.net",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.venpath.net/legal/privacy-notice",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.venpath.net/legal/privacy-notice",
+        "email": "privacy@venpath.net",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by VENPATH INC (registration DATA-00223)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00223 \"VENPATH INC\" (DBA: VENPATH INC), updated 08/16/2024",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_victory_waves_co",
+      "name": "VICTORY WAVES CO",
+      "domain": "victorywaves.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.victorywaves.com/legal/privacy-choices",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.victorywaves.com/legal/privacy-choices",
+        "email": "info@victorywaves.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by VICTORY WAVES CO (registration DATA-00494)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00494 \"VICTORY WAVES CO\" (DBA: VICTORY WAVES CO), updated 09/18/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_waypoint_metrics_llc",
+      "name": "WAYPOINT METRICS LLC",
+      "domain": "waypointmetrics.com",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://www.waypointmetrics.com/",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://www.waypointmetrics.com/",
+        "email": "privacy@waypointmetrics.com",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by WAYPOINT METRICS LLC (registration DATA-00470)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00470 \"WAYPOINT METRICS LLC\" (DBA: Waypoint Metrics, LLC), updated 07/20/2026",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    },
+    {
+      "id": "or_wiza_inc",
+      "name": "WIZA INC",
+      "domain": "wiza.co",
+      "aliasDomains": [],
+      "type": "data_broker",
+      "status": "active",
+      "estimatedReach": "unknown",
+      "privacyUrl": "https://wiza.co/optout-contact-info",
+      "detection": {
+        "mode": "not_listable",
+        "searchUrlTemplate": null,
+        "profileUrlPattern": null
+      },
+      "optOut": {
+        "method": "email",
+        "url": "https://wiza.co/optout-contact-info",
+        "email": "hello@wiza.co",
+        "emailSource": "Oregon DCBS data broker registry — contact email filed by WIZA INC (registration DATA-00401)",
+        "requiredFields": [],
+        "requiresEmailConfirm": "unknown",
+        "requiresPhoneVerify": "unknown",
+        "requiresIdUpload": "unknown",
+        "hasCaptcha": "unknown",
+        "scope": "perPerson"
+      },
+      "expectedTurnaroundDays": null,
+      "relistIntervalDays": null,
+      "parentGroup": null,
+      "lawfulBasis": [
+        "state_privacy"
+      ],
+      "registries": [
+        "or"
+      ],
+      "source": "state_registry",
+      "sourceNote": "Oregon DCBS data broker registry registration DATA-00401 \"WIZA INC\" (DBA: WIZA INC), updated 11/03/2025",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Registered with the Oregon DCBS data broker registry. Email a deletion / opt-out request to the contact the broker filed with the registry — file it yourself; ClearTrace does not act as an authorized agent and never sends it automatically. Oregon residents may also have rights under Oregon's consumer privacy law where it applies to this business; registration alone does not establish that."
+    }
+  ],
+  "links": [
+    {
+      "brokerId": "acxiom",
+      "registrationId": "DATA-00029",
+      "registrationName": "ACXIOM LLC"
+    },
+    {
+      "brokerId": "apollo",
+      "registrationId": "DATA-00283",
+      "registrationName": "ZENLEADS INC"
+    },
+    {
+      "brokerId": "beenverified",
+      "registrationId": "DATA-00068",
+      "registrationName": "BEEN VERIFIED LLC"
+    },
+    {
+      "brokerId": "cppa_6sense_insights_inc",
+      "registrationId": "DATA-00209",
+      "registrationName": "6SENSE INSIGHTS INC"
+    },
+    {
+      "brokerId": "cppa_a_direct_marketing_inc",
+      "registrationId": "DATA-00158",
+      "registrationName": "A DIRECT MARKETING INC"
+    },
+    {
+      "brokerId": "cppa_above_data_inc",
+      "registrationId": "DATA-00447",
+      "registrationName": "ABOVE DATA INC"
+    },
+    {
+      "brokerId": "cppa_accudata_integrated_marketing_llc",
+      "registrationId": "DATA-00021",
+      "registrationName": "Compact Information Systems LLC"
+    },
+    {
+      "brokerId": "cppa_accudata_integrated_marketing_llc",
+      "registrationId": "DATA-00022",
+      "registrationName": "Compact Information Systems LLC"
+    },
+    {
+      "brokerId": "cppa_accudata_integrated_marketing_llc",
+      "registrationId": "DATA-00023",
+      "registrationName": "Compact Information Systems LLC"
+    },
+    {
+      "brokerId": "cppa_accudata_integrated_marketing_llc",
+      "registrationId": "DATA-00024",
+      "registrationName": "Compact Information Systems LLC"
+    },
+    {
+      "brokerId": "cppa_accurate_append_inc",
+      "registrationId": "DATA-00387",
+      "registrationName": "ACCURATE APPEND INC"
+    },
+    {
+      "brokerId": "cppa_ach_address_clearing_house",
+      "registrationId": "DATA-00126",
+      "registrationName": "ACH ADDRESS CLEARING HOUSE LLC"
+    },
+    {
+      "brokerId": "cppa_activimpact_llc",
+      "registrationId": "DATA-00260",
+      "registrationName": "ACTIVIMPACT LLC"
+    },
+    {
+      "brokerId": "cppa_adeptid_inc",
+      "registrationId": "DATA-00350",
+      "registrationName": "ADEPT ID INC"
+    },
+    {
+      "brokerId": "cppa_affinity_answers_corporation",
+      "registrationId": "DATA-00226",
+      "registrationName": "AFFINITY ANSWERS CORPORATION"
+    },
+    {
+      "brokerId": "cppa_agile_education_marketing_llc",
+      "registrationId": "DATA-00432",
+      "registrationName": "AGILE EDUCATION MARKETING"
+    },
+    {
+      "brokerId": "cppa_aidentified_inc",
+      "registrationId": "DATA-00287",
+      "registrationName": "AIDENTIFIED INC"
+    },
+    {
+      "brokerId": "cppa_alliant_cooperative_data_solutions_llc",
+      "registrationId": "DATA-00076",
+      "registrationName": "ALLIANT COOPERATIVE DATA SOLUTIONS LLC"
+    },
+    {
+      "brokerId": "cppa_altair_data_resources_inc",
+      "registrationId": "DATA-00280",
+      "registrationName": "ALTAIR DATA RESOURCES INC"
+    },
+    {
+      "brokerId": "cppa_altrata_inc",
+      "registrationId": "DATA-00330",
+      "registrationName": "ALTRATA INC"
+    },
+    {
+      "brokerId": "cppa_anteriad_llc",
+      "registrationId": "DATA-00122",
+      "registrationName": "ANTERIAD LLC"
+    },
+    {
+      "brokerId": "cppa_apollo_interactive_llc",
+      "registrationId": "DATA-00296",
+      "registrationName": "APOLLO INTERACTIVE LLC"
+    },
+    {
+      "brokerId": "cppa_aristotle_international_inc",
+      "registrationId": "DATA-00103",
+      "registrationName": "ARISTOTLE INTERNATIONAL INC"
+    },
+    {
+      "brokerId": "cppa_attribits",
+      "registrationId": "DATA-00248",
+      "registrationName": "ALL GOOD MEDIA"
+    },
+    {
+      "brokerId": "cppa_audience_acuity_llc",
+      "registrationId": "DATA-00176",
+      "registrationName": "AUDIENCE ACUITY INC"
+    },
+    {
+      "brokerId": "cppa_audience_mix_llc",
+      "registrationId": "DATA-00393",
+      "registrationName": "AUDIENCE MIX LLC"
+    },
+    {
+      "brokerId": "cppa_autodata_solutions_inc",
+      "registrationId": "DATA-00050",
+      "registrationName": "JD POWER A CORPORATION OF DELAWARE"
+    },
+    {
+      "brokerId": "cppa_autoweb_inc",
+      "registrationId": "DATA-00391",
+      "registrationName": "AUTOWEB INC"
+    },
+    {
+      "brokerId": "cppa_azira_llc",
+      "registrationId": "DATA-00134",
+      "registrationName": "AZIRA LLC"
+    },
+    {
+      "brokerId": "cppa_babel_street_inc",
+      "registrationId": "DATA-00427",
+      "registrationName": "BABEL STREET INC"
+    },
+    {
+      "brokerId": "cppa_bdex_llc",
+      "registrationId": "DATA-00349",
+      "registrationName": "BDEX LLC"
+    },
+    {
+      "brokerId": "cppa_bh_marketing_group_llc",
+      "registrationId": "DATA-00236",
+      "registrationName": "BH MARKETING GROUP LLC"
+    },
+    {
+      "brokerId": "cppa_bigdbm",
+      "registrationId": "DATA-00148",
+      "registrationName": "PUBLICNSA LLC DBA BIGDBM"
+    },
+    {
+      "brokerId": "cppa_black_pearl_group_limited",
+      "registrationId": "DATA-00129",
+      "registrationName": "BLACK PEARL GROUP LLC"
+    },
+    {
+      "brokerId": "cppa_blackbaud_inc",
+      "registrationId": "DATA-00034",
+      "registrationName": "BLACKBAUD INC"
+    },
+    {
+      "brokerId": "cppa_blis_global_ltd",
+      "registrationId": "DATA-00301",
+      "registrationName": "BLIS USA, INC."
+    },
+    {
+      "brokerId": "cppa_blue_hill_marketing_solutions_inc",
+      "registrationId": "DATA-00398",
+      "registrationName": "BLUE HILL MARKETING SOLUTIONS"
+    },
+    {
+      "brokerId": "cppa_blueprint_audiences",
+      "registrationId": "DATA-00464",
+      "registrationName": "BLUEPRINT AUDIENCES LLC"
+    },
+    {
+      "brokerId": "cppa_buildertrend_solutions_inc",
+      "registrationId": "DATA-00039",
+      "registrationName": "BUILDERTREND SOLUTIONS INC"
+    },
+    {
+      "brokerId": "cppa_buxton_company_llc",
+      "registrationId": "DATA-00365",
+      "registrationName": "BUXTON COMPANY LLC"
+    },
+    {
+      "brokerId": "cppa_buxton_company_llc",
+      "registrationId": "DATA-00370",
+      "registrationName": "BUXTON COMPANY LLC"
+    },
+    {
+      "brokerId": "cppa_buyerlink_inc",
+      "registrationId": "DATA-00392",
+      "registrationName": "BUYERLINK INC"
+    },
+    {
+      "brokerId": "cppa_carry_technologies_inc",
+      "registrationId": "DATA-00133",
+      "registrationName": "CARRY TECHNOLOGIES INC"
+    },
+    {
+      "brokerId": "cppa_catalina_marketing_corporation",
+      "registrationId": "DATA-00299",
+      "registrationName": "CATALINA MARKETING CORPORATION"
+    },
+    {
+      "brokerId": "cppa_catalist_llc",
+      "registrationId": "DATA-00124",
+      "registrationName": "CATALIST LLC"
+    },
+    {
+      "brokerId": "cppa_cdk_global_llc",
+      "registrationId": "DATA-00322",
+      "registrationName": "CDK GLOBAL LLC"
+    },
+    {
+      "brokerId": "cppa_civis_analytics_inc",
+      "registrationId": "DATA-00188",
+      "registrationName": "CIVIS ANALYTICS INC"
+    },
+    {
+      "brokerId": "cppa_claritas_llc",
+      "registrationId": "DATA-00443",
+      "registrationName": "CLARITAS LLC"
+    },
+    {
+      "brokerId": "cppa_clay_labs_inc",
+      "registrationId": "DATA-00202",
+      "registrationName": "CLAY LABS LLC"
+    },
+    {
+      "brokerId": "cppa_clearcompany_llc",
+      "registrationId": "DATA-00231",
+      "registrationName": "CLEARCOMPANY LLC"
+    },
+    {
+      "brokerId": "cppa_clickagy_llc",
+      "registrationId": "DATA-00097",
+      "registrationName": "CLICKAGY LLC"
+    },
+    {
+      "brokerId": "cppa_collective_data_solutions_llc",
+      "registrationId": "DATA-00230",
+      "registrationName": "COLLECTIVE DATA SOLUTIONS LLC"
+    },
+    {
+      "brokerId": "cppa_complete_mailing_lists_llc",
+      "registrationId": "DATA-00319",
+      "registrationName": "COMPLETE MAILING LISTS LLC"
+    },
+    {
+      "brokerId": "cppa_complete_medical_lists_inc",
+      "registrationId": "DATA-00326",
+      "registrationName": "COMPLETE MEDICAL LISTS INC"
+    },
+    {
+      "brokerId": "cppa_connected_investors_llc",
+      "registrationId": "DATA-00054",
+      "registrationName": "Connected Investors LLC"
+    },
+    {
+      "brokerId": "cppa_consumer_canvas_llc",
+      "registrationId": "DATA-00328",
+      "registrationName": "CONSUMER CANVAS LLC"
+    },
+    {
+      "brokerId": "cppa_convex_labs_llc",
+      "registrationId": "DATA-00288",
+      "registrationName": "CONVEX LABS LLC"
+    },
+    {
+      "brokerId": "cppa_cox_automotive_inc",
+      "registrationId": "DATA-00471",
+      "registrationName": "COX AUTOMOTIVE INC"
+    },
+    {
+      "brokerId": "cppa_crimson_hexagon",
+      "registrationId": "DATA-00312",
+      "registrationName": "CRIMSON HEXAGON INC"
+    },
+    {
+      "brokerId": "cppa_crunchbase_inc",
+      "registrationId": "DATA-00009",
+      "registrationName": "Crunchbase Inc"
+    },
+    {
+      "brokerId": "cppa_ctam_leadshare_corp",
+      "registrationId": "DATA-00094",
+      "registrationName": "CTAM LEADSHARE CORP"
+    },
+    {
+      "brokerId": "cppa_cuebiq_group_llc",
+      "registrationId": "DATA-00125",
+      "registrationName": "CUEBIQ GROUP LLC"
+    },
+    {
+      "brokerId": "cppa_data_axle_inc",
+      "registrationId": "DATA-00087",
+      "registrationName": "DATA AXLE INC"
+    },
+    {
+      "brokerId": "cppa_data_decisions_group",
+      "registrationId": "DATA-00306",
+      "registrationName": "DATA DECISIONS GROUP LLC"
+    },
+    {
+      "brokerId": "cppa_data_partners_inc",
+      "registrationId": "DATA-00095",
+      "registrationName": "DATA PARTNERS INC"
+    },
+    {
+      "brokerId": "cppa_datafy_llc",
+      "registrationId": "DATA-00382",
+      "registrationName": "DATAFY LLC"
+    },
+    {
+      "brokerId": "cppa_dataline_inc",
+      "registrationId": "DATA-00099",
+      "registrationName": "DATALINE INC"
+    },
+    {
+      "brokerId": "cppa_datalink_services_inc",
+      "registrationId": "DATA-00030",
+      "registrationName": "TRANS UNION LLC"
+    },
+    {
+      "brokerId": "cppa_datalink_services_inc",
+      "registrationId": "DATA-00031",
+      "registrationName": "NEUSTAR INC"
+    },
+    {
+      "brokerId": "cppa_datalink_services_inc",
+      "registrationId": "DATA-00275",
+      "registrationName": "MONEVO INC"
+    },
+    {
+      "brokerId": "cppa_datamentors_llc",
+      "registrationId": "DATA-00092",
+      "registrationName": "DATAMENTORS LLC"
+    },
+    {
+      "brokerId": "cppa_datanyze_llc",
+      "registrationId": "DATA-00098",
+      "registrationName": "DATANYZE LLC"
+    },
+    {
+      "brokerId": "cppa_datasys_group_inc",
+      "registrationId": "DATA-00277",
+      "registrationName": "DATASYS GROUP INC"
+    },
+    {
+      "brokerId": "cppa_date_detective_inc",
+      "registrationId": "DATA-00337",
+      "registrationName": "DATE DETECTIVE INC"
+    },
+    {
+      "brokerId": "cppa_datonics_llc",
+      "registrationId": "DATA-00237",
+      "registrationName": "DATONICS LLC"
+    },
+    {
+      "brokerId": "cppa_decide_technologies_inc",
+      "registrationId": "DATA-00106",
+      "registrationName": "DECIDE TECHNOLOGIES INC"
+    },
+    {
+      "brokerId": "cppa_decisionlinks_llc",
+      "registrationId": "DATA-00327",
+      "registrationName": "DECISIONLINKS LLC"
+    },
+    {
+      "brokerId": "cppa_demand_science_us_llc",
+      "registrationId": "DATA-00355",
+      "registrationName": "DEMAND SCIENCE US LLC"
+    },
+    {
+      "brokerId": "cppa_demandbase_inc",
+      "registrationId": "DATA-00213",
+      "registrationName": "DEMANDBASE INC"
+    },
+    {
+      "brokerId": "cppa_dice_career_solutions_inc",
+      "registrationId": "DATA-00476",
+      "registrationName": "DICE CAREER SOLUTIONS INC"
+    },
+    {
+      "brokerId": "cppa_digital_viking_media_inc",
+      "registrationId": "DATA-00060",
+      "registrationName": "DIGITAL VIKING MEDIA INC"
+    },
+    {
+      "brokerId": "cppa_dr_decision_resources_llc",
+      "registrationId": "DATA-00441",
+      "registrationName": "CLARIVATE ANALYTICS (US)"
+    },
+    {
+      "brokerId": "cppa_dr_decision_resources_llc",
+      "registrationId": "DATA-00442",
+      "registrationName": "DR/DECISION RESOURCES, LLC"
+    },
+    {
+      "brokerId": "cppa_dtn_llc",
+      "registrationId": "DATA-00143",
+      "registrationName": "DTN LLC"
+    },
+    {
+      "brokerId": "cppa_dun_and_bradstreet_inc",
+      "registrationId": "DATA-00042",
+      "registrationName": "DUN & BRADSTREET INC"
+    },
+    {
+      "brokerId": "cppa_e_republic_llc",
+      "registrationId": "DATA-00152",
+      "registrationName": "EREPUBLIC LLC"
+    },
+    {
+      "brokerId": "cppa_eab_global_inc",
+      "registrationId": "DATA-00262",
+      "registrationName": "EAB GLOBAL INC"
+    },
+    {
+      "brokerId": "cppa_econtext_ai_llc",
+      "registrationId": "DATA-00376",
+      "registrationName": "ECONTEXT.AI LIMITED"
+    },
+    {
+      "brokerId": "cppa_edvisors_network_inc",
+      "registrationId": "DATA-00044",
+      "registrationName": "EDVISORS NETWORK INC"
+    },
+    {
+      "brokerId": "cppa_effyis_inc",
+      "registrationId": "DATA-00394",
+      "registrationName": "EFFYIS INC"
+    },
+    {
+      "brokerId": "cppa_el_toro_com_llc",
+      "registrationId": "DATA-00311",
+      "registrationName": "El TORO.COM LLC"
+    },
+    {
+      "brokerId": "cppa_enformion_llc",
+      "registrationId": "DATA-00065",
+      "registrationName": "ENFORMION LLC"
+    },
+    {
+      "brokerId": "cppa_exa_labs_inc",
+      "registrationId": "DATA-00440",
+      "registrationName": "EXA LABS INC"
+    },
+    {
+      "brokerId": "cppa_exact_opco_llc",
+      "registrationId": "DATA-00172",
+      "registrationName": "EXACT OPCO LLC"
+    },
+    {
+      "brokerId": "cppa_explorium_inc",
+      "registrationId": "DATA-00257",
+      "registrationName": "EXPLORIUM INC"
+    },
+    {
+      "brokerId": "cppa_faraday_inc",
+      "registrationId": "DATA-00340",
+      "registrationName": "FARADAY INC"
+    },
+    {
+      "brokerId": "cppa_first_orion_corp",
+      "registrationId": "DATA-00059",
+      "registrationName": "First Orion Corp"
+    },
+    {
+      "brokerId": "cppa_focus_usa_inc",
+      "registrationId": "DATA-00187",
+      "registrationName": "FOCUS USA"
+    },
+    {
+      "brokerId": "cppa_fourleaf_llc",
+      "registrationId": "DATA-00249",
+      "registrationName": "FOURLEAF LLC"
+    },
+    {
+      "brokerId": "cppa_foursquare_labs_inc",
+      "registrationId": "DATA-00020",
+      "registrationName": "Foursquare Labs Inc"
+    },
+    {
+      "brokerId": "cppa_fraiser_llc",
+      "registrationId": "DATA-00084",
+      "registrationName": "FRAISER LLC"
+    },
+    {
+      "brokerId": "cppa_general_motors_llc",
+      "registrationId": "DATA-00356",
+      "registrationName": "GENERAL MOTORS LLC"
+    },
+    {
+      "brokerId": "cppa_giant_partners_inc",
+      "registrationId": "DATA-00137",
+      "registrationName": "GIANT PARTNERS INC"
+    },
+    {
+      "brokerId": "cppa_gigabite_inc",
+      "registrationId": "DATA-00420",
+      "registrationName": "GIGABITE INC"
+    },
+    {
+      "brokerId": "cppa_grassroots_analytics",
+      "registrationId": "DATA-00232",
+      "registrationName": "GRASSROOTS ANALYTICS INC"
+    },
+    {
+      "brokerId": "cppa_graze_social_pbc",
+      "registrationId": "DATA-00372",
+      "registrationName": "GRAZE SOCIAL PBC"
+    },
+    {
+      "brokerId": "cppa_great_lakes_list_inc",
+      "registrationId": "DATA-00284",
+      "registrationName": "GREAT LAKES LIST INC"
+    },
+    {
+      "brokerId": "cppa_growthcode_llc",
+      "registrationId": "DATA-00466",
+      "registrationName": "GROWTHCODE LLC"
+    },
+    {
+      "brokerId": "cppa_guidestar_direct_corp",
+      "registrationId": "DATA-00154",
+      "registrationName": "GUIDESTAR DIRECT CORP"
+    },
+    {
+      "brokerId": "cppa_healthlink_dimensions",
+      "registrationId": "DATA-00282",
+      "registrationName": "HEALTHLINK DIMENSIONS LLC"
+    },
+    {
+      "brokerId": "cppa_healthwise_data",
+      "registrationId": "DATA-00012",
+      "registrationName": "HealthWise Data LLC"
+    },
+    {
+      "brokerId": "cppa_heartbeat_ai_inc",
+      "registrationId": "DATA-00105",
+      "registrationName": "HEARTBEAT.AI INC"
+    },
+    {
+      "brokerId": "cppa_helix_campaigns_llc",
+      "registrationId": "DATA-00383",
+      "registrationName": "HELIX CAMPAIGNS LLC"
+    },
+    {
+      "brokerId": "cppa_hireteammate_inc",
+      "registrationId": "DATA-00153",
+      "registrationName": "HIRETEAMMATE INC"
+    },
+    {
+      "brokerId": "cppa_i360_llc",
+      "registrationId": "DATA-00138",
+      "registrationName": "I360 LLC"
+    },
+    {
+      "brokerId": "cppa_idmap_inc",
+      "registrationId": "DATA-00426",
+      "registrationName": "IDMAP INC"
+    },
+    {
+      "brokerId": "cppa_infinite_media_concepts_inc",
+      "registrationId": "DATA-00397",
+      "registrationName": "INFINITE MEDIA CONCEPTS INCORPORATES"
+    },
+    {
+      "brokerId": "cppa_infomatics_llc",
+      "registrationId": "DATA-00214",
+      "registrationName": "INFOMATICS LLC"
+    },
+    {
+      "brokerId": "cppa_infopay_inc",
+      "registrationId": "DATA-00308",
+      "registrationName": "INFOPAY INC"
+    },
+    {
+      "brokerId": "cppa_inmar_brand_solutions_inc",
+      "registrationId": "DATA-00429",
+      "registrationName": "INMAR BRAND SOLUTIONS INC"
+    },
+    {
+      "brokerId": "cppa_innovation_brands_corp",
+      "registrationId": "DATA-00406",
+      "registrationName": "INNOVATION BRANDS CORP"
+    },
+    {
+      "brokerId": "cppa_intelius_llc",
+      "registrationId": "DATA-00071",
+      "registrationName": "INTELIUS LLC"
+    },
+    {
+      "brokerId": "cppa_intent_iq_llc",
+      "registrationId": "DATA-00278",
+      "registrationName": "INTENT IQ LLC"
+    },
+    {
+      "brokerId": "cppa_interactive_data_llc",
+      "registrationId": "DATA-00045",
+      "registrationName": "INTERACTIVE DATA LLC"
+    },
+    {
+      "brokerId": "cppa_iqvia_digital_inc",
+      "registrationId": "DATA-00415",
+      "registrationName": "IQVIA DIGITAL INC."
+    },
+    {
+      "brokerId": "cppa_ispot_tv_inc",
+      "registrationId": "DATA-00451",
+      "registrationName": "ISPOT.TV"
+    },
+    {
+      "brokerId": "cppa_jdm_list_services",
+      "registrationId": "DATA-00331",
+      "registrationName": "JDM LIST SERVICES LLC"
+    },
+    {
+      "brokerId": "cppa_jmr_media_consulting_inc",
+      "registrationId": "DATA-00243",
+      "registrationName": "JMR MEDIA CONSULTING INC"
+    },
+    {
+      "brokerId": "cppa_juicebox_app_inc",
+      "registrationId": "DATA-00377",
+      "registrationName": "JUICEBOX APP"
+    },
+    {
+      "brokerId": "cppa_key_marketing_advantage",
+      "registrationId": "DATA-00346",
+      "registrationName": "KEY MARKETING ADVANTAGE LLC"
+    },
+    {
+      "brokerId": "cppa_kloudend_inc",
+      "registrationId": "DATA-00195",
+      "registrationName": "KLOUDEND INC"
+    },
+    {
+      "brokerId": "cppa_knowledge_works_inc",
+      "registrationId": "DATA-00119",
+      "registrationName": "KNOWLEDGE WORKS INC"
+    },
+    {
+      "brokerId": "cppa_komodo_health_inc",
+      "registrationId": "DATA-00291",
+      "registrationName": "KOMODO HEALTH INC"
+    },
+    {
+      "brokerId": "cppa_labels_lists_inc",
+      "registrationId": "DATA-00150",
+      "registrationName": "LABELS & LISTS INC"
+    },
+    {
+      "brokerId": "cppa_lead411_corporation",
+      "registrationId": "DATA-00107",
+      "registrationName": "LEAD411 CORPORATION"
+    },
+    {
+      "brokerId": "cppa_leadiq_inc",
+      "registrationId": "DATA-00165",
+      "registrationName": "LEADIQ INC"
+    },
+    {
+      "brokerId": "cppa_leadspace_inc",
+      "registrationId": "DATA-00147",
+      "registrationName": "LEADSPACE INC"
+    },
+    {
+      "brokerId": "cppa_lexisnexis_risk_solutions_fl_inc",
+      "registrationId": "DATA-00019",
+      "registrationName": "LEXISNEXIS RISK SOLUTIONS FL INC"
+    },
+    {
+      "brokerId": "cppa_lightbox_parent_l_p",
+      "registrationId": "DATA-00362",
+      "registrationName": "LIGHTBOX PARENT LP"
+    },
+    {
+      "brokerId": "cppa_lightcast_llc",
+      "registrationId": "DATA-00233",
+      "registrationName": "ECONOMIC MODELING LLC"
+    },
+    {
+      "brokerId": "cppa_lionshare_marketing_inc",
+      "registrationId": "DATA-00317",
+      "registrationName": "LIONSHARE MARKETING INC"
+    },
+    {
+      "brokerId": "cppa_listkit_llc",
+      "registrationId": "DATA-00351",
+      "registrationName": "LISTKIT LLC"
+    },
+    {
+      "brokerId": "cppa_live_data_technologies_inc",
+      "registrationId": "DATA-00400",
+      "registrationName": "LIVE DATA TECHNOLOGIES INC"
+    },
+    {
+      "brokerId": "cppa_liveramp_holdings_inc",
+      "registrationId": "DATA-00072",
+      "registrationName": "LIVERAMP HOLDINGS INC"
+    },
+    {
+      "brokerId": "cppa_lob_com_inc",
+      "registrationId": "DATA-00361",
+      "registrationName": "LOB.COM INC."
+    },
+    {
+      "brokerId": "cppa_lookify_io",
+      "registrationId": "DATA-00193",
+      "registrationName": "LOOKIFY LLC"
+    },
+    {
+      "brokerId": "cppa_magnite_inc",
+      "registrationId": "DATA-00220",
+      "registrationName": "MAGNITE INC"
+    },
+    {
+      "brokerId": "cppa_matchbook_data_llc",
+      "registrationId": "DATA-00182",
+      "registrationName": "MATCHBOOK DATA LLC"
+    },
+    {
+      "brokerId": "cppa_maxmind_inc",
+      "registrationId": "DATA-00151",
+      "registrationName": "MAXMIND INC"
+    },
+    {
+      "brokerId": "cppa_mediawallah_inc",
+      "registrationId": "DATA-00156",
+      "registrationName": "MEDIAWALLAH INC"
+    },
+    {
+      "brokerId": "cppa_medpro_systems_llc",
+      "registrationId": "DATA-00354",
+      "registrationName": "MEDPRO SYSTEMS"
+    },
+    {
+      "brokerId": "cppa_merkle_inc",
+      "registrationId": "DATA-00032",
+      "registrationName": "Merkle Inc"
+    },
+    {
+      "brokerId": "cppa_message_digital_llc",
+      "registrationId": "DATA-00302",
+      "registrationName": "MESSAGE DIGITAL LLC"
+    },
+    {
+      "brokerId": "cppa_milestone_marketing_solutions",
+      "registrationId": "DATA-00229",
+      "registrationName": "MILESTONE MARKETING SOLUTIONS"
+    },
+    {
+      "brokerId": "cppa_minerva_bi_inc",
+      "registrationId": "DATA-00028",
+      "registrationName": "MINERVA BI INC"
+    },
+    {
+      "brokerId": "cppa_mobile_technology_corporation",
+      "registrationId": "DATA-00412",
+      "registrationName": "MOBILE TECHNOLOGY CORPORATION"
+    },
+    {
+      "brokerId": "cppa_mobilefuse_llc",
+      "registrationId": "DATA-00449",
+      "registrationName": "MOBILEFUSE LLC"
+    },
+    {
+      "brokerId": "cppa_mobilewalla_inc",
+      "registrationId": "DATA-00177",
+      "registrationName": "MOBILEWALLA INC"
+    },
+    {
+      "brokerId": "cppa_monocl_ab",
+      "registrationId": "DATA-00026",
+      "registrationName": "DEFINITIVE HEALTHCARE LLC"
+    },
+    {
+      "brokerId": "cppa_moody_s_corporation",
+      "registrationId": "DATA-00218",
+      "registrationName": "MOODYS ANALYTICS INC"
+    },
+    {
+      "brokerId": "cppa_multimedia_lists_inc",
+      "registrationId": "DATA-00342",
+      "registrationName": "MULTIMEDIA LISTS INC"
+    },
+    {
+      "brokerId": "cppa_mv_digital_group_llc",
+      "registrationId": "DATA-00438",
+      "registrationName": "MV DIGITAL GROUP LLC"
+    },
+    {
+      "brokerId": "cppa_nachal_inc",
+      "registrationId": "DATA-00434",
+      "registrationName": "NACHAL INC"
+    },
+    {
+      "brokerId": "cppa_national_opinion_institute_llc",
+      "registrationId": "DATA-00409",
+      "registrationName": "NATIONAL OPINION INSTITUTE"
+    },
+    {
+      "brokerId": "cppa_nexxen_inc",
+      "registrationId": "DATA-00359",
+      "registrationName": "NEXXEN INC"
+    },
+    {
+      "brokerId": "cppa_nfocus_consulting_inc",
+      "registrationId": "DATA-00113",
+      "registrationName": "NFOCUS CONSULTING INC"
+    },
+    {
+      "brokerId": "cppa_opensend_inc",
+      "registrationId": "DATA-00444",
+      "registrationName": "OPENSEND INC"
+    },
+    {
+      "brokerId": "cppa_orgio_inc",
+      "registrationId": "DATA-00159",
+      "registrationName": "ORGIO INC"
+    },
+    {
+      "brokerId": "cppa_outlogic_llc",
+      "registrationId": "DATA-00181",
+      "registrationName": "OUTLOGIC LLC"
+    },
+    {
+      "brokerId": "cppa_outward_media_inc",
+      "registrationId": "DATA-00445",
+      "registrationName": "OUTWARD MEDIA INC"
+    },
+    {
+      "brokerId": "cppa_owmn_ltd",
+      "registrationId": "DATA-00448",
+      "registrationName": "OWMN LLC"
+    },
+    {
+      "brokerId": "cppa_pacific_east_research_inc",
+      "registrationId": "DATA-00184",
+      "registrationName": "PACIFIC EAST RESEARCH INC"
+    },
+    {
+      "brokerId": "cppa_paedae_inc",
+      "registrationId": "DATA-00456",
+      "registrationName": "INFILLION INC"
+    },
+    {
+      "brokerId": "cppa_path2response_llc",
+      "registrationId": "DATA-00046",
+      "registrationName": "PATH2RESPONSE LLC"
+    },
+    {
+      "brokerId": "cppa_pen_link_ltd",
+      "registrationId": "DATA-00439",
+      "registrationName": "PEN-LINK LTD"
+    },
+    {
+      "brokerId": "cppa_placeiq_inc",
+      "registrationId": "DATA-00167",
+      "registrationName": "PRECISELY SOFTWARE INCORPORATED"
+    },
+    {
+      "brokerId": "cppa_placeiq_inc",
+      "registrationId": "DATA-00343",
+      "registrationName": "PLACEIQ INC"
+    },
+    {
+      "brokerId": "cppa_plug_chargers_llc",
+      "registrationId": "DATA-00402",
+      "registrationName": "PLUG INDUSTRIES"
+    },
+    {
+      "brokerId": "cppa_plunge_llc",
+      "registrationId": "DATA-00437",
+      "registrationName": "PLUNGE, LLC"
+    },
+    {
+      "brokerId": "cppa_postie_inc",
+      "registrationId": "DATA-00173",
+      "registrationName": "POSTIE INC"
+    },
+    {
+      "brokerId": "cppa_postpilot_inc",
+      "registrationId": "DATA-00335",
+      "registrationName": "POSTPILOT INC"
+    },
+    {
+      "brokerId": "cppa_project_affinity_inc",
+      "registrationId": "DATA-00363",
+      "registrationName": "PROJECT AFFINITY INC"
+    },
+    {
+      "brokerId": "cppa_property_reach_l_p",
+      "registrationId": "DATA-00063",
+      "registrationName": "PROPERTY REACH L.P."
+    },
+    {
+      "brokerId": "cppa_propertyradar_inc",
+      "registrationId": "DATA-00049",
+      "registrationName": "PropertyRadar Inc"
+    },
+    {
+      "brokerId": "cppa_pubmatic_inc",
+      "registrationId": "DATA-00168",
+      "registrationName": "PUBMATIC INC"
+    },
+    {
+      "brokerId": "cppa_quad_graphics_inc",
+      "registrationId": "DATA-00310",
+      "registrationName": "QUAD/GRAPHICS INC"
+    },
+    {
+      "brokerId": "cppa_quorum_data_inc",
+      "registrationId": "DATA-00472",
+      "registrationName": "QUORUM DATA INC"
+    },
+    {
+      "brokerId": "cppa_r_l_polk_co",
+      "registrationId": "DATA-00455",
+      "registrationName": "R L POLK  CO"
+    },
+    {
+      "brokerId": "cppa_rampedup",
+      "registrationId": "DATA-00344",
+      "registrationName": "RAMPEDUP"
+    },
+    {
+      "brokerId": "cppa_randall_reilly_llc",
+      "registrationId": "DATA-00371",
+      "registrationName": "FUSABLE"
+    },
+    {
+      "brokerId": "cppa_realeflow_llc",
+      "registrationId": "DATA-00247",
+      "registrationName": "REALEFLOW LLC"
+    },
+    {
+      "brokerId": "cppa_redi_data_inc",
+      "registrationId": "DATA-00245",
+      "registrationName": "REDI-DATA INC"
+    },
+    {
+      "brokerId": "cppa_redmob_llc",
+      "registrationId": "DATA-00300",
+      "registrationName": "REDMOB LLC"
+    },
+    {
+      "brokerId": "cppa_reklaim_ltd",
+      "registrationId": "DATA-00323",
+      "registrationName": "REKLAIM LTD"
+    },
+    {
+      "brokerId": "cppa_response_america_inc",
+      "registrationId": "DATA-00430",
+      "registrationName": "RESPONSE AMERICA DATA INC"
+    },
+    {
+      "brokerId": "cppa_reveal_mobile_inc",
+      "registrationId": "DATA-00163",
+      "registrationName": "REVEAL MOBILE INC"
+    },
+    {
+      "brokerId": "cppa_revoptimal_llc",
+      "registrationId": "DATA-00274",
+      "registrationName": "REVOPTIMAL LLC"
+    },
+    {
+      "brokerId": "cppa_rich_media_llc",
+      "registrationId": "DATA-00265",
+      "registrationName": "RICH MEDIA LLC"
+    },
+    {
+      "brokerId": "cppa_rocketreach_llc",
+      "registrationId": "DATA-00375",
+      "registrationName": "ROCKETREACH LLC"
+    },
+    {
+      "brokerId": "cppa_ror_partners_llc",
+      "registrationId": "DATA-00404",
+      "registrationName": "ROR PARTNERS LLC"
+    },
+    {
+      "brokerId": "cppa_rushmore_labs_llc",
+      "registrationId": "DATA-00411",
+      "registrationName": "RUSHMORE LABS LLC"
+    },
+    {
+      "brokerId": "cppa_salesintel_research_inc",
+      "registrationId": "DATA-00479",
+      "registrationName": "SalesIntel Research, Inc"
+    },
+    {
+      "brokerId": "cppa_semasio_gmbh",
+      "registrationId": "DATA-00145",
+      "registrationName": "SEMASIO INC"
+    },
+    {
+      "brokerId": "cppa_semcasting_inc",
+      "registrationId": "DATA-00316",
+      "registrationName": "SEMCASTING INC"
+    },
+    {
+      "brokerId": "cppa_sharethrough",
+      "registrationId": "DATA-00378",
+      "registrationName": "SHARETHROUGH USA INC"
+    },
+    {
+      "brokerId": "cppa_sheerid_inc",
+      "registrationId": "DATA-00100",
+      "registrationName": "SHEERID INC"
+    },
+    {
+      "brokerId": "cppa_simio_cloud_llc",
+      "registrationId": "DATA-00078",
+      "registrationName": "SIMIO CLOUD LLC"
+    },
+    {
+      "brokerId": "cppa_snovio_inc",
+      "registrationId": "DATA-00047",
+      "registrationName": "SNOVIO INC"
+    },
+    {
+      "brokerId": "cppa_social_catfish_llc",
+      "registrationId": "DATA-00074",
+      "registrationName": "SOCIAL CATFISH LLC"
+    },
+    {
+      "brokerId": "cppa_speedeon_data_llc",
+      "registrationId": "DATA-00135",
+      "registrationName": "SPEEDEON DATA LLC"
+    },
+    {
+      "brokerId": "cppa_stackadapt_inc",
+      "registrationId": "DATA-00289",
+      "registrationName": "STACKADAPT INC"
+    },
+    {
+      "brokerId": "cppa_statara_solutions_llc",
+      "registrationId": "DATA-00102",
+      "registrationName": "STATARA SOLUTIONS LLC"
+    },
+    {
+      "brokerId": "cppa_steppingblocks_inc",
+      "registrationId": "DATA-00178",
+      "registrationName": "STEPPINGBLOCKS INC"
+    },
+    {
+      "brokerId": "cppa_sterling_data_company_llc",
+      "registrationId": "DATA-00314",
+      "registrationName": "STERLING DATA COMPANY LLC"
+    },
+    {
+      "brokerId": "cppa_stirista_llc",
+      "registrationId": "DATA-00264",
+      "registrationName": "STIRISTA"
+    },
+    {
+      "brokerId": "cppa_subgraph_inc",
+      "registrationId": "DATA-00488",
+      "registrationName": "SUBGRAPH INC"
+    },
+    {
+      "brokerId": "cppa_summit_resources_llc",
+      "registrationId": "DATA-00373",
+      "registrationName": "SUMMIT RESOURCES LLC"
+    },
+    {
+      "brokerId": "cppa_swordfish_ai_inc",
+      "registrationId": "DATA-00166",
+      "registrationName": "SWORDFISH AI INC"
+    },
+    {
+      "brokerId": "cppa_t_mobile_usa_inc",
+      "registrationId": "DATA-00180",
+      "registrationName": "T-MOBILE USA INC"
+    },
+    {
+      "brokerId": "cppa_taboola_inc",
+      "registrationId": "DATA-00160",
+      "registrationName": "TABOOLA INC"
+    },
+    {
+      "brokerId": "cppa_tagis_inc",
+      "registrationId": "DATA-00422",
+      "registrationName": "TAGIS INC"
+    },
+    {
+      "brokerId": "cppa_techtarget_inc",
+      "registrationId": "DATA-00171",
+      "registrationName": "TECHTARGET INC"
+    },
+    {
+      "brokerId": "cppa_the_alesco_group_llc",
+      "registrationId": "DATA-00108",
+      "registrationName": "THE ALESCO GROUP LLC"
+    },
+    {
+      "brokerId": "cppa_the_people_searchers_llc",
+      "registrationId": "DATA-00216",
+      "registrationName": "THE PEOPLE SEARCHERS LLC"
+    },
+    {
+      "brokerId": "cppa_the_segerdahl_llc",
+      "registrationId": "DATA-00352",
+      "registrationName": "THE SEGERDAHL LLC"
+    },
+    {
+      "brokerId": "cppa_trestle_solutions_inc",
+      "registrationId": "DATA-00222",
+      "registrationName": "TRESTLE SOLUTIONS INC"
+    },
+    {
+      "brokerId": "cppa_triplelift_inc",
+      "registrationId": "DATA-00408",
+      "registrationName": "TRIPLE LIFT INC"
+    },
+    {
+      "brokerId": "cppa_true_blue_analytics_llc",
+      "registrationId": "DATA-00271",
+      "registrationName": "TRUE BLUE ANALYTICS LLC"
+    },
+    {
+      "brokerId": "cppa_truth_now_llc",
+      "registrationId": "DATA-00217",
+      "registrationName": "TRUTH NOW LLC"
+    },
+    {
+      "brokerId": "cppa_tunnl_llc",
+      "registrationId": "DATA-00364",
+      "registrationName": "TUNNL LLC"
+    },
+    {
+      "brokerId": "cppa_unacast_inc",
+      "registrationId": "DATA-00436",
+      "registrationName": "UNACAST INC"
+    },
+    {
+      "brokerId": "cppa_unearth_campaigns_llc",
+      "registrationId": "DATA-00250",
+      "registrationName": "UNEARTH CAMPAIGNS LLC"
+    },
+    {
+      "brokerId": "cppa_upcell_llc",
+      "registrationId": "DATA-00390",
+      "registrationName": "UPCELL LLC"
+    },
+    {
+      "brokerId": "cppa_uplead_llc",
+      "registrationId": "DATA-00267",
+      "registrationName": "UPLEAD LLC"
+    },
+    {
+      "brokerId": "cppa_ups_capital_corporation",
+      "registrationId": "DATA-00015",
+      "registrationName": "UPS Capital Corporation"
+    },
+    {
+      "brokerId": "cppa_urban_science_applications_inc",
+      "registrationId": "DATA-00463",
+      "registrationName": "URBAN SCIENCE APPLICATIONS INC"
+    },
+    {
+      "brokerId": "cppa_us_data_corporation",
+      "registrationId": "DATA-00131",
+      "registrationName": "US DATA CORPORATION"
+    },
+    {
+      "brokerId": "cppa_valassis_communications_inc",
+      "registrationId": "DATA-00048",
+      "registrationName": "VALASSIS COMMUNICATIONS INC"
+    },
+    {
+      "brokerId": "cppa_veeva_systems_inc",
+      "registrationId": "DATA-00091",
+      "registrationName": "VEEVA SYSTEMS INC"
+    },
+    {
+      "brokerId": "cppa_vendelux_inc",
+      "registrationId": "DATA-00483",
+      "registrationName": "VENDELUX INC"
+    },
+    {
+      "brokerId": "cppa_venntel_inc",
+      "registrationId": "DATA-00424",
+      "registrationName": "VENNTEL INC"
+    },
+    {
+      "brokerId": "cppa_ventiveiq_llc",
+      "registrationId": "DATA-00452",
+      "registrationName": "VENTIVEIQ LLC"
+    },
+    {
+      "brokerId": "cppa_veraset_llc",
+      "registrationId": "DATA-00101",
+      "registrationName": "VERASET LLC"
+    },
+    {
+      "brokerId": "cppa_versar_data_solutions_inc",
+      "registrationId": "DATA-00112",
+      "registrationName": "VERSIUM ANALYTICS INC"
+    },
+    {
+      "brokerId": "cppa_videoamp_inc",
+      "registrationId": "DATA-00292",
+      "registrationName": "VIDEOAMP INC"
+    },
+    {
+      "brokerId": "cppa_virtual_marketing_llc",
+      "registrationId": "DATA-00435",
+      "registrationName": "VIRTUAL MARKETING LLC"
+    },
+    {
+      "brokerId": "cppa_vistar_media_inc",
+      "registrationId": "DATA-00388",
+      "registrationName": "VISTAR MEDIA INC"
+    },
+    {
+      "brokerId": "cppa_visual_visitor_l_l_c",
+      "registrationId": "DATA-00348",
+      "registrationName": "VISUAL VISITOR LLC"
+    },
+    {
+      "brokerId": "cppa_we_inform_llc",
+      "registrationId": "DATA-00215",
+      "registrationName": "WE INFORM LLC"
+    },
+    {
+      "brokerId": "cppa_webbula_llc",
+      "registrationId": "DATA-00191",
+      "registrationName": "WEBBULA LLC"
+    },
+    {
+      "brokerId": "cppa_west_publishing_corp",
+      "registrationId": "DATA-00259",
+      "registrationName": "WEST PUBLISING CORPORATION"
+    },
+    {
+      "brokerId": "cppa_wiland_inc",
+      "registrationId": "DATA-00189",
+      "registrationName": "WILAND INC"
+    },
+    {
+      "brokerId": "cppa_windfall_data_inc",
+      "registrationId": "DATA-00142",
+      "registrationName": "WINDFALL DATA INC"
+    },
+    {
+      "brokerId": "cppa_winr_data_pty_ltd",
+      "registrationId": "DATA-00467",
+      "registrationName": "WINR ALCHEMIST PTY LTD"
+    },
+    {
+      "brokerId": "cppa_winr_data_pty_ltd",
+      "registrationId": "DATA-00468",
+      "registrationName": "WINR DATA PTY LTD"
+    },
+    {
+      "brokerId": "cppa_yobi_ventures_inc",
+      "registrationId": "DATA-00460",
+      "registrationName": "YOBI VENTURES INC"
+    },
+    {
+      "brokerId": "cppa_zeta_global",
+      "registrationId": "DATA-00205",
+      "registrationName": "ZETA GLOBAL CORP"
+    },
+    {
+      "brokerId": "cppa_ziff_davis_llc",
+      "registrationId": "DATA-00255",
+      "registrationName": "J2 GLOBAL CANADA INC"
+    },
+    {
+      "brokerId": "cppa_zipstorm_inc",
+      "registrationId": "DATA-00210",
+      "registrationName": "ZIPSTORM INC"
+    },
+    {
+      "brokerId": "cppa_zs_associates_inc",
+      "registrationId": "DATA-00258",
+      "registrationName": "ZS ASSOCIATES INC"
+    },
+    {
+      "brokerId": "familytreenow",
+      "registrationId": "DATA-00325",
+      "registrationName": "FAMILY TREE NOW LLC"
+    },
+    {
+      "brokerId": "fastpeoplesearch",
+      "registrationId": "DATA-00320",
+      "registrationName": "MISSISSIPPI TORNADO ALLEY LLC"
+    },
+    {
+      "brokerId": "instantcheckmate",
+      "registrationId": "DATA-00070",
+      "registrationName": "INSTANT CHECKMATE LLC"
+    },
+    {
+      "brokerId": "intelius",
+      "registrationId": "DATA-00071",
+      "registrationName": "INTELIUS LLC"
+    },
+    {
+      "brokerId": "lexisnexis",
+      "registrationId": "DATA-00075",
+      "registrationName": "RELX INC"
+    },
+    {
+      "brokerId": "lusha",
+      "registrationId": "DATA-00036",
+      "registrationName": "LUSHA SYSTEMS INC."
+    },
+    {
+      "brokerId": "melissa",
+      "registrationId": "DATA-00111",
+      "registrationName": "MELISSA DATA CORPORATOIN"
+    },
+    {
+      "brokerId": "numlookup",
+      "registrationId": "DATA-00446",
+      "registrationName": "NUMLOOKUP LLC"
+    },
+    {
+      "brokerId": "nuwber",
+      "registrationId": "DATA-00037",
+      "registrationName": "NUWBER INC"
+    },
+    {
+      "brokerId": "pdl",
+      "registrationId": "DATA-00066",
+      "registrationName": "People Data Labs Inc"
+    },
+    {
+      "brokerId": "peekyou",
+      "registrationId": "DATA-00266",
+      "registrationName": "PEEKYOU LLC"
+    },
+    {
+      "brokerId": "peoplefinders",
+      "registrationId": "DATA-00061",
+      "registrationName": "PEOPLEFINDERS LLC"
+    },
+    {
+      "brokerId": "pipl",
+      "registrationId": "DATA-00169",
+      "registrationName": "PIPL INC"
+    },
+    {
+      "brokerId": "privaterecords",
+      "registrationId": "DATA-00212",
+      "registrationName": "PRIVATE RECORDS LLC"
+    },
+    {
+      "brokerId": "spokeo",
+      "registrationId": "DATA-00053",
+      "registrationName": "Spokeo Inc"
+    },
+    {
+      "brokerId": "spydialer",
+      "registrationId": "DATA-00419",
+      "registrationName": "SPY LABS ADCO LLC"
+    },
+    {
+      "brokerId": "truepeoplesearch",
+      "registrationId": "DATA-00324",
+      "registrationName": "FREE DATA SERVICES LLC"
+    },
+    {
+      "brokerId": "truthfinder",
+      "registrationId": "DATA-00069",
+      "registrationName": "TRUTHFINDER LLC"
+    },
+    {
+      "brokerId": "ussearch",
+      "registrationId": "DATA-00071",
+      "registrationName": "INTELIUS LLC"
+    },
+    {
+      "brokerId": "whitepages",
+      "registrationId": "DATA-00132",
+      "registrationName": "WHITEPAGES INC"
+    },
+    {
+      "brokerId": "zoominfo",
+      "registrationId": "DATA-00077",
+      "registrationName": "ZOOMINFO TECHNOLOGIES LLC"
+    }
+  ]
+}

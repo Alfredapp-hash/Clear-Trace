@@ -6,14 +6,20 @@
  * browser makes the visit and a human solves any CAPTCHA. Types are client-safe (import
  * them with `import type`); the loaders below are server-only.
  */
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { brokerSweepMatches, brokerSweepRuns, identityClaims } from "@/lib/db/schema";
+import { brokerSweepMatches, brokerSweepRuns, identityClaims, privacyCases } from "@/lib/db/schema";
 import { decryptValue } from "@/lib/crypto/encryption";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { getLatestBrokerSweep } from "@/lib/enterprise/broker-sweep";
 import { getBroker } from "@/lib/brokers/universe";
-import { buildSearchUrl, type SearchUrlParams } from "./search-url";
+import { isNeverQueryClaimType } from "@/lib/constants";
+import {
+  PLACE_PLACEHOLDERS,
+  buildSearchUrl,
+  missingSearchParams,
+  type SearchUrlParams,
+} from "./search-url";
 
 export const CHECKLIST_GROUPS = ["found", "to_check", "not_listed", "needs_manual"] as const;
 export type ChecklistGroup = (typeof CHECKLIST_GROUPS)[number];
@@ -34,12 +40,19 @@ export interface ChecklistRow {
   searchUrl: string | null;
   /** True when the link is the broker's own search with the name / place filled in. */
   prefilled: boolean;
+  /**
+   * Why a broker with a search template is not prefilled: "add_place" when only a city /
+   * state is missing (the case has neither a current nor a previous city and state).
+   */
+  prefillHint?: ChecklistPrefillHint | null;
   checkedAt: string | null;
   checkMethod: string | null;
   profileUrls: string[];
   /** The previous sweep's recorded check for this broker, when there was one. */
   lastCheck: ChecklistLastCheck | null;
 }
+
+export type ChecklistPrefillHint = "add_place";
 
 export interface BrokerChecklistView {
   sweepRunId: string;
@@ -114,8 +127,15 @@ function httpUrl(value: string | null | undefined): string | null {
   }
 }
 
-/** Search parameters from the decrypted full_name / city_state claims. */
-export function searchParamsFromClaims(fullName: string | null, cityState: string | null): SearchUrlParams {
+/**
+ * Search parameters from the decrypted full_name / city_state claims. `fallbackState` (the
+ * case's two-letter jurisdiction_state) fills {state} only when there is no place at all.
+ */
+export function searchParamsFromClaims(
+  fullName: string | null,
+  cityState: string | null,
+  fallbackState: string | null = null,
+): SearchUrlParams {
   const params: SearchUrlParams = {};
   const name = fullName?.trim().replace(/\s+/g, " ");
   if (name) {
@@ -134,8 +154,33 @@ export function searchParamsFromClaims(fullName: string | null, cityState: strin
       params.city = place.slice(0, comma).trim();
       params.state = place.slice(comma + 1).trim();
     }
+  } else if (fallbackState && /^[A-Z]{2}$/.test(fallbackState.trim())) {
+    params.state = fallbackState.trim();
   }
   return params;
+}
+
+/** Claim types a checklist search link may use. Never a NEVER_QUERY type (DOB, relatives…). */
+export const SEARCH_LINK_CLAIM_TYPES = ["full_name", "city_state", "previous_city_state"] as const;
+
+/**
+ * Search parameters for a case: the name, and the best available place — the current city /
+ * state (city_state) before a previous one (previous_city_state) — then the case's
+ * jurisdiction_state for {state} alone. Claims are taken oldest first per type. Only
+ * SEARCH_LINK_CLAIM_TYPES are read; any other claim (birth year, DOB, relatives, phone…) is
+ * ignored, so it can never reach a URL.
+ */
+export function searchParamsForCase(
+  claims: ReadonlyArray<{ claimType: string; value: string | null; createdAt?: string | null }>,
+  jurisdictionState: string | null = null,
+): SearchUrlParams {
+  const allowed = new Set<string>(SEARCH_LINK_CLAIM_TYPES);
+  const usable = claims
+    .filter((c) => allowed.has(c.claimType) && !isNeverQueryClaimType(c.claimType) && c.value?.trim())
+    .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""));
+  const first = (type: string) => usable.find((c) => c.claimType === type)?.value ?? null;
+  const place = first("city_state") ?? first("previous_city_state");
+  return searchParamsFromClaims(first("full_name"), place, jurisdictionState);
 }
 
 /**
@@ -146,12 +191,14 @@ export function checklistLink(
   match: Pick<ChecklistMatchInput, "domain" | "optOutUrl">,
   broker: ChecklistBroker | null | undefined,
   params: SearchUrlParams,
-): { url: string | null; prefilled: boolean } {
+): { url: string | null; prefilled: boolean; hint: ChecklistPrefillHint | null } {
   const prefilled = broker ? buildSearchUrl(broker, params) : null;
-  if (prefilled) return { url: prefilled, prefilled: true };
+  if (prefilled) return { url: prefilled, prefilled: true, hint: null };
+  const missing = broker ? missingSearchParams(broker, params) : [];
+  const hint = missing.length > 0 && missing.every((p) => PLACE_PLACEHOLDERS.has(p)) ? "add_place" : null;
   const domain = broker?.domain ?? match.domain;
   const home = /^[a-z0-9.-]+\.[a-z]{2,}$/i.test(domain) ? `https://${domain}/` : null;
-  return { url: home ?? httpUrl(broker?.optOut.url) ?? httpUrl(match.optOutUrl), prefilled: false };
+  return { url: home ?? httpUrl(broker?.optOut.url) ?? httpUrl(match.optOutUrl), prefilled: false, hint };
 }
 
 const GROUP_ORDER: Record<ChecklistGroup, number> = { found: 0, needs_manual: 1, to_check: 2, not_listed: 3 };
@@ -177,6 +224,7 @@ export function buildChecklistView(
       group: checklistGroup(m),
       searchUrl: link.url,
       prefilled: link.prefilled,
+      prefillHint: link.hint,
       checkedAt: m.checkedAt ?? null,
       checkMethod: m.checkMethod ?? null,
       profileUrls: parseUrlList(m.profileUrlsJson),
@@ -195,26 +243,34 @@ export function buildChecklistView(
 }
 
 /**
- * The first full_name and city_state claims of a case, decrypted for building search links.
- * The values stay on the server side of the page render and are never logged.
+ * The case's name and best city / state (see searchParamsForCase), decrypted for building
+ * search links. Only SEARCH_LINK_CLAIM_TYPES are read and decrypted. The values stay on the
+ * server side of the page render and are never logged.
  */
 async function loadSearchParams(caseId: string): Promise<SearchUrlParams> {
-  const claims = await db.query.identityClaims.findMany({
-    where: eq(identityClaims.caseId, caseId),
-    columns: { claimType: true, encryptedValue: true, createdAt: true },
-  });
-  const first = (type: string) => {
-    const claim = claims
-      .filter((c) => c.claimType === type)
-      .sort((a, b) => (a.createdAt ?? "").localeCompare(b.createdAt ?? ""))[0];
-    if (!claim) return null;
+  const [claims, privacyCase] = await Promise.all([
+    db.query.identityClaims.findMany({
+      where: and(
+        eq(identityClaims.caseId, caseId),
+        inArray(identityClaims.claimType, [...SEARCH_LINK_CLAIM_TYPES]),
+      ),
+      columns: { claimType: true, encryptedValue: true, createdAt: true },
+    }),
+    db.query.privacyCases.findFirst({
+      where: eq(privacyCases.id, caseId),
+      columns: { jurisdictionState: true },
+    }),
+  ]);
+  const decrypted = claims.map((c) => {
+    let value: string | null = null;
     try {
-      return decryptValue(claim.encryptedValue);
+      value = decryptValue(c.encryptedValue);
     } catch {
-      return null;
+      value = null;
     }
-  };
-  return searchParamsFromClaims(first("full_name"), first("city_state"));
+    return { claimType: c.claimType, value, createdAt: c.createdAt };
+  });
+  return searchParamsForCase(decrypted, privacyCase?.jurisdictionState ?? null);
 }
 
 /** The latest broker sweep of a case as a checklist, or null before the first sweep. */

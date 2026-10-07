@@ -275,6 +275,9 @@ describe("POST /api/cases/[id]/live-url with brokerId (broker checklist)", () =>
   beforeEach(() => {
     mockSessionCookie(fixture.token);
     sqlite.prepare("DELETE FROM rate_limit_events WHERE key = ?").run(`live-url:${fixture.userId}`);
+    sqlite
+      .prepare("DELETE FROM rate_limit_events WHERE key LIKE ?")
+      .run(`live-url-checklist:${fixture.userId}%`);
     vi.mocked(safeFetchPublicPage).mockReset();
     vi.mocked(safeFetchPublicPage).mockImplementation(async (url: string) =>
       page(url, "Jane Doe, age 40, Austin TX. Relatives and phone numbers."),
@@ -386,6 +389,62 @@ describe("POST /api/cases/[id]/live-url with brokerId (broker checklist)", () =>
     expect(res.status).toBe(403);
     const rows = await db.query.exposureCandidates.findMany({ where: eq(exposureCandidates.caseId, caseId) });
     expect(rows.some((r) => r.captureMethod === "user_reported")).toBe(false);
+  });
+
+  /** Pretend `n` requests were already made under `key` within the hour. */
+  function spend(key: string, n: number) {
+    const insert = sqlite.prepare("INSERT INTO rate_limit_events (id, key, created_at) VALUES (?, ?, ?)");
+    const at = new Date().toISOString();
+    for (let i = 0; i < n; i++) insert.run(uuid(), key, at);
+  }
+  const countKey = (key: string) =>
+    (sqlite.prepare("SELECT COUNT(*) AS n FROM rate_limit_events WHERE key = ?").get(key) as { n: number }).n;
+
+  it("checklist reports have their own bucket: a spent generic live-URL limit does not block them", async () => {
+    const { caseId } = await caseWithStatus(fixture, "candidate_review");
+    spend(`live-url:${fixture.userId}`, 10);
+    // The generic fetch is limited…
+    expect((await addUrl(caseId, "https://example.com/jane")).status).toBe(429);
+    // …a report on the broker's own site is not, and does not use the generic budget.
+    const res = await addBrokerUrl(caseId, "https://www.spokeo.com/Jane-Doe/p1", "spokeo");
+    expect(res.status).toBe(201);
+    expect(countKey(`live-url:${fixture.userId}`)).toBe(10);
+    expect(countKey(`live-url-checklist:${fixture.userId}`)).toBe(1);
+    expect(countKey(`live-url-checklist:${fixture.userId}:${caseId}`)).toBe(1);
+  });
+
+  it("checklist reports are limited to 25 per case and 40 per user per hour", async () => {
+    const { caseId } = await caseWithStatus(fixture, "candidate_review");
+    spend(`live-url-checklist:${fixture.userId}:${caseId}`, 25);
+    expect((await addBrokerUrl(caseId, "https://www.spokeo.com/Jane-Doe/p2", "spokeo")).status).toBe(429);
+    expect(safeFetchPublicPage).not.toHaveBeenCalled();
+
+    // Another case still has room, until the user's overall checklist budget is spent.
+    const { caseId: other } = await caseWithStatus(fixture, "candidate_review");
+    spend(`live-url-checklist:${fixture.userId}`, 39);
+    expect((await addBrokerUrl(other, "https://www.spokeo.com/Jane-Doe/p3", "spokeo")).status).toBe(201);
+    expect((await addBrokerUrl(other, "https://www.spokeo.com/Jane-Doe/p4", "spokeo")).status).toBe(429);
+    expect(safeFetchPublicPage).toHaveBeenCalledTimes(1);
+  });
+
+  it("the checklist bucket never fetches off the broker's domains (SSRF / domain checks unchanged)", async () => {
+    const { caseId } = await caseWithStatus(fixture, "candidate_review");
+    spend(`live-url:${fixture.userId}`, 10);
+    for (const url of ["http://127.0.0.1/admin", "https://example.com/jane", "https://spokeo.com.evil.test/p"]) {
+      expect((await addBrokerUrl(caseId, url, "spokeo")).status).toBe(400);
+    }
+    expect(safeFetchPublicPage).not.toHaveBeenCalled();
+  });
+
+  it("a malformed request does not spend any budget", async () => {
+    const { caseId } = await caseWithStatus(fixture, "candidate_review");
+    const bad = await liveUrlPost(
+      jsonRequest(`http://localhost/api/cases/${caseId}/live-url`, "POST", { url: "", brokerId: "spokeo" }),
+      ctx(caseId),
+    );
+    expect(bad.status).toBe(400);
+    expect(countKey(`live-url-checklist:${fixture.userId}`)).toBe(0);
+    expect(countKey(`live-url:${fixture.userId}`)).toBe(0);
   });
 
   it("consent and paused gates still apply before anything is fetched", async () => {

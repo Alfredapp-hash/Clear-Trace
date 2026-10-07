@@ -23,7 +23,7 @@ describe("broker playbooks", () => {
   });
 
   it("returns manual_research (no invented address) when no route is known", () => {
-    const r = resolveFromPlaybook("https://www.zlookup.com/x");
+    const r = resolveFromPlaybook("https://publicrecordsnow.com/x");
     expect(r?.contactMethod).toBe("manual_research");
     expect(r?.contactValue).toBe("");
     expect(r?.confidence).toBeLessThanOrEqual(0.3);

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Badge, Button, InlineResult, type InlineResultView } from "../ui";
 import type { BrokerChecklistView, ChecklistGroup, ChecklistRow } from "@/lib/brokers/checklist";
 import { formatDate, formatDateTime, itemStatusLabel, plural } from "@/lib/ux/plain-status";
-import { foundKey, latestResult, matchKey } from "./useCaseMutations";
+import { foundKey, latestResult, matchKey, PLACE_KEY } from "./useCaseMutations";
 
 const GROUPS: ReadonlyArray<{ id: ChecklistGroup; title: string; hint: string }> = [
   { id: "found", title: "Found", hint: "Listings you found. Prepare opt-outs for these first." },
@@ -35,6 +35,7 @@ export function BrokerChecklist({
   onMarkNotListed,
   onClearCheck,
   onFoundListing,
+  onAddPlace,
 }: {
   checklist: BrokerChecklistView;
   casePaused: boolean;
@@ -46,6 +47,8 @@ export function BrokerChecklist({
   /** Undo "Not listed" (back to "To check"). */
   onClearCheck: (matchId: string) => void;
   onFoundListing: (brokerId: string, url: string) => Promise<boolean>;
+  /** Save a city and state on the case; shown when a search cannot prefill without one. */
+  onAddPlace?: (cityState: string) => Promise<boolean>;
 }) {
   const [open, setOpen] = useState<Partial<Record<ChecklistGroup, boolean>>>({
     to_check: true,
@@ -54,6 +57,8 @@ export function BrokerChecklist({
   const [showAll, setShowAll] = useState<Partial<Record<ChecklistGroup, boolean>>>({});
   const [pasting, setPasting] = useState<string | null>(null);
   const [pasteUrl, setPasteUrl] = useState("");
+  const [place, setPlace] = useState("");
+  const needsPlace = checklist.rows.some((r) => r.group === "to_check" && r.prefillHint === "add_place");
   const disabled = busy || casePaused;
   const { counts } = checklist;
   const total = checklist.rows.length;
@@ -143,7 +148,13 @@ export function BrokerChecklist({
             {row.lastCheck.checkedAt && <> on {formatDate(row.lastCheck.checkedAt)}</>}
           </p>
         )}
-        {!row.prefilled && row.group === "to_check" && (
+        {!row.prefilled && row.group === "to_check" && row.prefillHint === "add_place" && (
+          <p data-prefill-hint="add_place" className="mt-1 text-xs text-[var(--muted)]">
+            This search needs a city and state. Add one above the list to prefill it — for now the
+            link opens the broker&apos;s site, so search for your name and city there.
+          </p>
+        )}
+        {!row.prefilled && row.group === "to_check" && row.prefillHint !== "add_place" && (
           <p className="mt-1 text-xs text-[var(--muted)]">
             Opens the broker&apos;s site — search for your name there.
           </p>
@@ -200,6 +211,39 @@ export function BrokerChecklist({
         &quot;prove you&apos;re human&quot; check, solve it there — ClearTrace never visits these
         search pages or answers those checks for you.
       </p>
+      {needsPlace && onAddPlace && (
+        <form
+          className="flex flex-wrap items-end gap-2 rounded-xl border border-white/[0.06] p-3"
+          onSubmit={async (e) => {
+            e.preventDefault();
+            const value = place.trim();
+            if (value && (await onAddPlace(value))) setPlace("");
+          }}
+        >
+          <div className="min-w-[14rem] flex-1">
+            <label htmlFor="checklist-place" className="block text-xs font-medium text-slate-200">
+              City and state
+            </label>
+            <p id="checklist-place-hint" className="text-xs text-[var(--muted)]">
+              Some searches need where you live or used to live. Saved to this case, encrypted.
+            </p>
+            <input
+              id="checklist-place"
+              value={place}
+              onChange={(e) => setPlace(e.target.value)}
+              placeholder="Dayton, OH"
+              aria-describedby="checklist-place-hint"
+              autoComplete="off"
+              disabled={disabled}
+              className="mt-1 w-full rounded-lg border border-white/10 bg-white/[0.03] px-3 py-2 text-sm text-slate-100"
+            />
+          </div>
+          <Button type="submit" size="sm" disabled={disabled || !place.trim()}>
+            {loading === PLACE_KEY ? "Saving…" : "Save city and state"}
+          </Button>
+          <InlineResult result={results[PLACE_KEY]} onRetry={() => onRetry(PLACE_KEY)} />
+        </form>
+      )}
       <div className="flex flex-wrap gap-2 text-xs">
         {GROUPS.map((g) => (
           <Badge key={g.id} tone={g.id === "found" ? "danger" : g.id === "not_listed" ? "success" : g.id === "needs_manual" ? "warning" : "neutral"}>

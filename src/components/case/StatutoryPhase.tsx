@@ -6,6 +6,7 @@ import { DROP_FILING_KEY, useCaseActions } from "./useCaseMutations";
 import type { StatutorySummary } from "@/lib/statutory/drop";
 import {
   DROP_EARLIEST_FILING_DATE,
+  DROP_HOW_IT_WORKS_URL,
   DROP_IDENTIFIER_TYPES,
   DROP_OFFICIAL_URL,
 } from "@/lib/statutory/constants";
@@ -120,13 +121,30 @@ export default function StatutoryPhase({
                   checked={Boolean(ready[t.id])}
                   onChange={(e) => setReady((r) => ({ ...r, [t.id]: e.target.checked }))}
                 />
-                <span>{t.label}</span>
+                <span>
+                  {t.label}
+                  <span className="ml-1 text-xs text-[var(--muted)]">
+                    {t.required ? "(needed to submit)" : "(optional)"}
+                  </span>
+                </span>
               </label>
             </li>
           ))}
         </ul>
         <p className="mt-1.5 text-xs text-[var(--muted)]">
-          This list is just a reminder — nothing you tick here is stored or sent.
+          These are the kinds of details the state&apos;s DROP guide lists (checked October 2026).
+          DROP verifies California residency separately, and you can add more than one of each
+          except date of birth. Adding more may help brokers find your records, but matches are
+          not guaranteed, and DROP may change its form.{" "}
+          <a
+            href={DROP_HOW_IT_WORKS_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-teal-300 hover:underline"
+          >
+            How to find each one
+          </a>
+          . This list is just a reminder — nothing you tick here is stored or sent.
         </p>
       </fieldset>
 

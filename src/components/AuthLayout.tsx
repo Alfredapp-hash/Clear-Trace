@@ -4,9 +4,9 @@ import { CURATED_BROKER_COUNT } from "@/lib/brokers/count";
 
 /** Count kept in sync with the broker universe by count.test.ts (the catalog stays server-side). */
 const AUTH_BULLETS = [
-  `${CURATED_BROKER_COUNT}+ data brokers covered`,
+  `Removal playbooks for ${CURATED_BROKER_COUNT} data brokers, plus the CA, OR and TX registries`,
   "Private by default — AI runs on your device",
-  "Removal certificates with tamper-evident audit trail",
+  "Removal certificates backed by a hash-linked activity log",
 ];
 
 export function AuthLayout({

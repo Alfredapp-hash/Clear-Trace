@@ -15,13 +15,26 @@ export const DROP_DELETION_DAYS = 90;
 
 /**
  * KINDS of identifiers the user may want to have ready when filing — never values.
- * DROP decides which fields it asks for; these are what people-search listings typically
- * key on, so adding them helps brokers match.
+ *
+ * Matches the data types DROP's own consumer guide lists (verified 2026-10-07 against
+ * https://privacy.ca.gov/drop/how-drop-works/, "Before you start" and "Step 2 Create your
+ * profile"): names (including maiden names), date of birth, ZIP code, email addresses, phone
+ * numbers, mobile advertising IDs (MAIDs), connected TV IDs and vehicle identification
+ * numbers (VINs). Only name, date of birth and ZIP code are needed to submit; MAID, connected
+ * TV ID and VIN are optional. Every type except date of birth accepts more than one value.
+ * Residency is confirmed separately through the California Identity Gateway (or Login.gov)
+ * and is not part of this list. DROP may change its form; this is a reminder only.
  */
-export const DROP_IDENTIFIER_TYPES: ReadonlyArray<{ id: string; label: string }> = [
-  { id: "full_name", label: "Full legal name, plus any former names or aliases" },
-  { id: "date_of_birth", label: "Date of birth" },
-  { id: "zip_codes", label: "Current and past ZIP codes" },
-  { id: "emails", label: "Email addresses you use or have used" },
-  { id: "phones", label: "Phone numbers you use or have used" },
+export const DROP_IDENTIFIER_TYPES: ReadonlyArray<{ id: string; label: string; required: boolean }> = [
+  { id: "full_name", label: "Your name, plus any other names you have used (including maiden names)", required: true },
+  { id: "date_of_birth", label: "Date of birth", required: true },
+  { id: "zip_codes", label: "ZIP code (you can add past ZIP codes too)", required: true },
+  { id: "emails", label: "Email addresses you use or have used", required: false },
+  { id: "phones", label: "Phone numbers you use or have used", required: false },
+  { id: "maid", label: "Mobile advertising ID (MAID) from your phone's settings", required: false },
+  { id: "connected_tv_id", label: "Connected TV ID", required: false },
+  { id: "vin", label: "Vehicle identification number (VIN)", required: false },
 ];
+
+/** Official DROP page that explains each data type (rendered as a link only — never fetched). */
+export const DROP_HOW_IT_WORKS_URL = "https://privacy.ca.gov/drop/how-drop-works/";

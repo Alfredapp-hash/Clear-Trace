@@ -1,9 +1,9 @@
 {
   "name": "cleartrace",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "private": true,
   "cleartrace": {
-    "schemaVersion": 4
+    "schemaVersion": 5
   },
   "bin": {
     "create-cleartrace": "./scripts/create-cleartrace.mjs"

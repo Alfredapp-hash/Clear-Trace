@@ -4,6 +4,23 @@ import { requireCaseAccess } from "@/lib/auth/case-access";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
 import { jsonError, jsonOk, workflowErrorResponse } from "@/lib/api";
 
+/** "Add a page I found": any public URL, per user per hour. */
+const LIVE_URL_LIMIT_PER_HOUR = 10;
+/** Checklist "I found my listing" reports, per user per hour (all cases). */
+const CHECKLIST_REPORT_LIMIT_PER_HOUR = 40;
+/** …and per user per case per hour, so one case cannot take the whole budget. */
+const CHECKLIST_REPORT_LIMIT_PER_CASE_PER_HOUR = 25;
+
+async function checklistReportRateLimited(userId: string, caseId: string): Promise<boolean> {
+  const perCase = await checkRateLimit(
+    `live-url-checklist:${userId}:${caseId}`,
+    CHECKLIST_REPORT_LIMIT_PER_CASE_PER_HOUR,
+  );
+  if (!perCase.allowed) return true;
+  const perUser = await checkRateLimit(`live-url-checklist:${userId}`, CHECKLIST_REPORT_LIMIT_PER_HOUR);
+  return !perUser.allowed;
+}
+
 export async function POST(
   request: Request,
   { params }: { params: Promise<{ id: string }> },
@@ -14,9 +31,6 @@ export async function POST(
   if (access instanceof Response) return access;
   const { session } = access;
 
-  const rate = await checkRateLimit(`live-url:${session.userId}`, 10);
-  if (!rate.allowed) return jsonError("Rate limit exceeded", 429);
-
   const body = await request.json().catch(() => ({}));
   const { url, brokerId } = body as { url?: unknown; brokerId?: unknown };
 
@@ -24,6 +38,14 @@ export async function POST(
   if (brokerId !== undefined && brokerId !== null && (typeof brokerId !== "string" || !brokerId)) {
     return jsonError("brokerId must be a broker id");
   }
+
+  // Validated input only spends the budget. A checklist report (brokerId set) has its own,
+  // larger bucket: its URL must be on that broker's own domains (checked before any fetch),
+  // so it cannot be used to fetch arbitrary pages under the higher limit.
+  const limited = typeof brokerId === "string"
+    ? await checklistReportRateLimited(session.userId, id)
+    : !(await checkRateLimit(`live-url:${session.userId}`, LIVE_URL_LIMIT_PER_HOUR)).allowed;
+  if (limited) return jsonError("Rate limit exceeded", 429);
 
   try {
     const result = await addLiveUrlCandidate(session, id, url, {

@@ -1,3 +1,4 @@
+import { matchPlatformByUrl } from "./platform-routes";
 import type {
   ExposureCategory,
   ExposureClassification,
@@ -55,7 +56,9 @@ function inferSourceClass(
   if (sourceType === "data_broker" || sourceType === "people_search") {
     return "aggregation";
   }
-  if (/facebook|twitter|instagram|linkedin|tiktok/i.test(url)) {
+  // Same domain matching as the report-route lookup (x.com, youtu.be, threads.net, …), so
+  // a platform page gets the platform remedy and template, not a broker opt-out.
+  if (matchPlatformByUrl(url)) {
     return "platform_content";
   }
   return "aggregation";

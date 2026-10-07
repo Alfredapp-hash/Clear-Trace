@@ -151,7 +151,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "suppression-requests page behind a bot challenge on 2026-10-05; not re-read; flow (listing URL + automated verification call) per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05; search URL: pattern not live-verified (bot challenge)",
+      "sourceNote": "suppression-requests page and privacy page still behind a bot challenge on 2026-10-07 (the Internet Archive copy of the privacy page, Sept. 2026, is also the challenge); not re-read. Flow (listing URL, reason, automated verification call to a phone you control; one request per listing) per third-party opt-out guides (Incogni / DeleteMe / Offlist / meprism 2026), 2026-10-07; a privacy email quoted by one guide was not confirmed from Whitepages' own pages and is not stored; search URL: pattern not live-verified (bot challenge)",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -163,7 +163,7 @@
       "type": "data_broker",
       "status": "active",
       "estimatedReach": "high",
-      "privacyUrl": "https://www.beenverified.com/privacy",
+      "privacyUrl": "https://www.beenverified.com/faq/privacy/",
       "detection": {
         "mode": "guided_manual",
         "searchUrlTemplate": "https://www.beenverified.com/people/{first}-{last}/",
@@ -172,8 +172,8 @@
       "optOut": {
         "method": "web_form",
         "url": "https://www.beenverified.com/svc/optout/search/",
-        "email": null,
-        "emailSource": null,
+        "email": "privacy@beenverified.com",
+        "emailSource": "BeenVerified privacy policy § 18.3 (https://www.beenverified.com/faq/privacy/, read 2026-10-07) — requests to opt out, access or delete via the online request form or this address",
         "requiredFields": [],
         "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
@@ -192,8 +192,8 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "/app/optout/search redirects to /svc/optout/search/ (page behind a bot challenge on 2026-10-05; not re-read); CPPA filing names the BeenVerified opt-out as the rights page; email confirmation per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "/app/optout/search redirects to /svc/optout/search/ (page still behind a bot challenge on 2026-10-07; not re-read). Privacy policy read 2026-10-07 (The Lifetime Value Co. LLC): opt-out / deletion requests by online request form or privacy@beenverified.com. CPPA filing names the BeenVerified opt-out as the rights page; email confirmation per third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     },
     {
@@ -333,7 +333,7 @@
       "type": "people_search",
       "status": "active",
       "estimatedReach": "high",
-      "privacyUrl": null,
+      "privacyUrl": "https://www.fastpeoplesearch.com/privacy",
       "detection": {
         "mode": "guided_manual",
         "searchUrlTemplate": "https://www.fastpeoplesearch.com/name/{first}-{last}",
@@ -341,17 +341,20 @@
       },
       "optOut": {
         "method": "web_form",
-        "url": "https://www.fastpeoplesearch.com/removal",
+        "url": "https://www.fastpeoplesearch.com/optout",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
-        "requiresPhoneVerify": "unknown",
-        "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "requiredFields": [
+          "full_name",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
+        "requiresPhoneVerify": false,
+        "requiresIdUpload": false,
+        "hasCaptcha": true,
+        "scope": "perListing"
       },
-      "expectedTurnaroundDays": null,
+      "expectedTurnaroundDays": 3,
       "relistIntervalDays": null,
       "parentGroup": "mississippi_tornado_alley",
       "lawfulBasis": [
@@ -362,8 +365,8 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "removal page page behind a bot challenge on 2026-10-05; not re-read; operator per CPPA registry",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "/optout ('Do Not Sell/Right to Opt-out', linked as the Opt-Out Form from the privacy notice § 6.2.2) read 2026-10-07: name + email + Turnstile captcha, then the emailed link (valid 24 hours) opens a form that must match the record to remove; the page says to allow 3 days. Deletion / know requests: /privacy-rights or (866) 679-8725 (privacy notice). /removal still behind a bot challenge; operator per CPPA registry",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     },
     {
@@ -385,12 +388,14 @@
         "url": "https://www.truepeoplesearch.com/removal",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "hasCaptcha": true,
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -403,7 +408,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "removal page page behind a bot challenge on 2026-10-05; not re-read",
+      "sourceNote": "removal page still behind a bot challenge on 2026-10-07; not re-read. Flow (email + CAPTCHA, emailed link, then search and select each listing to remove; footer 'Do Not Sell My Personal Information') per third-party opt-out guides (DeleteMe / Incogni / redact.dev / OneRep 2026), 2026-10-07",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -444,7 +449,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "thatsthem.com/optout behind a bot check on 2026-10-05; Spokeo, Inc. CPPA filing lists ThatsThem; name-page pattern from indexed URLs",
+      "sourceNote": "thatsthem.com/optout and /privacy still behind a Cloudflare Turnstile check on 2026-10-07; not re-read. Guides confirm the /optout form but give no consistent field list; an opt-out email quoted by one guide was not confirmed from ThatsThem's own pages and is not stored. Spokeo, Inc. CPPA filing lists ThatsThem; name-page pattern from indexed URLs",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -500,15 +505,20 @@
       },
       "optOut": {
         "method": "web_form",
-        "url": "https://www.mylife.com/ccpa/index.pubview",
+        "url": "https://www.mylife.com/privacyrequest",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "listing_url",
+          "full_name",
+          "city_state",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "hasCaptcha": true,
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -521,7 +531,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "CCPA page page behind a bot challenge on 2026-10-05; not re-read; operator Insightbridge LLC per CPPA registry",
+      "sourceNote": "Every mylife.com path (including unknown ones) is behind a bot challenge on 2026-10-07; not read directly. URL changed from /ccpa/index.pubview to /privacyrequest: Incogni's MyLife guide (updated 2026-06-22) says the old form now returns 404 and describes /privacyrequest (profile URL + name + city/state/ZIP + email, CAPTCHA, emailed verification link). Other guides give email / phone channels that were not confirmed from MyLife's own pages. Operator Insightbridge LLC per CPPA registry",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -628,12 +638,15 @@
         "url": "https://nuwber.com/removal/link",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "listing_url",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
         "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -646,7 +659,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand; search URL: pattern from indexed URLs",
+      "sourceNote": "Host still does not resolve from the research network on 2026-10-07 (the local resolver and 1.1.1.1 / 8.8.8.8 queries are all filtered, so it is a local block, not a dead domain) — not read directly. Opt-out at /removal/link (also the 'Remove My Info' footer link on a profile): profile URL + email, then click the emailed confirmation link; removal in about 24 hours (third-party opt-out guides: Incogni / Optery / DeleteMe / IDStrong, 2026-10-07); search URL: pattern from indexed URLs",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -792,11 +805,14 @@
         "url": "https://www.peoplefinders.com/opt-out",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "full_name",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
+        "hasCaptcha": true,
         "scope": "unknown"
       },
       "expectedTurnaroundDays": null,
@@ -810,7 +826,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "opt-out page page behind a bot challenge on 2026-10-05; not re-read",
+      "sourceNote": "opt-out page still behind a bot challenge on 2026-10-07; not re-read. Flow (choose 'Right to Opt-out', name + email + CAPTCHA, emailed link, then a longer record-suppression form) per third-party opt-out guides (redact.dev / Offlist / OneRep / Crabclear 2026), 2026-10-07; guides say it suppresses display rather than deleting",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -876,11 +892,14 @@
         "url": "https://www.familytreenow.com/optout",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "full_name",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
+        "hasCaptcha": true,
         "scope": "unknown"
       },
       "expectedTurnaroundDays": null,
@@ -894,7 +913,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "opt-out page page behind a bot challenge on 2026-10-05; not re-read",
+      "sourceNote": "opt-out page still behind a bot challenge on 2026-10-07; not re-read. Flow (request for yourself, name + email + CAPTCHA, emailed link, then a second form matched against the listing) per third-party opt-out guides (redact.dev / DeleteMe / Optery / Offlist 2026), 2026-10-07",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -999,11 +1018,14 @@
         "url": "https://www.cyberbackgroundchecks.com/removal",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "full_name",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
+        "hasCaptcha": true,
         "scope": "unknown"
       },
       "expectedTurnaroundDays": null,
@@ -1017,7 +1039,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "removal page page behind a bot challenge on 2026-10-05; not re-read; operator per CPPA registry",
+      "sourceNote": "removal page still behind a bot challenge on 2026-10-07; not re-read. Flow (name + email + reCAPTCHA, emailed 'Complete your privacy request' link, then a second detailed form) per third-party opt-out guides (redact.dev / Optery / Cloaked 2026), 2026-10-07; operator per CPPA registry",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -1029,7 +1051,7 @@
       "type": "data_broker",
       "status": "active",
       "estimatedReach": "medium",
-      "privacyUrl": "https://www.peoplelooker.com/privacy",
+      "privacyUrl": "https://www.peoplelooker.com/privacy-policy/",
       "detection": {
         "mode": "serp_only",
         "searchUrlTemplate": null,
@@ -1038,8 +1060,8 @@
       "optOut": {
         "method": "web_form",
         "url": "https://www.peoplelooker.com/svc/optout/search/",
-        "email": null,
-        "emailSource": null,
+        "email": "privacy@peoplelooker.com",
+        "emailSource": "PeopleLooker privacy policy §§ 18.3 and 19.12 (https://www.peoplelooker.com/privacy-policy/, read 2026-10-07) — opt-out / deletion requests via online request form or this address",
         "requiredFields": [],
         "requiresEmailConfirm": "unknown",
         "requiresPhoneVerify": "unknown",
@@ -1058,8 +1080,8 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "/optout redirects to /svc/optout/search/ (page behind a bot challenge on 2026-10-05; not re-read); a BeenVerified opt-out does not cover PeopleLooker (third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05)",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "/optout redirects to /svc/optout/search/ (page still behind a bot challenge on 2026-10-07; not re-read). Privacy policy read 2026-10-07 (The Lifetime Value Co. LLC): opt-out / deletion requests by online request form or privacy@peoplelooker.com. A BeenVerified opt-out does not cover PeopleLooker (third-party opt-out guides (Incogni / Optery / DeleteMe), 2026-10-05)",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     },
     {
@@ -1081,12 +1103,17 @@
         "url": "https://clustrmaps.com/bl/opt-out",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
+        "requiredFields": [
+          "listing_url",
+          "full_name",
+          "email",
+          "address"
+        ],
         "requiresEmailConfirm": "unknown",
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
         "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -1096,7 +1123,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "sourceNote": "Host resolves to 127.0.0.1 from the research network on 2026-10-07 (local block) — not read directly. Opt-out at /bl/opt-out (also 'Remove My Info' at the bottom of a listing): listing URL + name + email + address exactly as listed, then tick the items to remove (third-party opt-out guides: Incogni / DeleteMe / Cloaked / meprism 2026, 2026-10-07)",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -1108,23 +1135,25 @@
       "type": "data_broker",
       "status": "active",
       "estimatedReach": "low",
-      "privacyUrl": null,
+      "privacyUrl": "https://www.usatrace.com/privacy-policy/",
       "detection": {
         "mode": "serp_only",
         "searchUrlTemplate": null,
         "profileUrlPattern": null
       },
       "optOut": {
-        "method": "unknown",
-        "url": null,
-        "email": null,
-        "emailSource": null,
-        "requiredFields": [],
+        "method": "web_form",
+        "url": "https://www.usatrace.com/your-privacy/",
+        "email": "research@usatrace.com",
+        "emailSource": "USATrace privacy policy, 'Contact us' section (https://www.usatrace.com/privacy-policy/, read 2026-10-07)",
+        "requiredFields": [
+          "full_name"
+        ],
         "requiresEmailConfirm": "unknown",
-        "requiresPhoneVerify": "unknown",
-        "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "requiresPhoneVerify": false,
+        "requiresIdUpload": false,
+        "hasCaptcha": true,
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -1132,8 +1161,8 @@
       "lawfulBasis": [],
       "registries": [],
       "source": "curated",
-      "sourceNote": "/optout returns 404; /your-privacy/ is an explainer, not a form (2026-10-05)",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "/your-privacy/ read 2026-10-07: search for your profile, then press the block button next to each matching result (reCAPTCHA); blocks the preview on USATrace.com and QuickPeopleTrace.com only (up to 48 hours) and does not remove the data from the source (the policy names PeopleFinders as its data partner). Privacy contact research@usatrace.com per the privacy policy (QuickLocate LLC). Earlier: /optout 404 (2026-10-05)",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     },
     {
@@ -1195,15 +1224,19 @@
       },
       "optOut": {
         "method": "web_form",
-        "url": "https://www.publicdatausa.com/remove.php",
+        "url": null,
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
+        "requiredFields": [
+          "listing_url",
+          "full_name",
+          "email"
+        ],
         "requiresEmailConfirm": "unknown",
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "hasCaptcha": true,
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -1213,7 +1246,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "sourceNote": "Host does not resolve from the research network on 2026-10-07 (local block) — not read directly. The previous /remove.php URL is not confirmed by any source and was removed. Guides disagree: Optery and Clearnym use the 'Remove My Information' link at the bottom of the listing (listing URL + name + email, CAPTCHA, email confirmation per Clearnym); Incogni (2023) gives /optout.php (third-party opt-out guides, 2026-10-07)",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -1225,7 +1258,7 @@
       "type": "data_broker",
       "status": "active",
       "estimatedReach": "medium",
-      "privacyUrl": null,
+      "privacyUrl": "https://www.smartbackgroundchecks.com/privacy",
       "detection": {
         "mode": "guided_manual",
         "searchUrlTemplate": "https://www.smartbackgroundchecks.com/people/{first}-{last}",
@@ -1257,8 +1290,8 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "/optout redirects to /remove; page read 2026-10-05: email + name + captcha, then an emailed link opens the opt-out form; search URL: pattern from indexed profile URLs; not live-verified (bot challenge)",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "/optout redirects to /remove; page read 2026-10-05: email + name + captcha, then an emailed link opens the opt-out form. Privacy notice read 2026-10-07 links /optout as its Opt-Out Form (also phone 800-571-0614). Search URL: pattern from indexed profile URLs; not live-verified (bot challenge)",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     },
     {
@@ -1280,12 +1313,16 @@
         "url": "https://www.idtrue.com/optout/",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "full_name",
+          "city_state",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "hasCaptcha": true,
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -1295,7 +1332,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "sourceNote": "Host does not resolve from the research network on 2026-10-07 (local block) — not read directly. Opt-out at /optout (footer 'Opt Out & Removal'): search name + city/state, pick 'This is me', email + CAPTCHA, then click the emailed link (third-party opt-out guides: Incogni / Optery / DeleteMe / Comparitech, 2026-10-07)",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -1347,16 +1384,16 @@
       "domain": "arrestfacts.com",
       "aliasDomains": [],
       "type": "public_records",
-      "status": "active",
+      "status": "defunct",
       "estimatedReach": "low",
       "privacyUrl": null,
       "detection": {
-        "mode": "serp_only",
+        "mode": "not_listable",
         "searchUrlTemplate": null,
         "profileUrlPattern": null
       },
       "optOut": {
-        "method": "unknown",
+        "method": "none",
         "url": null,
         "email": null,
         "emailSource": null,
@@ -1373,9 +1410,9 @@
       "lawfulBasis": [],
       "registries": [],
       "source": "curated",
-      "sourceNote": "arrestfacts.com now serves an 'nkreeger.com' records site and the old /ng/control/privacy path redirects to a 404 (2026-10-05)",
-      "lastVerifiedAt": "2026-10-05",
-      "jurisdictionNotes": null
+      "sourceNote": "2026-10-07: every arrestfacts.com path 301-redirects to nkreeger.com (e.g. /ng/control/privacy -> nkreeger.com/ng/control/privacy, which is a 404), a differently branded arrest-records site whose operator is not verified; the ArrestFacts brand and its 'information control' opt-out are no longer served. nkreeger.com's own privacy page says to use an 'Information Control' link on record pages, but no such link was found on a sampled record page (2026-10-07). Earlier: 2026-10-05 same redirect",
+      "lastVerifiedAt": "2026-10-07",
+      "jurisdictionNotes": "Defunct: the broker no longer operates this domain (it redirects to nkreeger.com). Kept so stored rows still resolve; never queued."
     },
     {
       "id": "mugshots",
@@ -1505,7 +1542,7 @@
       "type": "people_search",
       "status": "active",
       "estimatedReach": "medium",
-      "privacyUrl": null,
+      "privacyUrl": "https://www.neighborwho.com/privacy-policy/",
       "detection": {
         "mode": "serp_only",
         "searchUrlTemplate": null,
@@ -1514,8 +1551,8 @@
       "optOut": {
         "method": "web_form",
         "url": "https://www.neighborwho.com/svc/optout/search/",
-        "email": null,
-        "emailSource": null,
+        "email": "privacy@neighborwho.com",
+        "emailSource": "NeighborWho privacy policy §§ 18.3 and 19.12 (https://www.neighborwho.com/privacy-policy/, read 2026-10-07) — opt-out / deletion requests via online request form or this address",
         "requiredFields": [],
         "requiresEmailConfirm": "unknown",
         "requiresPhoneVerify": "unknown",
@@ -1534,8 +1571,8 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "/app/optout/search redirects to /svc/optout/search/ (page behind a bot challenge on 2026-10-05; not re-read)",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "/app/optout/search redirects to /svc/optout/search/ (page still behind a bot challenge on 2026-10-07; not re-read). Privacy policy read 2026-10-07 (The Lifetime Value Co. LLC): opt-out / deletion requests by online request form or privacy@neighborwho.com",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     },
     {
@@ -1874,12 +1911,16 @@
         "url": "https://www.backgroundalert.com/optout/",
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "full_name",
+          "city_state",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
-        "requiresIdUpload": "unknown",
+        "requiresIdUpload": true,
         "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -1889,7 +1930,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "sourceNote": "Host does not resolve from the research network on 2026-10-07 (local block) — not read directly. Opt-out at /optout: search name + state, 'that's me', email confirmation link, then identity verification (guides describe a photo of an ID with photo / number redacted; DeleteMe also lists fax / mail); removal within about 7 business days (third-party opt-out guides: Optery / Incogni / DeleteMe / meprism 2026, 2026-10-07)",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -2515,15 +2556,19 @@
       },
       "optOut": {
         "method": "web_form",
-        "url": "https://backgroundcheck.run/optout",
+        "url": null,
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
+        "requiredFields": [
+          "listing_url",
+          "full_name",
+          "email"
+        ],
+        "requiresEmailConfirm": true,
         "requiresPhoneVerify": "unknown",
         "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "hasCaptcha": true,
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -2533,7 +2578,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "host did not resolve from the research network on 2026-10-05 (local DNS filtering suspected) — re-check by hand",
+      "sourceNote": "Host does not resolve from the research network on 2026-10-07 (local block) — not read directly. The previous /optout URL is not confirmed by any source and was removed: guides describe a 'Control this profile' link on the listing page that opens a form (profile URL + name + email, CAPTCHA), then an email verification link; deletion in 24-48 hours (third-party opt-out guides: Incogni / Optery / DeleteMe / PurePrivacy, 2026-10-07)",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -2609,7 +2654,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "allpeople.com is now a business-professional directory (2026-10-05); /remove behind a bot challenge",
+      "sourceNote": "allpeople.com is now a business-professional directory (2026-10-05); /remove and /privacy still behind a bot challenge on 2026-10-07. Guides describe a Remove / Removal Tool link next to the listing or in the footer (reason + CAPTCHA) but disagree on the label and URL (third-party opt-out guides: DeleteMe / Optery / Crabclear / PrivacyOn 2026, 2026-10-07); /remove not confirmed",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -2767,7 +2812,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "'remove-my-info' linked from the peoplewhiz.com footer (2026-10-05); form itself behind a bot challenge",
+      "sourceNote": "'remove-my-info' linked from the peoplewhiz.com footer (2026-10-05); form and privacy page still behind a bot challenge on 2026-10-07. Guides describe a name + state search, select the record, then email verification (redact.dev / Offlist / meprism 2026); an opt-out email quoted by one guide was not confirmed from PeopleWhiz's own pages and is not stored",
       "lastVerifiedAt": "2026-10-05",
       "jurisdictionNotes": null
     },
@@ -2928,8 +2973,8 @@
       "lawfulBasis": [],
       "registries": [],
       "source": "curated",
-      "sourceNote": "/optout is a redirect loop (TOO_MANY_REDIRECTS) and the home page is a JS app with no opt-out link found (2026-10-05)",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "Re-checked 2026-10-07: the site is a single-page app whose routes are only /, /people-search, /background-check, /criminal-records, /reverse-phone-lookup, /find-old-friends and /blog; it has no privacy policy, opt-out page or privacy email (every other path returns the app shell). Third-party guides disagree: DeleteMe says it is owned by PeopleFinders and removal goes through PeopleFinders; Incogni (2022) gives /static/view/optout/; Crabclear (2026) gives /optout (403 to them). None confirmed by the operator, so the method stays unknown. Earlier: /optout redirect loop (2026-10-05)",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     },
     {
@@ -2982,7 +3027,7 @@
       "type": "data_broker",
       "status": "active",
       "estimatedReach": "medium",
-      "privacyUrl": "https://seamless.ai/privacy",
+      "privacyUrl": "https://seamless.ai/policies/privacy-policy",
       "detection": {
         "mode": "not_listable",
         "searchUrlTemplate": null,
@@ -2992,7 +3037,7 @@
         "method": "web_form",
         "url": "https://preferences.seamless.ai/",
         "email": "privacy@seamlessleads.com",
-        "emailSource": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) — Seamless Contacts, Inc. filing",
+        "emailSource": "Seamless.AI privacy policy §§ 9 and 15 (https://seamless.ai/policies/privacy-policy, read 2026-10-07) and the CPPA data broker registry (Seamless Contacts, Inc. filing, retrieved 2026-10-05)",
         "requiredFields": [],
         "requiresEmailConfirm": "unknown",
         "requiresPhoneVerify": "unknown",
@@ -3012,8 +3057,8 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "CPPA data broker registry (registry.csv, retrieved 2026-10-05) names preferences.seamless.ai as the rights page (bot challenge on 2026-10-05)",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "Privacy policy read 2026-10-07: access / correct / delete through the 'Privacy Request Center' (https://preferences.seamless.ai/), appeals and privacy questions to privacy@seamlessleads.com; the old privacyUrl /privacy now 404s. preferences.seamless.ai itself still behind a bot challenge on 2026-10-07; the CPPA registry also names it as the rights page",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": "B2B / marketing data: no consumer-facing listing to find; send a rights (deletion) request"
     },
     {
@@ -3152,23 +3197,25 @@
       "type": "people_search",
       "status": "active",
       "estimatedReach": "medium",
-      "privacyUrl": null,
+      "privacyUrl": "https://www.unitedstatesphonebook.com/privacypolicy.htm",
       "detection": {
         "mode": "serp_only",
         "searchUrlTemplate": null,
         "profileUrlPattern": null
       },
       "optOut": {
-        "method": "unknown",
+        "method": "web_form",
         "url": null,
         "email": null,
         "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
-        "requiresPhoneVerify": "unknown",
-        "requiresIdUpload": "unknown",
+        "requiredFields": [
+          "listing_url"
+        ],
+        "requiresEmailConfirm": false,
+        "requiresPhoneVerify": false,
+        "requiresIdUpload": false,
         "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -3176,8 +3223,8 @@
       "lawfulBasis": [],
       "registries": [],
       "source": "curated",
-      "sourceNote": "/opt-out returns 404 and the site is a static partner-link page (2026-10-05); no removal route found",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "contact.php and privacypolicy.htm read 2026-10-07: removal is the REMOVE button next to the listing (automatic, within 24-48 hours); the site says not to email for removals. The phone + ZIP removal form on contact.php is commented out of the page. The policy says listings come from public phone books and that one request can cover OldPhoneBook.com and AmericaPhoneBook.com. Earlier: /opt-out 404 (2026-10-05)",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     },
     {
@@ -3230,23 +3277,25 @@
       "type": "people_search",
       "status": "active",
       "estimatedReach": "medium",
-      "privacyUrl": null,
+      "privacyUrl": "https://www.zlookup.com/privacy",
       "detection": {
         "mode": "serp_only",
         "searchUrlTemplate": null,
         "profileUrlPattern": null
       },
       "optOut": {
-        "method": "unknown",
-        "url": null,
-        "email": null,
-        "emailSource": null,
-        "requiredFields": [],
-        "requiresEmailConfirm": "unknown",
-        "requiresPhoneVerify": "unknown",
-        "requiresIdUpload": "unknown",
-        "hasCaptcha": "unknown",
-        "scope": "unknown"
+        "method": "web_form",
+        "url": "https://www.zlookup.com/opt_out",
+        "email": "hello@zlookup.com",
+        "emailSource": "ZLOOKUP privacy policy, 'Questions' section (https://www.zlookup.com/privacy, read 2026-10-07)",
+        "requiredFields": [
+          "phone"
+        ],
+        "requiresEmailConfirm": false,
+        "requiresPhoneVerify": false,
+        "requiresIdUpload": false,
+        "hasCaptcha": true,
+        "scope": "perListing"
       },
       "expectedTurnaroundDays": null,
       "relistIntervalDays": null,
@@ -3254,8 +3303,8 @@
       "lawfulBasis": [],
       "registries": [],
       "source": "curated",
-      "sourceNote": "/optout returns 404 (2026-10-05); no removal route found",
-      "lastVerifiedAt": "2026-10-05",
+      "sourceNote": "/opt_out read 2026-10-07: enter the full phone number to remove, reCAPTCHA, 'Remove My Info' (one number per request); path also listed by Optery / PrivacyOn opt-out guides (2026). Privacy-policy questions go to hello@zlookup.com. Earlier: /optout 404 (2026-10-05)",
+      "lastVerifiedAt": "2026-10-07",
       "jurisdictionNotes": null
     }
   ]

@@ -10,7 +10,7 @@ import { test, expect } from "./fixtures";
 // A pasted link on the wrong domain is answered with a 400 the page reports in a toast.
 test.use({ consoleAllowlist: [/status of 400/] });
 
-async function registerAndCreateCase(page: Page) {
+async function registerAndCreateCase(page: Page, options: { previousCityState?: string } = {}) {
   const suffix = randomUUID().slice(0, 8);
   await page.goto("/register");
   await page.getByLabel("Full name").fill("Checklist User");
@@ -25,6 +25,7 @@ async function registerAndCreateCase(page: Page) {
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByLabel("Full name", { exact: true }).fill("Jordan Testcase");
+  if (options.previousCityState) await page.getByLabel("Previous city / state").fill(options.previousCityState);
   await page.getByRole("button", { name: "Complete intake" }).click();
   await expect(page).toHaveURL(/\/cases\/[a-f0-9-]+$/);
   return page.url();
@@ -66,6 +67,12 @@ test("no-connector broker checklist: prefilled links, Not listed survives reload
   // At least one broker search is prefilled with the (URL-encoded) name from the intake.
   const hrefs = await links.evaluateAll((els) => els.map((el) => el.getAttribute("href") ?? ""));
   expect(hrefs.some((h) => /Jordan/.test(h) && !/Jordan Testcase/.test(h))).toBe(true);
+  // A name-only intake cannot fill a city / state search: those rows ask for a place instead
+  // of linking a half-filled search.
+  const placeHints = checklist.locator('[data-prefill-hint="add_place"]');
+  expect(await placeHints.count()).toBeGreaterThanOrEqual(1);
+  await expect(placeHints.first()).toContainText("This search needs a city and state");
+  expect(hrefs.some((h) => /=(&|$)/.test(h))).toBe(false);
 
   // "Not listed" on the first row moves it to the Not listed group.
   const firstNotListed = checklist.getByRole("button", { name: /^Not listed on / }).first();
@@ -102,4 +109,41 @@ test("no-connector broker checklist: prefilled links, Not listed survives reload
   await expect(page.getByText(`Checked ${brokerName} by hand: not listed`)).toBeVisible();
 
   expect(external).toEqual([]);
+});
+
+test("a previous city / state from the intake prefills city / state broker searches", async ({ page }) => {
+  await registerAndCreateCase(page, { previousCityState: "Dayton, OH" });
+  await openBrokerPhase(page);
+  await page.getByRole("button", { name: "Find brokers that may list me" }).click();
+
+  const checklist = page.locator('section[aria-labelledby="broker-checklist-heading"]');
+  await expect(checklist.getByRole("heading", { name: "Broker checklist" })).toBeVisible();
+  const showAll = checklist.getByRole("button", { name: /^Show all \d+$/ });
+  if (await showAll.count()) await showAll.first().click();
+
+  const hrefs = await checklist
+    .getByRole("link", { name: /^Search on / })
+    .evaluateAll((els) => els.map((el) => el.getAttribute("href") ?? ""));
+  expect(hrefs.some((h) => decodeURIComponent(h).includes("Dayton, OH"))).toBe(true);
+  await expect(checklist.locator('[data-prefill-hint="add_place"]')).toHaveCount(0);
+});
+
+test("adding a city and state from the checklist prefills the searches that need one", async ({ page }) => {
+  await registerAndCreateCase(page);
+  await openBrokerPhase(page);
+  await page.getByRole("button", { name: "Find brokers that may list me" }).click();
+
+  const checklist = page.locator('section[aria-labelledby="broker-checklist-heading"]');
+  await expect(checklist.getByRole("heading", { name: "Broker checklist" })).toBeVisible();
+  await checklist.getByLabel("City and state").fill("Dayton, OH");
+  await checklist.getByRole("button", { name: "Save city and state" }).click();
+
+  await expect(checklist.locator('[data-prefill-hint="add_place"]')).toHaveCount(0);
+  await expect(checklist.getByLabel("City and state")).toHaveCount(0);
+  const showAll = checklist.getByRole("button", { name: /^Show all \d+$/ });
+  if (await showAll.count()) await showAll.first().click();
+  const hrefs = await checklist
+    .getByRole("link", { name: /^Search on / })
+    .evaluateAll((els) => els.map((el) => el.getAttribute("href") ?? ""));
+  expect(hrefs.some((h) => decodeURIComponent(h).includes("Dayton, OH"))).toBe(true);
 });

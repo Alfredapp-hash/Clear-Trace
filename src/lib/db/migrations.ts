@@ -20,6 +20,7 @@ import { getTableConfig, type SQLiteTable } from "drizzle-orm/sqlite-core";
 import { sqlite } from "./index";
 import { log } from "@/lib/log";
 import { encryptFileSync } from "./snapshots";
+import brokerIdAliases from "@/lib/brokers/data/id-aliases.json";
 import {
   EXCLUDED_EXPOSURE_STATUSES,
   deriveCaseStatusFromExposures,
@@ -1025,6 +1026,208 @@ function migrateV4(conn: Conn): void {
 }
 
 /* ==========================================================================================
+ * v5 (v1.7.0) — rewrite stored legacy broker ids
+ * ======================================================================================== */
+
+/** Old broker id → current id (src/lib/brokers/data/id-aliases.json). */
+export const LEGACY_BROKER_ID_ALIASES: Readonly<Record<string, string>> = brokerIdAliases as Record<string, string>;
+
+export interface CanonicalizeBrokerIdsResult {
+  /** Rows whose broker_id was rewritten in place. */
+  rewritten: number;
+  /** Alias rows merged into a row that already had the current id (and deleted). */
+  merged: number;
+}
+
+function newestOf(a: string | null | undefined, b: string | null | undefined): string | null {
+  if (!a) return b ?? null;
+  if (!b) return a;
+  return a >= b ? a : b;
+}
+
+function parseJsonList(raw: string | null): string[] {
+  if (!raw) return [];
+  try {
+    const v: unknown = JSON.parse(raw);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * v5 data step: rewrite every stored legacy (renamed) broker id to its current id, in every
+ * table that carries one — exposure_candidates, verified_exposures, opt_out_dispatches,
+ * broker_sweep_matches, protection_schedules — and in search_queries.coverage_json.
+ *
+ * Collisions (an alias row next to a row that already has the current id):
+ * - broker_sweep_matches, same sweep run: one row is kept — the one with the newest check
+ *   (then the newest row) — under the current id; profile URLs are unioned and a missing
+ *   evidence id is taken from the other row; the other row is deleted.
+ * - protection_schedules, same (case, kind): the unique index allows one. The current-id row
+ *   is kept and takes the alias row's dispatch / cadence / next run when the alias row is the
+ *   newer one (newer dispatch, else newer updated_at) — the same rule as the per-tick
+ *   canonicalizeStoredBrokerIds() in protection/schedules.ts; last_run_at keeps the newest.
+ *
+ * Idempotent (a second run finds no legacy ids). Runs inside the migration's transaction.
+ */
+export function canonicalizeLegacyBrokerIds(
+  conn: Conn,
+  aliases: Readonly<Record<string, string>> = LEGACY_BROKER_ID_ALIASES,
+): CanonicalizeBrokerIdsResult {
+  const result: CanonicalizeBrokerIdsResult = { rewritten: 0, merged: 0 };
+  const pairs = Object.entries(aliases).filter(([from, to]) => from && to && from !== to);
+  if (pairs.length === 0) return result;
+
+  for (const [legacy, current] of pairs) {
+    // Tables with no uniqueness on broker_id: a plain rewrite.
+    for (const table of ["exposure_candidates", "verified_exposures", "opt_out_dispatches"]) {
+      result.rewritten += conn
+        .prepare(`UPDATE "${table}" SET broker_id = ? WHERE broker_id = ?`)
+        .run(current, legacy).changes;
+    }
+
+    // broker_sweep_matches: at most one row per broker per sweep run.
+    type MatchRow = {
+      id: string;
+      sweepRunId: string;
+      checkedAt: string | null;
+      createdAt: string | null;
+      profileUrlsJson: string | null;
+      evidenceId: string | null;
+      rid: number;
+    };
+    const matchCols = `id, sweep_run_id AS sweepRunId, checked_at AS checkedAt, created_at AS createdAt,
+      profile_urls_json AS profileUrlsJson, evidence_id AS evidenceId, rowid AS rid`;
+    const legacyMatches = conn
+      .prepare(`SELECT ${matchCols} FROM broker_sweep_matches WHERE broker_id = ?`)
+      .all(legacy) as MatchRow[];
+    const twinMatch = conn.prepare(
+      `SELECT ${matchCols} FROM broker_sweep_matches WHERE sweep_run_id = ? AND broker_id = ? LIMIT 1`,
+    );
+    const rank = (m: MatchRow) => [m.checkedAt ? 1 : 0, m.checkedAt ?? "", m.createdAt ?? "", m.rid] as const;
+    const newer = (a: MatchRow, b: MatchRow) => {
+      const ra = rank(a);
+      const rb = rank(b);
+      for (let i = 0; i < ra.length; i++) if (ra[i] !== rb[i]) return ra[i] > rb[i];
+      return false;
+    };
+    for (const m of legacyMatches) {
+      const twin = twinMatch.get(m.sweepRunId, current) as MatchRow | undefined;
+      if (!twin) {
+        conn.prepare("UPDATE broker_sweep_matches SET broker_id = ? WHERE id = ?").run(current, m.id);
+        result.rewritten++;
+        continue;
+      }
+      const [keep, drop] = newer(m, twin) ? [m, twin] : [twin, m];
+      const urls = [...new Set([...parseJsonList(keep.profileUrlsJson), ...parseJsonList(drop.profileUrlsJson)])];
+      conn.prepare("DELETE FROM broker_sweep_matches WHERE id = ?").run(drop.id);
+      conn
+        .prepare(
+          `UPDATE broker_sweep_matches
+              SET broker_id = ?, profile_urls_json = ?, evidence_id = COALESCE(evidence_id, ?)
+            WHERE id = ?`,
+        )
+        .run(current, urls.length ? JSON.stringify(urls) : keep.profileUrlsJson, drop.evidenceId, keep.id);
+      result.merged++;
+    }
+
+    // protection_schedules: unique per (case, kind, broker).
+    type ScheduleRow = {
+      id: string;
+      caseId: string;
+      kind: string;
+      dispatchId: string | null;
+      dispatchAt: string | null;
+      updatedAt: string | null;
+      lastRunAt: string | null;
+      cadenceDays: number;
+      nextRunAt: string;
+    };
+    const scheduleCols = `ps.id, ps.case_id AS caseId, ps.kind, ps.dispatch_id AS dispatchId,
+      od.created_at AS dispatchAt, ps.updated_at AS updatedAt, ps.last_run_at AS lastRunAt,
+      ps.cadence_days AS cadenceDays, ps.next_run_at AS nextRunAt`;
+    const legacySchedules = conn
+      .prepare(
+        `SELECT ${scheduleCols} FROM protection_schedules ps
+           LEFT JOIN opt_out_dispatches od ON od.id = ps.dispatch_id
+          WHERE ps.broker_id = ?`,
+      )
+      .all(legacy) as ScheduleRow[];
+    const twinSchedule = conn.prepare(
+      `SELECT ${scheduleCols} FROM protection_schedules ps
+         LEFT JOIN opt_out_dispatches od ON od.id = ps.dispatch_id
+        WHERE ps.case_id = ? AND ps.kind = ? AND ps.broker_id = ? LIMIT 1`,
+    );
+    for (const sched of legacySchedules) {
+      const twin = twinSchedule.get(sched.caseId, sched.kind, current) as ScheduleRow | undefined;
+      if (!twin) {
+        conn.prepare("UPDATE protection_schedules SET broker_id = ? WHERE id = ?").run(current, sched.id);
+        result.rewritten++;
+        continue;
+      }
+      const aliasIsNewer =
+        sched.dispatchAt || twin.dispatchAt
+          ? (sched.dispatchAt ?? "") > (twin.dispatchAt ?? "")
+          : (sched.updatedAt ?? "") > (twin.updatedAt ?? "");
+      conn.prepare("DELETE FROM protection_schedules WHERE id = ?").run(sched.id);
+      if (aliasIsNewer) {
+        conn
+          .prepare(
+            `UPDATE protection_schedules
+                SET dispatch_id = ?, cadence_days = ?, next_run_at = ?, updated_at = ?
+              WHERE id = ?`,
+          )
+          .run(sched.dispatchId, sched.cadenceDays, sched.nextRunAt, newestOf(sched.updatedAt, twin.updatedAt), twin.id);
+      }
+      conn
+        .prepare("UPDATE protection_schedules SET last_run_at = ? WHERE id = ?")
+        .run(newestOf(sched.lastRunAt, twin.lastRunAt), twin.id);
+      result.merged++;
+    }
+  }
+
+  // search_queries.coverage_json: {group, brokerIds[], skippedBrokerIds[]}.
+  const legacyIds = pairs.map(([from]) => from);
+  const like = legacyIds.map(() => "coverage_json LIKE ?").join(" OR ");
+  const queries = conn
+    .prepare(`SELECT id, coverage_json AS json FROM search_queries WHERE ${like}`)
+    .all(...legacyIds.map((id) => `%"${id}"%`)) as { id: string; json: string }[];
+  const map = new Map(pairs);
+  for (const q of queries) {
+    let coverage: Record<string, unknown>;
+    try {
+      coverage = JSON.parse(q.json) as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (!coverage || typeof coverage !== "object") continue;
+    let changed = false;
+    for (const key of ["brokerIds", "skippedBrokerIds"]) {
+      const list = coverage[key];
+      if (!Array.isArray(list)) continue;
+      const next = [...new Set(list.map((v) => (typeof v === "string" ? (map.get(v) ?? v) : v)))];
+      if (next.length !== list.length || next.some((v, i) => v !== list[i])) {
+        coverage[key] = next;
+        changed = true;
+      }
+    }
+    if (changed) {
+      conn.prepare("UPDATE search_queries SET coverage_json = ? WHERE id = ?").run(JSON.stringify(coverage), q.id);
+      result.rewritten++;
+    }
+  }
+  return result;
+}
+
+function migrateV5(conn: Conn): void {
+  const { rewritten, merged } = canonicalizeLegacyBrokerIds(conn);
+  if (rewritten || merged) {
+    log.info("db.migration.broker_ids", { migration: "v5_canonical_broker_ids", counts: { rewritten, merged } });
+  }
+}
+
+/* ==========================================================================================
  * Runner
  * ======================================================================================== */
 
@@ -1039,6 +1242,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 2, name: "v2_ongoing_protection", up: migrateV2 },
   { version: 3, name: "v3_verification_checks_exposure_index", up: migrateV3 },
   { version: 4, name: "v4_privacy_cases_owner_org_updated_index", up: migrateV4 },
+  { version: 5, name: "v5_canonical_broker_ids", up: migrateV5 },
 ];
 
 export const LATEST_SCHEMA_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1].version;

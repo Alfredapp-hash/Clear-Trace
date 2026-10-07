@@ -5,12 +5,32 @@ import {
   resolveFromPlaybook,
 } from "@/lib/brokers/playbooks";
 import { readPublicPolicySignals, type PolicySignals } from "@/lib/routing/policy-reader";
+import { matchPlatformByUrl, type PlatformRoute } from "./platform-routes";
 import type { ControllerResolution } from "./types";
+
+/** Confidence for a platform's own verified report form (data/platform-report-routes.json). */
+export const PLATFORM_ROUTE_CONFIDENCE = 0.85;
+
+function fromPlatformRoute(route: PlatformRoute): ControllerResolution {
+  const account =
+    route.requiresAccount === true ? " The form requires a signed-in account." : "";
+  return {
+    targetType: "platform",
+    contactMethod: "safety_report",
+    contactValue: route.reportUrl,
+    policyUrl: route.policyUrl,
+    confidence: PLATFORM_ROUTE_CONFIDENCE,
+    notes:
+      `${route.name}: submit through the platform's official form "${route.reportLabel}" (verified ${route.verifiedOn}). ` +
+      `${route.scope}${account} The draft is for your reference when filling in the form; it is not emailed.`,
+  };
+}
 
 /**
  * Resolve who to contact for an exposure URL, without network access.
  *
- * Order: broker catalog (verified, sourced contacts) → platform / search-engine channels →
+ * Order: broker catalog (verified, sourced contacts) → verified platform report forms
+ * (data/platform-report-routes.json, matched by registrable domain) → search-engine channel →
  * `manual_research`. ClearTrace never fabricates an address such as privacy@<host> or
  * contact@<host>: with no verified contact the result is `manual_research`, an empty
  * contactValue and confidence ≤ 0.3, and the notes tell the user to find the contact.
@@ -26,14 +46,21 @@ export function resolveController(
   const host = new URL(url).hostname;
   const homepage = `https://${host}/`;
 
-  if (sourceClass === "platform_content" || /facebook|twitter|instagram|linkedin|tiktok/i.test(url)) {
+  // Known platform (matched by registrable domain): its own verified report form.
+  const platform = matchPlatformByUrl(url);
+  if (platform) return fromPlatformRoute(platform);
+
+  // Hosted content on a platform without a verified route: no guessed /help/report URL.
+  if (sourceClass === "platform_content") {
     return {
       targetType: "platform",
-      contactMethod: "safety_report",
-      contactValue: `https://${host}/help/report`,
-      policyUrl: `https://${host}/privacy`,
-      confidence: 0.86,
-      notes: "Platform reporting channel preferred for hosted content.",
+      contactMethod: "manual_research",
+      contactValue: "",
+      policyUrl: homepage,
+      confidence: MANUAL_RESEARCH_CONFIDENCE,
+      notes:
+        `No verified report form for ${host}. Use the Report option on the post or profile, or find the ` +
+        "platform's own privacy / safety report page and enter it as the recipient. ClearTrace does not guess report URLs.",
     };
   }
 
@@ -134,6 +161,9 @@ export async function resolveControllerWithPolicy(
   if (isVerifiedPlaybookContact(resolveFromPlaybook(url))) return base;
   // Platform / search-engine channels are not improved by scraping the page's site.
   if (base.contactMethod !== "manual_research") return base;
+  // A platform without a verified route stays manual: a scraped "opt-out" link on a social
+  // site is not a content-report channel (and would re-route the remedy to a broker opt-out).
+  if (base.targetType === "platform") return base;
 
   const signals = await readPublicPolicySignals(url);
   if (!signals) return base;

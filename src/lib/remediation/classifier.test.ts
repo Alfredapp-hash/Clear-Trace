@@ -48,4 +48,28 @@ describe("exposure classifier", () => {
     expect(result.categories).not.toContain("business_listing");
     expect(result.recommendedRemedyFamily).toBe("data_broker_optout");
   });
+
+  it("recognises platform pages by verified domain, not by a name in the URL", () => {
+    const classify = (canonicalUrl: string) =>
+      classifyExposure({
+        evidenceExcerpt: "Profile page showing a home address.",
+        sourceType: "web_page",
+        canonicalUrl,
+        caseType: "personal_exposure",
+        sensitivity: "medium",
+      }).sourceClass;
+    for (const url of [
+      "https://www.youtube.com/watch?v=abc",
+      "https://youtu.be/abc",
+      "https://www.reddit.com/r/x/comments/1",
+      "https://www.threads.net/@someone",
+      "https://x.com/someone",
+      "https://m.facebook.com/someone",
+    ]) {
+      expect(classify(url)).toBe("platform_content");
+    }
+    // Look-alikes and platform names in the path are not platforms.
+    expect(classify("https://notfacebook.com/jane")).toBe("aggregation");
+    expect(classify("https://people.example/facebook-jane-doe")).toBe("aggregation");
+  });
 });

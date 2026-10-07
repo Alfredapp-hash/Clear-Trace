@@ -58,3 +58,24 @@ export function buildSearchUrl(
   });
   return missing ? null : url;
 }
+
+/** Placeholders that describe a place (city / state). */
+export const PLACE_PLACEHOLDERS: ReadonlySet<SearchPlaceholder> = new Set(["city", "state", "cityState"]);
+
+/**
+ * Placeholders a broker's template uses that `params` cannot fill (each listed once, in
+ * template order). Empty when the template fills, or when there is no valid template.
+ */
+export function missingSearchParams(
+  broker: { detection: { searchUrlTemplate: string | null } },
+  params: SearchUrlParams,
+): SearchPlaceholder[] {
+  const template = broker.detection.searchUrlTemplate;
+  if (!template || !isValidSearchTemplate(template)) return [];
+  const values = withDerivedParams(params);
+  const missing: SearchPlaceholder[] = [];
+  for (const name of templatePlaceholders(template) as SearchPlaceholder[]) {
+    if (!values[name]?.trim() && !missing.includes(name)) missing.push(name);
+  }
+  return missing;
+}

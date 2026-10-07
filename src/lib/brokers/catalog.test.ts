@@ -155,6 +155,18 @@ describe("public API", () => {
     expect(getBroker("radaris")?.status).toBe("defunct");
   });
 
+  it("Sprint 7 catalog gaps: only PublicRecordsNow still has no verified removal route", () => {
+    const unknown = curatedJson.brokers.filter((b) => b.optOut.method === "unknown").map((b) => b.id);
+    expect(unknown).toEqual(["publicrecordsnow"]);
+    // arrestfacts.com now redirects to an unrelated records site.
+    expect(getBroker("arrestfacts")?.status).toBe("defunct");
+    expect(BROKER_UNIVERSE.some((b) => b.id === "arrestfacts")).toBe(false);
+    // Emails only where the broker's own privacy policy publishes them.
+    for (const id of ["beenverified", "peoplelooker", "neighborwho", "usatrace", "zlookup"]) {
+      expect(getBroker(id)?.optOut.emailSource, id).toMatch(/privacy policy/i);
+    }
+  });
+
   it("Spokeo requires the listing URL and email confirmation", () => {
     const spokeo = getBroker("spokeo")!;
     expect(spokeo.optOut.requiredFields).toContain("listing_url");
