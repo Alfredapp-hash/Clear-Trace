@@ -3,7 +3,7 @@ import { db } from "@/lib/db";
 import { exposureCandidates, verifiedExposures } from "@/lib/db/schema";
 import { assessExposureImpact } from "@/lib/ux/impact-score";
 import { isActiveCaseStatus, isRemovedCaseStatus } from "@/lib/ux/case-status";
-import { listDashboardCases, type DashboardCase } from "./actions";
+import type { DashboardCase } from "./actions";
 
 /** How many of the most recently updated cases the radar covers. */
 export const RADAR_CASE_LIMIT = 10;
@@ -101,9 +101,6 @@ export async function buildExposureRadar(cases: DashboardCase[]) {
   });
 }
 
-export async function getExposureRadar(userId: string, organizationId?: string) {
-  return buildExposureRadar(await listDashboardCases(userId, organizationId));
-}
 
 export function computeVictoryStats(cases: Pick<DashboardCase, "status">[]) {
   const removed = cases.filter((c) => isRemovedCaseStatus(c.status)).length;
@@ -116,6 +113,3 @@ export function computeVictoryStats(cases: Pick<DashboardCase, "status">[]) {
   };
 }
 
-export async function getVictoryStats(userId: string, organizationId?: string) {
-  return computeVictoryStats(await listDashboardCases(userId, organizationId));
-}

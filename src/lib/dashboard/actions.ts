@@ -184,9 +184,6 @@ export async function buildActionItems(cases: DashboardCase[]): Promise<ActionIt
   return items.sort((a, b) => priorityOrder[a.priority] - priorityOrder[b.priority]);
 }
 
-export async function getActionItems(userId: string, organizationId?: string): Promise<ActionItem[]> {
-  return buildActionItems(await listDashboardCases(userId, organizationId));
-}
 
 export function computeDashboardStats(cases: Pick<DashboardCase, "status">[]) {
   return {
@@ -197,9 +194,6 @@ export function computeDashboardStats(cases: Pick<DashboardCase, "status">[]) {
   };
 }
 
-export async function getDashboardStats(userId: string, organizationId?: string) {
-  return computeDashboardStats(await listDashboardCases(userId, organizationId));
-}
 
 /**
  * Recent audit events for the user's own cases only (not org-wide activity from other
