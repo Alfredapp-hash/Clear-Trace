@@ -281,6 +281,26 @@ describe("BrokerChecklist", () => {
     // Collapsed groups render no rows.
     expect(html).not.toContain("Search on Nuwber");
   });
+
+  it("asks for a city and state on a row whose search needs one", () => {
+    const placeRow = { ...row("m5", "truepeoplesearch", "TruePeopleSearch", "to_check"), prefillHint: "add_place" as const };
+    const html = brokerPhase([], {
+      checklist: { ...checklist, counts: { ...checklist.counts, to_check: 3 }, rows: [...checklist.rows, placeRow] },
+    });
+    expect(html.match(/data-prefill-hint="add_place"/g)).toHaveLength(1);
+    expect(html).toContain("This search needs a city and state. Add one above the list");
+    // The link still goes to the broker's own site, never a half-filled search.
+    expect(html).toContain('href="https://truepeoplesearch.com/"');
+    // With an onAddPlace handler, a city/state field is offered above the list.
+    const withForm = brokerPhase([], {
+      checklist: { ...checklist, counts: { ...checklist.counts, to_check: 3 }, rows: [...checklist.rows, placeRow] },
+      onAddPlace: async () => true,
+    });
+    expect(withForm).toContain('for="checklist-place"');
+    expect(withForm).toContain("Save city and state");
+    // No field when every search already prefills.
+    expect(brokerPhase([], { checklist, onAddPlace: async () => true })).not.toContain('id="checklist-place"');
+  });
 });
 
 describe("BrokerPhase proactive opt-outs", () => {

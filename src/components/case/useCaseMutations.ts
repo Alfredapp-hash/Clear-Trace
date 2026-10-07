@@ -474,6 +474,7 @@ export const matchKey = (matchId: string) => `match-${matchId}`;
 export const foundKey = (brokerId: string) => `found-${brokerId}`;
 export const RESIDENCE_KEY = "residence-state";
 export const DROP_FILING_KEY = "drop-filing";
+export const PLACE_KEY = "add-place";
 
 /** "Approved 10 of 12 opt-outs. 2 failed — use Retry on those rows." */
 export function batchSummary(verb: string, ok: number, total: number, one: string, many = `${one}s`): string {
@@ -671,6 +672,11 @@ export function useCaseActions(caseId: string) {
         errorMessage: "Could not undo that check",
       }),
     /** Checklist: "I found my listing" — adds the pasted profile page tied to that broker. */
+    /** Add the person's city and state (a searchable claim) so checklist searches prefill. */
+    addPlace: (cityState: string) =>
+      post(PLACE_KEY, "identity-claims", { claims: [{ claimType: "city_state", value: cityState }] },
+        "Could not save your city and state",
+        say("City and state saved. Searches that need them are now prefilled.")),
     foundListing: (brokerId: string, url: string) =>
       post(foundKey(brokerId), "live-url", { url, brokerId }, "Could not add that page", (d) => {
         if (d.outcome === "already_known") setMessage("That page is already in this case.");

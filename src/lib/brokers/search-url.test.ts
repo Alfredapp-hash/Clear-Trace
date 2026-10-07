@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildSearchUrl, isValidSearchTemplate, templatePlaceholders } from "./search-url";
+import { buildSearchUrl, isValidSearchTemplate, missingSearchParams, templatePlaceholders } from "./search-url";
 
 const broker = (searchUrlTemplate: string | null) => ({ detection: { searchUrlTemplate } });
 
@@ -52,5 +52,21 @@ describe("buildSearchUrl", () => {
     expect(isValidSearchTemplate("https://example.test/{{first}}")).toBe(false);
     expect(isValidSearchTemplate("https://example.test/{first}-{last}")).toBe(true);
     expect(templatePlaceholders("https://x.test/{first}/{state}")).toEqual(["first", "state"]);
+  });
+});
+
+describe("missingSearchParams", () => {
+  it("lists the placeholders a template needs that the params cannot fill (once, in order)", () => {
+    const b = broker("https://x.test/{first}-{last}/{city}/{state}?w={cityState}&c={city}");
+    expect(missingSearchParams(b, { first: "Jane", last: "Doe" })).toEqual(["city", "state", "cityState"]);
+    expect(missingSearchParams(b, { first: "Jane", last: "Doe", state: "OH" })).toEqual(["city", "cityState"]);
+    // city + state derive cityState.
+    expect(missingSearchParams(b, { first: "Jane", last: "Doe", city: "Dayton", state: "OH" })).toEqual([]);
+    expect(missingSearchParams(b, { city: "Dayton", state: " " })).toEqual(["first", "last", "state", "cityState"]);
+  });
+
+  it("is empty when there is no valid template", () => {
+    expect(missingSearchParams(broker(null), {})).toEqual([]);
+    expect(missingSearchParams(broker("https://x.test/{dob}"), {})).toEqual([]);
   });
 });

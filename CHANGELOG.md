@@ -2,6 +2,31 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.7.0] — Unreleased
+
+Sprint 7: broker coverage & reach. See [docs/sprint/SPRINT-7.md](./docs/sprint/SPRINT-7.md).
+
+### State data-broker registries
+- **Oregon** (DCBS opt-out methods report, 390 rows, complete) and **Texas** (Secretary of State registry, 450 registrations, complete) snapshots, retrieved 2026-10-07 and checked in like the CPPA registry: 48 + 81 new entries, the rest linked to existing catalog entries by filed domain. `scripts/import-state-registries.ts --check` runs in CI
+- Registry brokers from every state are never auto-queued for opt-out
+- **Vermont not imported** — its public search needs a reCAPTCHA and the bulk download needs an account
+
+### Platform report routes
+- Facebook, Instagram/Threads, X, LinkedIn, TikTok, YouTube, Reddit and Pinterest pages resolve to each platform's official privacy-report form (each verified 2026-10-07; source and scope recorded). Matching is by registrable domain (x.com/twitter.com, youtu.be, fb.com, …), never a name in the URL
+- Platforms with no verified form get `manual_research` — the invented `https://<host>/help/report` fallback is gone, and platform sites are no longer scraped for contacts
+
+### Broker catalog
+- Removal routes found for usatrace, zlookup and unitedstatesphonebook; arrestfacts marked defunct (redirects to an unrelated site); fastpeoplesearch, mylife and seamless routes updated; privacy inboxes added only where the broker's own policy states them. PublicRecordsNow still has no verifiable route
+- **California DROP** checklist now lists DROP's eight data types (name, date of birth and ZIP required; email, phone, MAID, connected-TV ID and VIN optional) from privacy.ca.gov, checked 2026-10-07
+
+### Broker checklist
+- "I found my listing" reports have their own limit (40 per user, 25 per case per hour); the general live-URL limit stays at 10
+- Searches that need a place prefill from the current city/state, then a previous one, then the case's state; otherwise the row asks for one and a **City and state** field on the checklist saves it to the case
+- **Schema v5** rewrites stored legacy broker ids (`spokeo2`, `spokeo_alt`) across exposures, candidates, dispatches, sweep matches, schedules and query coverage
+
+### Copy
+- Sign-in pages no longer claim "74+ brokers covered" or a "tamper-evident" trail
+
 ## [1.6.0] — Unreleased
 
 Sprint 6: the Sprint 5 leftovers. See [docs/sprint/SPRINT-6.md](./docs/sprint/SPRINT-6.md).

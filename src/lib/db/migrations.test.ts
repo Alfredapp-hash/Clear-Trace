@@ -11,7 +11,9 @@ import {
   LATEST_SCHEMA_VERSION,
   MIGRATIONS,
   NEWER_DATABASE_MESSAGE,
+  LEGACY_BROKER_ID_ALIASES,
   V2_DUPLICATE_OPT_OUT_NOTE,
+  canonicalizeLegacyBrokerIds,
   findSchemaDrift,
   getSchemaVersion,
   preMigrateSnapshotPath,
@@ -201,6 +203,146 @@ describe("runMigrations", () => {
     const res = runMigrations(conn, { snapshot: false, migrations: [MIGRATIONS[0], racing] });
     expect(ran).toBe(0);
     expect(res.applied).toEqual([]);
+  });
+});
+
+describe("v5: legacy broker ids", () => {
+  function v4WithLegacyIds() {
+    const db = tempDb();
+    runMigrations(db.conn, { snapshot: false, target: 4 });
+    expect(readUserVersion(db.conn)).toBe(4);
+    db.conn.exec(fixture("v4-legacy-broker-ids.sql"));
+    return db;
+  }
+  const brokerIdsIn = (conn: Database.Database, table: string) =>
+    (conn.prepare(`SELECT DISTINCT broker_id AS b FROM "${table}" WHERE broker_id IS NOT NULL ORDER BY b`).all() as {
+      b: string;
+    }[]).map((r) => r.b);
+
+  it("the alias map the migration uses is the catalog's", () => {
+    expect(LEGACY_BROKER_ID_ALIASES).toMatchObject({ spokeo2: "peoplesearch123", spokeo_alt: "unitedstatesphonebook" });
+  });
+
+  it("upgrades a v4 database: no table keeps a legacy broker id", () => {
+    const { conn } = v4WithLegacyIds();
+    const res = runMigrations(conn, { snapshot: false });
+    expect(res.applied).toEqual(["v5_canonical_broker_ids"]);
+    expect(readUserVersion(conn)).toBe(5);
+    for (const table of [
+      "exposure_candidates",
+      "verified_exposures",
+      "opt_out_dispatches",
+      "broker_sweep_matches",
+      "protection_schedules",
+    ]) {
+      const ids = brokerIdsIn(conn, table);
+      expect(ids, table).not.toContain("spokeo2");
+      expect(ids, table).not.toContain("spokeo_alt");
+    }
+    expect(conn.prepare("SELECT broker_id AS b FROM exposure_candidates WHERE id = 'k1'").get()).toEqual({
+      b: "peoplesearch123",
+    });
+    expect(conn.prepare("SELECT broker_id AS b FROM exposure_candidates WHERE id = 'k3'").get()).toEqual({ b: "spokeo" });
+    expect(conn.prepare("SELECT broker_id AS b FROM verified_exposures WHERE id = 'e1'").get()).toEqual({
+      b: "peoplesearch123",
+    });
+    // Dispatches keep every row (history), under the current id.
+    expect(conn.prepare("SELECT COUNT(*) AS n FROM opt_out_dispatches WHERE broker_id = 'peoplesearch123'").get()).toEqual({
+      n: 4,
+    });
+  });
+
+  it("merges colliding sweep matches, keeping the newest check and unioning profile URLs", () => {
+    const { conn } = v4WithLegacyIds();
+    runMigrations(conn, { snapshot: false });
+    const run1 = conn
+      .prepare(
+        `SELECT id, broker_id AS brokerId, check_outcome AS outcome, profile_urls_json AS urls, evidence_id AS ev
+           FROM broker_sweep_matches WHERE sweep_run_id = 'bsr1'`,
+      )
+      .all() as { id: string; brokerId: string; outcome: string; urls: string; ev: string }[];
+    expect(run1).toHaveLength(1);
+    expect(run1[0]).toMatchObject({ id: "bsm-alias", brokerId: "peoplesearch123", outcome: "found", ev: "ev-canon" });
+    expect(JSON.parse(run1[0].urls)).toEqual(["https://peoplesearch123.example/b", "https://peoplesearch123.example/a"]);
+    expect(
+      conn.prepare("SELECT id, broker_id AS b FROM broker_sweep_matches WHERE sweep_run_id = 'bsr2' ORDER BY id").all(),
+    ).toEqual([
+      { id: "bsm-other", b: "spokeo" },
+      { id: "bsm-solo", b: "unitedstatesphonebook" },
+    ]);
+  });
+
+  it("merges colliding protection schedules into the current-id row, keeping the newer dispatch", () => {
+    const { conn } = v4WithLegacyIds();
+    runMigrations(conn, { snapshot: false });
+    const rows = conn
+      .prepare(
+        `SELECT id, case_id AS c, broker_id AS b, dispatch_id AS d, cadence_days AS cadence, next_run_at AS next,
+                last_run_at AS last
+           FROM protection_schedules ORDER BY id`,
+      )
+      .all();
+    expect(rows).toEqual([
+      // Case 1: the alias row's dispatch was newer — the kept row takes it.
+      {
+        id: "ps-c1-alt",
+        c: "c1",
+        b: "unitedstatesphonebook",
+        d: null,
+        cadence: 30,
+        next: "2026-06-01T00:00:00.000Z",
+        last: null,
+      },
+      {
+        id: "ps-c1-canon",
+        c: "c1",
+        b: "peoplesearch123",
+        d: "od-new",
+        cadence: 45,
+        next: "2026-05-01T00:00:00.000Z",
+        last: "2026-03-15T00:00:00.000Z",
+      },
+      // Case 2: the current-id row already had the newer dispatch — unchanged but last run kept.
+      {
+        id: "ps-c2-canon",
+        c: "c2",
+        b: "peoplesearch123",
+        d: "od-c2-new",
+        cadence: 90,
+        next: "2026-07-01T00:00:00.000Z",
+        last: "2026-02-10T00:00:00.000Z",
+      },
+    ]);
+  });
+
+  it("rewrites search_queries coverage ids (deduped) and leaves other queries alone", () => {
+    const { conn } = v4WithLegacyIds();
+    runMigrations(conn, { snapshot: false });
+    const q1 = conn.prepare("SELECT coverage_json AS j FROM search_queries WHERE id = 'q1'").get() as { j: string };
+    expect(JSON.parse(q1.j)).toEqual({
+      group: "people_search",
+      brokerIds: ["spokeo", "peoplesearch123"],
+      skippedBrokerIds: ["unitedstatesphonebook"],
+    });
+    const q2 = conn.prepare("SELECT coverage_json AS j FROM search_queries WHERE id = 'q2'").get() as { j: string };
+    expect(q2.j).toBe('{"group":"people_search","brokerIds":["spokeo"],"skippedBrokerIds":[]}');
+  });
+
+  it("is idempotent: a second pass changes nothing", () => {
+    const { conn } = v4WithLegacyIds();
+    const first = conn.transaction(() => canonicalizeLegacyBrokerIds(conn))();
+    expect(first.rewritten).toBeGreaterThan(0);
+    expect(first.merged).toBe(3);
+    const second = conn.transaction(() => canonicalizeLegacyBrokerIds(conn))();
+    expect(second).toEqual({ rewritten: 0, merged: 0 });
+    expect(canonicalizeLegacyBrokerIds(conn, {})).toEqual({ rewritten: 0, merged: 0 });
+  });
+
+  it("a fresh database migrates to v5 with nothing to rewrite", () => {
+    const { conn } = tempDb();
+    runMigrations(conn, { snapshot: false });
+    expect(readUserVersion(conn)).toBe(LATEST_SCHEMA_VERSION);
+    expect(canonicalizeLegacyBrokerIds(conn)).toEqual({ rewritten: 0, merged: 0 });
   });
 });
 

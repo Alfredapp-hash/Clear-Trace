@@ -1,18 +1,19 @@
 /**
  * The protection engine's view of the broker catalog (lane 4 contract):
  * - getBroker(id) resolves curated and CPPA-registry entries (and renamed ids);
- * - listCatalog({ source: "cppa_registry" }) lists registry-only brokers, which are never
+ * - registry-only brokers (source "cppa_registry" or "state_registry") are never
  *   queued for opt-out and never written as sweep match rows;
  * - relistIntervalDays overrides the default relist cadence when the catalog knows it.
  */
-import { getBroker, listCatalog } from "@/lib/brokers/universe";
+import { REGISTRY_SOURCES } from "@/lib/brokers/catalog-schema";
+import { getBroker, listCatalog, type BrokerSource } from "@/lib/brokers/universe";
 
 export interface ProtectionBrokerInfo {
   id: string;
   name: string;
   type: "data_broker" | "people_search" | "public_records";
   relistIntervalDays: number | null;
-  source: "curated" | "cppa_registry";
+  source: BrokerSource;
 }
 
 export function lookupBroker(id: string | null | undefined): ProtectionBrokerInfo | undefined {
@@ -28,14 +29,18 @@ export function lookupBroker(id: string | null | undefined): ProtectionBrokerInf
   };
 }
 
-/** CPPA-registry-only brokers are never auto-queued (California residents are pointed to DROP). */
+/**
+ * Registry-only brokers (CPPA and state registries) are never auto-queued (California
+ * residents are pointed to DROP; other registry entries are a filed contact only).
+ */
 export function isRegistryBroker(id: string | null | undefined): boolean {
-  return lookupBroker(id)?.source === "cppa_registry";
+  const source = lookupBroker(id)?.source;
+  return source !== undefined && REGISTRY_SOURCES.includes(source);
 }
 
 let registryCount: number | null = null;
-/** Number of CPPA-registry brokers in the checked-in snapshot. */
+/** Number of registry-only brokers (CPPA + state registries) in the checked-in snapshots. */
 export function registryBrokerCount(): number {
-  registryCount ??= listCatalog({ source: "cppa_registry" }).length;
+  registryCount ??= listCatalog().filter((b) => REGISTRY_SOURCES.includes(b.source)).length;
   return registryCount;
 }

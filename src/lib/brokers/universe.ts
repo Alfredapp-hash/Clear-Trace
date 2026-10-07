@@ -1,14 +1,18 @@
 import curatedJson from "./data/brokers.json";
 import registryJson from "./data/cppa-registry.json";
 import aliasesJson from "./data/id-aliases.json";
+import orRegistryJson from "./data/or-registry.json";
+import txRegistryJson from "./data/tx-registry.json";
 import {
   parseCatalog,
   type BrokerGroup,
   type BrokerSource,
   type CatalogBroker,
+  type Registry,
+  type StateRegistryMeta,
 } from "./catalog-schema";
 
-export type { BrokerGroup, BrokerSource, CatalogBroker } from "./catalog-schema";
+export type { BrokerGroup, BrokerSource, CatalogBroker, StateRegistryMeta } from "./catalog-schema";
 
 /**
  * Legacy flat broker shape (pre-Sprint 4). Sweeps, AuthLayout and reports still use it.
@@ -27,14 +31,16 @@ export interface BrokerEntry {
 }
 
 // Validated at import: a bad data edit fails loudly (and in CI via catalog.test.ts).
-const CATALOG = parseCatalog(curatedJson, registryJson, aliasesJson);
+// State registries (Sprint 7): Oregon and Texas snapshots; Vermont is not importable (see
+// scripts/import-state-registries.ts). Their links tag existing entries' `registries`.
+const CATALOG = parseCatalog(curatedJson, registryJson, aliasesJson, [orRegistryJson, txRegistryJson]);
 
 const GROUPS_BY_ID = new Map<string, BrokerGroup>(CATALOG.groups.map((g) => [g.id, g]));
 const BROKERS_BY_ID = new Map<string, CatalogBroker>(CATALOG.brokers.map((b) => [b.id, b]));
 
 /** hostname → broker. Curated entries are inserted first and are never overwritten. */
 const BROKERS_BY_HOST = new Map<string, CatalogBroker>();
-for (const source of ["curated", "cppa_registry"] as const) {
+for (const source of ["curated", "cppa_registry", "state_registry"] as const) {
   for (const b of CATALOG.brokers) {
     if (b.source !== source) continue;
     for (const host of [b.domain, ...b.aliasDomains]) {
@@ -68,11 +74,21 @@ export const BROKER_UNIVERSE: BrokerEntry[] = CATALOG.brokers
 
 export const BROKER_GROUPS: readonly BrokerGroup[] = CATALOG.groups;
 
-/** Every catalog entry (curated + CPPA registry), optionally filtered by source. */
-export function listCatalog(options: { source?: BrokerSource } = {}): CatalogBroker[] {
-  return options.source
-    ? CATALOG.brokers.filter((b) => b.source === options.source)
-    : [...CATALOG.brokers];
+/**
+ * Every catalog entry (curated + CPPA registry + state registries), optionally filtered by
+ * source and/or by a registry the broker is registered with ("ca", "or", "tx", ...).
+ */
+export function listCatalog(options: { source?: BrokerSource; registry?: Registry } = {}): CatalogBroker[] {
+  return CATALOG.brokers.filter(
+    (b) =>
+      (!options.source || b.source === options.source) &&
+      (!options.registry || b.registries.includes(options.registry)),
+  );
+}
+
+/** Source, retrieval date and completeness of each imported state registry snapshot. */
+export function listStateRegistries(): readonly StateRegistryMeta[] {
+  return CATALOG.stateRegistries;
 }
 
 /** Current id for a possibly-renamed broker id (data/id-aliases.json). */

@@ -77,6 +77,7 @@ export function BrokerPhase({
   onMarkNotListed = () => {},
   onClearCheck = () => {},
   onFoundListing = async () => false,
+  onAddPlace,
   onCopy,
 }: {
   status: string;
@@ -98,6 +99,7 @@ export function BrokerPhase({
   onMarkNotListed?: (matchId: string) => void;
   onClearCheck?: (matchId: string) => void;
   onFoundListing?: (brokerId: string, url: string) => Promise<boolean>;
+  onAddPlace?: (cityState: string) => Promise<boolean>;
   onCopy: (text: string) => void;
 }) {
   const disabled = busy || status === "draft" || casePaused;
@@ -249,6 +251,7 @@ export function BrokerPhase({
           onMarkNotListed={onMarkNotListed}
           onClearCheck={onClearCheck}
           onFoundListing={onFoundListing}
+          onAddPlace={onAddPlace}
         />
       )}
 
