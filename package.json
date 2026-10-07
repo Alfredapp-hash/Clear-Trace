@@ -1,9 +1,9 @@
 {
   "name": "cleartrace",
-  "version": "1.5.0",
+  "version": "1.6.0",
   "private": true,
   "cleartrace": {
-    "schemaVersion": 3
+    "schemaVersion": 4
   },
   "bin": {
     "create-cleartrace": "./scripts/create-cleartrace.mjs"
@@ -30,7 +30,7 @@
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.3",
     "jose": "^6.2.12",
     "jszip": "^3.10.2",
@@ -38,26 +38,27 @@
     "nodemailer": "^10.0.15",
     "react": "19.3.0",
     "react-dom": "19.3.0",
-    "stripe": "^22.6.2",
+    "stripe": "^23.0.0",
     "uuid": "^14.0.2",
     "zod": "^4.6.5"
   },
   "devDependencies": {
     "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "^4.3.3",
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^24",
     "@types/nodemailer": "^8.0.2",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
-    "@vitest/coverage-v8": "^4.1.9",
+    "@vitest/coverage-v8": "^5.0.3",
+    "babel-plugin-react-compiler": "^1.0.0",
     "drizzle-kit": "^0.31.11",
     "eslint": "^9.39.5",
     "eslint-config-next": "16.4.0",
     "tailwindcss": "^4.3.3",
     "tsx": "^4.23.15",
-    "typescript": "^5",
-    "vitest": "^4.1.9"
+    "typescript": "~6.0.3",
+    "vitest": "^5.0.3"
   },
   "engines": {
     "node": ">=24"

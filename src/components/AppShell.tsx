@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode } from "react";
@@ -8,7 +9,7 @@ import { type ReactNode } from "react";
  * Primary navigation. Developer tools (Skills registry, Sentinel) are not here: they live
  * under Settings → Developer and are shown only to developer operators.
  */
-const NAV = [
+const NAV: { href: Route; label: string }[] = [
   { href: "/", label: "Dashboard" },
   { href: "/cases", label: "Cases" },
   { href: "/settings", label: "Settings" },

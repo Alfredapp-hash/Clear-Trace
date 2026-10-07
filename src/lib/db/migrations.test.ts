@@ -235,6 +235,14 @@ describe("schema v2 shape", () => {
     expect(
       plan("SELECT * FROM opt_out_dispatches WHERE case_id = ? AND broker_id = ? ORDER BY created_at DESC", "c", "b"),
     ).toMatch(/idx_opt_out_dispatches_case_broker_created/);
+    // Dashboard case list: owner + org, newest first, served by the index without a sort.
+    const dashboard = plan(
+      "SELECT * FROM privacy_cases WHERE owner_user_id = ? AND organization_id = ? ORDER BY updated_at DESC",
+      "u",
+      "o",
+    );
+    expect(dashboard).toMatch(/idx_privacy_cases_owner_org_updated/);
+    expect(dashboard).not.toMatch(/TEMP B-TREE/);
   });
 });
 

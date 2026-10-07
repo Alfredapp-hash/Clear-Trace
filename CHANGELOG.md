@@ -2,6 +2,27 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.6.0] — Unreleased
+
+Sprint 6: the Sprint 5 leftovers. See [docs/sprint/SPRINT-6.md](./docs/sprint/SPRINT-6.md).
+
+### Toolchain & dependencies
+- **better-sqlite3 13** (N-API, Node ≥ 22) with `@types/better-sqlite3` 9; backup / restore / check-key scripts unchanged
+- **vitest 5** with `@vitest/coverage-v8` 5
+- **TypeScript 6.0.3** — TypeScript 7 is blocked: typescript-eslint (used by eslint-config-next) supports `< 6.1`
+- **ESLint stays on 9** — eslint-config-next's react, import and jsx-a11y plugins peer on ESLint ≤ 9. Dependabot now ignores ESLint majors and TypeScript ≥ 6.1 until they catch up
+- **Stripe 23** (API version `2026-09-30`); checkout, portal, subscription retrieve and webhook paths unchanged
+- curl sidecar image 8.22.0 (by digest); GitHub Actions bumps (#19)
+- Dev-only advisories left: `braces` via `@next/eslint-plugin-next` (no patched release) and esbuild 0.18 inside drizzle-kit's loader (never serves). `npm audit --omit=dev`: 0
+
+### Next.js
+- **`typedRoutes`** — link and router hrefs are checked at type-check time; computed hrefs in shared primitives are cast at one place each
+- **React Compiler** (`reactCompiler: true`, `babel-plugin-react-compiler`) — automatic memoization for client components
+
+### Data
+- **Schema v4** — `privacy_cases(owner_user_id, organization_id, updated_at)` serves the dashboard case list without a sort; `remediation_batch_items.claimed_at`
+- **Batch recovery** — a batch step left `running` for more than 15 minutes (crashed process) is claimed again; a Gmail-draft step is instead marked `INTERRUPTED_CHECK_GMAIL` so a draft is never pushed twice unattended
+
 ## [1.5.0] — Unreleased
 
 Sprint 5: audit & upgrades. A four-lane audit (logic, UI/UX, security, platform) and its fixes.

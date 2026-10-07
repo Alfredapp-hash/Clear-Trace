@@ -9,6 +9,13 @@ updates:
       interval: weekly
       day: monday
     open-pull-requests-limit: 10
+    ignore:
+      # eslint-config-next's react / import / jsx-a11y plugins peer on eslint <= 9.
+      - dependency-name: "eslint"
+        update-types: ["version-update:semver-major"]
+      # typescript-eslint (via eslint-config-next) supports typescript < 6.1.
+      - dependency-name: "typescript"
+        versions: [">= 6.1.0"]
     groups:
       # next and eslint-config-next are pinned exactly and must move together.
       next:

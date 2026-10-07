@@ -42,6 +42,10 @@ const SHARP_TRACE_EXCLUDES = ["./node_modules/sharp/**/*", "./node_modules/@img/
 
 const nextConfig: NextConfig = {
   output: "standalone",
+  // Link/router hrefs are checked against the app's routes at type-check time.
+  typedRoutes: true,
+  // Automatic memoization for client components (babel-plugin-react-compiler).
+  reactCompiler: true,
   // No server-side image optimization: /_next/image returns 404 and <img> assets are
   // served as-is from /public.
   images: { unoptimized: true },
