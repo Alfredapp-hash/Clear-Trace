@@ -16,6 +16,9 @@ updates:
       # typescript-eslint (via eslint-config-next) supports typescript < 6.1.
       - dependency-name: "typescript"
         versions: [">= 6.1.0"]
+      # Types track the runtime (Node 24 LTS in Docker, CI and engines).
+      - dependency-name: "@types/node"
+        versions: [">= 25.0.0"]
     groups:
       # next and eslint-config-next are pinned exactly and must move together.
       next:
