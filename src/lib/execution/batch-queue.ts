@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, isNull, ne, sql } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import {
@@ -17,6 +17,23 @@ import {
 } from "@/lib/remediation/service";
 import { createGmailDraft } from "./gmail";
 import { resolveEmailConnector } from "@/lib/connectors/service";
+
+/** A `running` item claimed longer ago than this was left behind by a crashed process. */
+export const STALE_CLAIM_MS = 15 * 60 * 1000;
+
+function isStaleClaim(claimedAt: string | null, now = Date.now()): boolean {
+  // Items claimed before v1.6 have no claim time; treat them as stale.
+  if (!claimedAt) return true;
+  const at = Date.parse(claimedAt);
+  return Number.isNaN(at) || now - at > STALE_CLAIM_MS;
+}
+
+function claimMatches(status: string, claimedAt: string | null) {
+  return and(
+    eq(remediationBatchItems.status, status),
+    claimedAt === null ? isNull(remediationBatchItems.claimedAt) : eq(remediationBatchItems.claimedAt, claimedAt),
+  );
+}
 
 export async function createRemediationBatch(
   session: SessionPayload,
@@ -113,15 +130,30 @@ export async function processBatch(
       completed++;
       continue;
     }
-    if (item.status === "running") continue; // another run is processing it
+    const stale = item.status === "running" && isStaleClaim(item.claimedAt);
+    if (item.status === "running" && !stale) continue; // another run is processing it
+
+    if (stale && item.step === "gmail_draft") {
+      // The crashed run may already have created the Gmail draft. Never push it twice
+      // unattended: mark it interrupted so the user checks Gmail and retries on purpose.
+      const marked = db
+        .update(remediationBatchItems)
+        .set({ status: "error", error: "INTERRUPTED_CHECK_GMAIL", completedAt: new Date().toISOString() })
+        .where(and(eq(remediationBatchItems.id, item.id), claimMatches(item.status, item.claimedAt)))
+        .run();
+      if (marked.changes === 1) {
+        results.push({ itemId: item.id, step: item.step, ok: false, error: "INTERRUPTED_CHECK_GMAIL" });
+      }
+      continue;
+    }
 
     // Conditional claim: two concurrent runs of the same batch never both run a step (e.g.
-    // create two Gmail drafts). Only the run that moves the item out of the status it read
-    // processes it.
+    // create two Gmail drafts). Only the run that moves the item out of the status (and, for
+    // a stale claim, the claim time) it read processes it.
     const claimed = db
       .update(remediationBatchItems)
-      .set({ status: "running" })
-      .where(and(eq(remediationBatchItems.id, item.id), eq(remediationBatchItems.status, item.status)))
+      .set({ status: "running", claimedAt: new Date().toISOString() })
+      .where(and(eq(remediationBatchItems.id, item.id), claimMatches(item.status, item.claimedAt)))
       .run();
     if (claimed.changes !== 1) continue;
 

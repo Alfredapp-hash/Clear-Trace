@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import { useEffect, useRef, useState, useSyncExternalStore, type KeyboardEvent } from "react";
 import Link from "next/link";
 import { Badge, Button, ButtonLink, Card, SectionTitle } from "./ui";
@@ -280,7 +281,7 @@ export function GuidePanel({
                     return (
                       <li key={a.id} className="rounded-lg border border-white/[0.04] px-3 py-2">
                         {isPath ? (
-                          <Link href={a.location} className="block hover:text-teal-300">
+                          <Link href={a.location as Route} className="block hover:text-teal-300">
                             {content}
                           </Link>
                         ) : (

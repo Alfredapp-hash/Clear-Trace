@@ -534,6 +534,8 @@ export const remediationBatchItems = sqliteTable("remediation_batch_items", {
     .notNull()
     .default(sql`(datetime('now'))`),
   completedAt: text("completed_at"),
+  /** When a run moved the item to `running` (stale claims are recovered). */
+  claimedAt: text("claimed_at"),
 });
 
 export const slaDeadlines = sqliteTable("sla_deadlines", {

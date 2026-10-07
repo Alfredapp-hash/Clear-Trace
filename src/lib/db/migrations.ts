@@ -1010,6 +1010,20 @@ function migrateV3(conn: Conn): void {
   for (const statement of V3_INDEXES) conn.exec(statement);
 }
 
+/**
+ * v4 (v1.6.0): the dashboard's owner + org case list, newest first, without a sort step; and
+ * `remediation_batch_items.claimed_at`, so a step left `running` by a crashed process can be
+ * recovered.
+ */
+export const V4_INDEXES: readonly string[] = [
+  "CREATE INDEX IF NOT EXISTS idx_privacy_cases_owner_org_updated ON privacy_cases(owner_user_id, organization_id, updated_at)",
+];
+
+function migrateV4(conn: Conn): void {
+  addColumn(conn, "remediation_batch_items", "claimed_at", "TEXT");
+  for (const statement of V4_INDEXES) conn.exec(statement);
+}
+
 /* ==========================================================================================
  * Runner
  * ======================================================================================== */
@@ -1024,6 +1038,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "v1_baseline", up: applyBaselineSchema },
   { version: 2, name: "v2_ongoing_protection", up: migrateV2 },
   { version: 3, name: "v3_verification_checks_exposure_index", up: migrateV3 },
+  { version: 4, name: "v4_privacy_cases_owner_org_updated_index", up: migrateV4 },
 ];
 
 export const LATEST_SCHEMA_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1].version;

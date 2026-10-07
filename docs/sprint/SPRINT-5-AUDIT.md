@@ -98,7 +98,7 @@ Solid: case ownership on every `/api/cases/[id]/**` route, SSRF guard (pinned IP
 
 ## Results (2026-10-07)
 
-Every item A1–A15, B1–B15, C1–C8 and D1–D14 landed except: better-sqlite3 13, TypeScript 7,
+Every item A1–A15, B1–B15, C1–C8 and D1–D14 landed except (all handled in [Sprint 6](./SPRINT-6.md)): better-sqlite3 13, TypeScript 7,
 ESLint 10, Stripe 23 and vitest 5 (deferred majors); `typedRoutes` / `reactCompiler` (D12, not
 tried); the D7 composite index on `privacy_cases`.
 
@@ -119,6 +119,6 @@ client bundle carries zod or the catalog), Playwright 18/18 against the producti
 - npm 10.9 crashed (`edgesOut`) resolving vitest 4.1.11's optional peers; vitest stays on 4.1.9.
 
 ### Known limits
-- A batch item left `running` by a crashed process is not re-claimed (no stale-claim reset).
+- A batch item left `running` by a crashed process is not re-claimed (fixed in v1.6.0).
 - `GET /api/cases/[id]` now pages its timeline and agent runs (50 by default) — an API change.
 - Pages under the new layouts still repeat their own session check (harmless, cacheable).

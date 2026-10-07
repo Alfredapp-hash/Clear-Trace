@@ -1,5 +1,6 @@
 "use client";
 
+import type { Route } from "next";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useState, Suspense } from "react";
@@ -49,7 +50,8 @@ function LoginForm() {
     }
 
     const from = safeRedirectPath(searchParams.get("from"));
-    router.push(from);
+    // safeRedirectPath only returns a same-origin relative path.
+    router.push(from as Route);
     router.refresh();
   }
 

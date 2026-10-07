@@ -21,8 +21,7 @@ import {
 } from "@/lib/db/schema";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { seedTestCase, seedTestUser } from "@/lib/test/api-helpers";
-import { getActionItems, getDashboardStats } from "./actions";
-import { getExposureRadar, getVictoryStats } from "./radar";
+import { computeDashboardStats, listDashboardCases } from "./actions";
 import { loadDashboard } from "./load";
 
 describe("dashboard queries", () => {
@@ -56,21 +55,19 @@ describe("dashboard queries", () => {
       { id: uuid(), caseId: mine.caseId, exposureId: mine.exposureId, nextCheckAt: past },
     ]);
 
-    const items = await getActionItems(me.userId, me.orgId);
-    expect(items.every((i) => i.caseId === mine.caseId)).toBe(true);
-    expect(items.some((i) => i.type === "verification_due")).toBe(true);
+    const data = await loadDashboard(me.userId, me.orgId);
+    expect(data.actionItems.every((i) => i.caseId === mine.caseId)).toBe(true);
+    expect(data.actionItems.some((i) => i.type === "verification_due")).toBe(true);
 
-    const stats = await getDashboardStats(me.userId, me.orgId);
-    expect(stats).toEqual({ total: 1, active: 1, removed: 0, archived: 0 });
-    expect((await getDashboardStats(me.userId)).total).toBe(2);
+    expect(data.stats).toEqual({ total: 1, active: 1, removed: 0, archived: 0 });
+    // Without an org, every case the user owns counts.
+    expect(computeDashboardStats(await listDashboardCases(me.userId)).total).toBe(2);
 
-    const radar = await getExposureRadar(me.userId, me.orgId);
-    expect(radar).toHaveLength(1);
+    expect(data.radar).toHaveLength(1);
     // confirmed candidate + its exposure counted once
-    expect(radar[0].surfaceCount).toBe(1);
+    expect(data.radar[0].surfaceCount).toBe(1);
 
-    const victory = await getVictoryStats(me.userId, me.orgId);
-    expect(victory.active).toBe(1);
+    expect(data.victories.active).toBe(1);
   });
 
   it("loads once and counts opt-outs / deindex drafts per case with grouped queries", async () => {

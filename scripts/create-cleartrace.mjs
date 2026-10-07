@@ -92,7 +92,7 @@ Register → create case → demo discovery → see candidates in workflow UI.
 ## Tasks
 1. Scaffold Next.js 16 + SQLite + Drizzle + bcrypt session auth
 2. Implement cases table, encrypted identity claims, audit events
-3. Load skills/ as Markdown registry (gray-matter front matter)
+3. Load skills/ as Markdown registry (YAML front matter, src/lib/skills/front-matter.ts)
 4. Add POST /api/cases/[id]/run-next-step wired to skill runner
 5. Add Guide panel with agent handoff export
 

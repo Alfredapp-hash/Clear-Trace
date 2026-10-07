@@ -1,3 +1,4 @@
+import type { Route } from "next";
 import Link from "next/link";
 import { type ReactNode } from "react";
 import { shortStatusLabel } from "@/lib/ux/plain-status";
@@ -97,7 +98,8 @@ export function ButtonLink({
   const isInternal = href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/api/");
   if (isInternal && !external && download === undefined) {
     return (
-      <Link href={href} className={cls}>
+      // Runtime-checked internal path; callers pass computed hrefs (e.g. /cases/<id>).
+      <Link href={href as Route} className={cls}>
         {children}
       </Link>
     );
@@ -318,7 +320,7 @@ export function ListRow({
   const cls = `group flex items-center justify-between gap-4 rounded-xl border border-white/[0.06] bg-white/[0.02] px-4 py-3.5 transition duration-200 hover:border-white/12 hover:bg-white/[0.04] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-300 ${className}`;
   if (href) {
     return (
-      <Link href={href} className={cls}>
+      <Link href={href as Route} className={cls}>
         {children}
       </Link>
     );
