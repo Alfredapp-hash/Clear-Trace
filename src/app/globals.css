@@ -1,6 +1,9 @@
 @import "tailwindcss";
 
 :root {
+  /* The app is dark-only: native controls (select popups, date pickers, scrollbars,
+     checkboxes) must render dark too, or Windows shows white-on-white options. */
+  color-scheme: dark;
   --background: #08090d;
   --foreground: #eef2f6;
   --muted: #8b95a8;
@@ -34,6 +37,28 @@ body {
 
 * {
   box-sizing: border-box;
+}
+
+/* Native <select> popups do not inherit the page's translucent backgrounds; give options an
+   opaque dark surface and readable text on every platform. */
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background-color: #0f1117;
+  color: var(--foreground);
+}
+
+select option:disabled {
+  color: var(--muted);
+}
+
+/* Native checkboxes / radios pick up the brand accent. */
+input[type="checkbox"],
+input[type="radio"] {
+  accent-color: var(--accent);
 }
 
 /* Visible keyboard focus everywhere; components may add their own ring on top. */

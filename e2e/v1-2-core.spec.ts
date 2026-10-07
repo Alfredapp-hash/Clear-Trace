@@ -19,7 +19,7 @@ async function createCase(page: Page, title: string) {
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByPlaceholder("Encrypted on save").fill("Jordan Testcase");
+  await page.getByLabel("Full name", { exact: true }).fill("Jordan Testcase");
   await page.getByRole("button", { name: "Complete intake" }).click();
   await expect(page).toHaveURL(/\/cases\/[a-f0-9-]+$/);
   return page.url();
@@ -53,8 +53,37 @@ test("core workflow: discovery → draft → verification never reports a false 
   await expect(hero.getByRole("heading", { name: "Find who to contact" })).toBeVisible();
   await hero.getByRole("button", { name: "Find who to contact" }).click();
   await page.getByRole("button", { name: "Use this template" }).click();
-  await expect(page.getByRole("button", { name: "Mark as sent" })).toBeVisible();
-  await page.getByRole("button", { name: "Mark as sent" }).click();
+  const markSent = page.getByRole("button", { name: "Mark as sent" });
+  await expect(markSent).toBeVisible();
+
+  // Mark as sent asks first, showing recipient and subject. The sample site has no verified
+  // contact, so it can't be recorded until a recipient is added.
+  await markSent.click();
+  const confirm = page.getByRole("dialog", { name: "Record this request as sent?" });
+  await expect(confirm).toBeVisible();
+  await expect(confirm.getByText("Subject:")).toBeVisible();
+  await expect(confirm.getByText(/has no recipient yet/)).toBeVisible();
+  await expect(confirm.getByRole("button", { name: "Yes, I sent it" })).toBeDisabled();
+  await confirm.getByRole("button", { name: "Cancel" }).click();
+  await expect(confirm).toHaveCount(0);
+  // Focus returns to the button that opened the dialog.
+  await expect(markSent).toBeFocused();
+
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.getByLabel("Recipient (email address or removal-form link)").fill("privacy@publicrecords.example");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page.getByText("To: privacy@publicrecords.example")).toBeVisible();
+
+  await markSent.click();
+  await expect(confirm.getByText("privacy@publicrecords.example")).toBeVisible();
+  const reviewed = confirm.getByRole("checkbox", { name: "I've checked these items" });
+  if (await reviewed.count()) {
+    // Review items gate the confirmation.
+    await expect(confirm.getByRole("button", { name: "Yes, I sent it" })).toBeDisabled();
+    await reviewed.check();
+  }
+  await confirm.getByRole("button", { name: "Yes, I sent it" }).click();
+  await expect(confirm).toHaveCount(0);
 
   // After sending, removal checks are the current phase.
   const checks = page.locator("#phase-verification-body");

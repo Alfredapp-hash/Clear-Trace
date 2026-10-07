@@ -6,14 +6,14 @@
 # a different image. Dependabot (docker ecosystem) proposes digest bumps; keep the three
 # FROM lines on the same digest.
 
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS deps
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS deps
 WORKDIR /app
 # Toolchain for better-sqlite3's native addon when no musl prebuild matches.
 RUN apk add --no-cache python3 make g++ libc6-compat
 COPY package.json package-lock.json ./
 RUN npm ci
 
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS builder
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS builder
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 COPY --from=deps /app/node_modules ./node_modules
@@ -22,7 +22,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 # prebuild runs scripts/sync-skills.mjs, which fails the build if no skill pack is found.
 RUN npm run build
 
-FROM node:22-alpine@sha256:0a7108bf6c7bf5de370ffb1a3ed6be93d405b43ff159f681a8d18c0e2bc2e402 AS runner
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS runner
 WORKDIR /app
 RUN apk add --no-cache libc6-compat
 ENV NODE_ENV=production \

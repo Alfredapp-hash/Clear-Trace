@@ -21,6 +21,7 @@ import { relistIntervalDays } from "@/lib/protection/cadence";
 import { upsertBrokerRecheckSchedule } from "@/lib/protection/schedules";
 import { addDays } from "@/lib/protection/time";
 import type { SessionPayload } from "@/lib/auth/session";
+import { UNSUBMITTED_OPT_OUT_STATUSES, type OptOutDispatchStatus } from "./statuses";
 
 export interface OptOutPackage {
   brokerName: string;
@@ -54,12 +55,8 @@ export function buildOptOutPackage(
   return { brokerName, optOutUrl, exposureUrl, steps, copyBlock };
 }
 
-/** Dispatch statuses that still need the user's action. */
-export const OPEN_OPT_OUT_STATUSES: ReadonlySet<string> = new Set([
-  "pending_approval",
-  "approved",
-  "submitted",
-]);
+export { OPEN_OPT_OUT_STATUSES } from "./statuses";
+export type { OptOutDispatchStatus } from "./statuses";
 
 /**
  * Queue opt-out dispatches from the latest broker sweep.
@@ -67,8 +64,11 @@ export const OPEN_OPT_OUT_STATUSES: ReadonlySet<string> = new Set([
  * - By default only brokers the case was SEEN on ('open' rows, or rows a user checked and
  *   found). `includeUnchecked` also queues unchecked 'to_check' rows (proactive opt-outs).
  * - CPPA-registry brokers are never queued.
- * - Never duplicates a broker: a broker that already has any dispatch is skipped. New
- *   dispatches for such a broker come only from the relist / re-submission paths.
+ * - Never duplicates a broker: a broker that already has a dispatch is skipped. New
+ *   dispatches for such a broker come only from the relist / re-submission paths. A broker
+ *   whose dispatches were all dismissed CAN be queued again when the user asks (the
+ *   default); `skipDismissed` (the automatic monthly-sweep path) skips it too, since the
+ *   user said no.
  * - exposureUrl (and the package) come from the case's exposures by broker_id, falling back
  *   to a host match against exposures and confirmed candidates.
  * - All inserts share one transaction; the broker_opt_out SLA deadline (idempotent) is
@@ -77,7 +77,7 @@ export const OPEN_OPT_OUT_STATUSES: ReadonlySet<string> = new Set([
 export async function queueOptOutDispatchesFromSweep(
   session: SessionPayload,
   caseId: string,
-  options: { includeUnchecked?: boolean } = {},
+  options: { includeUnchecked?: boolean; skipDismissed?: boolean } = {},
 ): Promise<{ created: number; dispatchIds: string[]; skippedExisting: number; skippedRegistry: number }> {
   await requireBillingFeature(session.organizationId, "opt_out_dispatch");
 
@@ -110,10 +110,11 @@ export async function queueOptOutDispatchesFromSweep(
   const dispatchIds = db.transaction(
     (tx) => {
       const existing = tx
-        .select({ brokerId: optOutDispatches.brokerId })
+        .select({ brokerId: optOutDispatches.brokerId, status: optOutDispatches.status })
         .from(optOutDispatches)
         .where(eq(optOutDispatches.caseId, caseId))
-        .all();
+        .all()
+        .filter((d) => options.skipDismissed || d.status !== "dismissed");
       const existingBrokers = new Set(existing.map((d) => canonicalBrokerId(d.brokerId)));
       const ids: string[] = [];
       for (const m of eligible) {
@@ -216,15 +217,18 @@ export async function listOptOutDispatches(
 /**
  * Explicit opt-out dispatch lifecycle. Anything not listed is rejected.
  *   pending_approval → approved → submitted → completed
+ *   pending_approval | approved → dismissed (declined by the user before anything was sent)
  */
-export type OptOutDispatchStatus = "pending_approval" | "approved" | "submitted" | "completed";
-
 export const OPT_OUT_TRANSITIONS: Record<string, readonly OptOutDispatchStatus[]> = {
-  pending_approval: ["approved"],
-  approved: ["submitted"],
+  pending_approval: ["approved", "dismissed"],
+  approved: ["submitted", "dismissed"],
   submitted: ["completed"],
   completed: [],
+  dismissed: [],
 };
+
+/** Longest dismissal reason kept (the route rejects longer ones). */
+export const DISMISS_REASON_MAX = 500;
 
 export function canTransitionOptOut(from: string, to: OptOutDispatchStatus): boolean {
   return OPT_OUT_TRANSITIONS[from]?.includes(to) ?? false;
@@ -269,7 +273,9 @@ async function transitionOptOutDispatch(
     // Relist re-check: catalog relistIntervalDays, else 60 (people-search) / 90 days.
     patch.nextDueAt = addDays(now, relistIntervalDays(row.brokerId));
   }
-  if (to === "submitted" || to === "completed") patch.notes = notes ?? row.notes;
+  if (to === "submitted" || to === "completed" || to === "dismissed") {
+    patch.notes = notes ?? row.notes;
+  }
 
   // Conditional update: only succeeds if the status is still what we validated.
   const res = db
@@ -354,6 +360,32 @@ export async function recordOptOutCompleted(
   await resolveBrokerOptOutDeadlineIfDone(caseId, session.organizationId);
 }
 
+/**
+ * The user declines an opt-out dispatch that was not sent yet (pending_approval or
+ * approved). `dismissed` is terminal and never open: it no longer blocks a relist or a
+ * re-submission for the broker, and the case's broker_opt_out deadline closes once no
+ * dispatch is open. The reason is stored on the dispatch only (it is free text); the audit
+ * event records that one was given.
+ */
+export async function dismissOptOutDispatch(
+  session: SessionPayload,
+  caseId: string,
+  dispatchId: string,
+  reason?: string,
+) {
+  const trimmed = reason?.trim() ? reason.trim().slice(0, DISMISS_REASON_MAX) : undefined;
+  const row = await transitionOptOutDispatch(session, caseId, dispatchId, "dismissed", trimmed);
+  await logAuditEvent({
+    caseId,
+    organizationId: session.organizationId,
+    userId: session.userId,
+    eventType: "opt_out_dismissed",
+    summary: `User dismissed opt-out dispatch for ${row.brokerName}`,
+    detail: { dispatchId: row.id, reasonProvided: Boolean(trimmed) },
+  });
+  await resolveBrokerOptOutDeadlineIfDone(caseId, session.organizationId);
+}
+
 export async function getOptOutDispatchSummary(organizationId: string, caseIds: string[]) {
   if (!caseIds.length) {
     return { pending: 0, submitted: 0, completed: 0 };
@@ -365,9 +397,7 @@ export async function getOptOutDispatchSummary(organizationId: string, caseIds: 
 
   const relevant = rows.filter((r) => caseIds.includes(r.caseId));
   return {
-    pending: relevant.filter((r) =>
-      ["pending_approval", "approved"].includes(r.status),
-    ).length,
+    pending: relevant.filter((r) => UNSUBMITTED_OPT_OUT_STATUSES.has(r.status)).length,
     submitted: relevant.filter((r) => r.status === "submitted").length,
     completed: relevant.filter((r) => r.status === "completed").length,
   };

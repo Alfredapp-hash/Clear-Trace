@@ -25,10 +25,12 @@ export default defineConfig({
       // ~3 points of slack (measured 2026-10-05 with every lane's work in the tree:
       // src/lib 80.8/71.9/80.4/83.3, src/app/api 56.4/42.2/73.3/59.1 for
       // statements/branches/functions/lines; Sprint 3 gates were 70/62/68/72 and 48/33/68/50).
+      // Sprint 5 (v1.5.0) added route tests for api-keys, webhooks, authorization, export and
+      // billing: src/app/api measured 68.0/52.9/74.1/71.4 (2026-10-07), gated ~2 points under.
       // Raise them as coverage improves; never lower them to get a PR through.
       thresholds: {
         "src/lib/**": { statements: 77, branches: 68, functions: 77, lines: 80 },
-        "src/app/api/**": { statements: 53, branches: 39, functions: 70, lines: 56 },
+        "src/app/api/**": { statements: 66, branches: 51, functions: 72, lines: 69 },
       },
     },
   },

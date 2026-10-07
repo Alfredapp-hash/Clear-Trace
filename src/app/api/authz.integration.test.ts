@@ -292,9 +292,20 @@ describe("authorization (Lane A)", () => {
       registerPost(
         new Request("http://localhost/api/auth/register", {
           method: "POST",
+          headers: { "content-type": "application/json" },
           body: JSON.stringify(body),
         }),
       );
+
+    it("rejects a non-JSON (text/plain) body with 415 — no login-CSRF via simple requests", async () => {
+      const res = await registerPost(
+        new Request("http://localhost/api/auth/register", {
+          method: "POST",
+          body: JSON.stringify({ email: `plain-${uuid()}@test.local`, password: "long-enough-password", name: "P" }),
+        }),
+      );
+      expect(res.status).toBe(415);
+    });
 
     it("rejects passwords shorter than 10 characters", async () => {
       const res = await post({ email: `short-${uuid()}@test.local`, password: "123456789", name: "S" });

@@ -16,7 +16,7 @@ async function registerAndCreateCase(page: Page, label: string) {
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByPlaceholder("Encrypted on save").fill("Jordan Testcase");
+  await page.getByLabel("Full name", { exact: true }).fill("Jordan Testcase");
   await page.getByRole("button", { name: "Complete intake" }).click();
   await expect(page).toHaveURL(/\/cases\/[a-f0-9-]+$/);
   return page.url();
@@ -153,7 +153,7 @@ test("'Finish setup' on a draft case resumes that case instead of creating a sec
 
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue" }).click();
-  await page.getByPlaceholder("Encrypted on save").fill("Jordan Testcase");
+  await page.getByLabel("Full name", { exact: true }).fill("Jordan Testcase");
   await page.getByRole("button", { name: "Complete intake" }).click();
   await expect(page).toHaveURL(new RegExp(`/cases/${caseId}$`));
   expect(await countCases()).toBe(before);

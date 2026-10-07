@@ -3,6 +3,7 @@ import { sqlite } from "./index";
 import {
   V1_INDEXES,
   V2_INDEXES,
+  V3_INDEXES,
   runMigrations,
   type RunMigrationsOptions,
   type RunMigrationsResult,
@@ -28,7 +29,7 @@ export {
 } from "./migrations";
 
 /** Every secondary index the migrations create (v1 baseline + later versions). */
-export const INDEXES: readonly string[] = [...V1_INDEXES, ...V2_INDEXES];
+export const INDEXES: readonly string[] = [...V1_INDEXES, ...V2_INDEXES, ...V3_INDEXES];
 
 /**
  * Creates/migrates the whole schema on `conn` by running every pending migration.

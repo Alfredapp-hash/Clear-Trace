@@ -9,6 +9,7 @@ import {
 } from "@/lib/db/schema";
 import { PROTECTION_EXCLUDED_CASE_STATUSES } from "@/lib/protection/schedules";
 import { parseDbTime } from "@/lib/protection/time";
+import { OPEN_OPT_OUT_STATUSES } from "@/lib/opt-out/statuses";
 import { parseAgentDefaults } from "@/lib/connectors/service";
 import { sendNotificationEmail, isDigestEmailSendEnabled } from "@/lib/connectors/email-send";
 import { buildProgressReportForOrg } from "./progress-report";
@@ -66,8 +67,6 @@ export function caseLink(caseId: string): string {
   return `${base}/cases/${caseId}`;
 }
 
-const OPEN_DISPATCH = new Set(["pending_approval", "approved", "submitted"]);
-
 /**
  * Ongoing-protection section of the digest: relists found since the last digest,
  * re-submissions waiting for the user, and the next automatic scan. Broker names and case
@@ -87,7 +86,7 @@ export async function buildProtectionDigestSection(
     (d) => d.relistedFromId && parseDbTime(d.createdAt) > sinceMs,
   );
   const resubmissions = dispatches.filter(
-    (d) => OPEN_DISPATCH.has(d.status) && (d.resubmitCount > 0 || !!d.relistedFromId),
+    (d) => OPEN_OPT_OUT_STATUSES.has(d.status) && (d.resubmitCount > 0 || !!d.relistedFromId),
   );
 
   const schedules = db

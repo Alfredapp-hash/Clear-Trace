@@ -13,7 +13,13 @@ import {
 import { logAuditEvent } from "@/lib/audit/logger";
 import { jsonError, jsonOk } from "@/lib/api";
 import { checkRateLimit } from "@/lib/security/rate-limiter";
-import { getClientIp, normalizeEmailKey } from "@/lib/security/client-ip";
+import {
+  UNKNOWN_CLIENT_IP,
+  getClientIp,
+  normalizeEmailKey,
+  warnUnknownClientIpOnce,
+} from "@/lib/security/client-ip";
+import { hasJsonContentType } from "@/lib/security/request-guards";
 import {
   REGISTRATION_CLOSED,
   REGISTRATION_CLOSED_MESSAGE,
@@ -51,6 +57,10 @@ class RegistrationClosedError extends Error {}
 export async function POST(request: Request) {
   ensureDatabase();
 
+  if (!hasJsonContentType(request)) {
+    return jsonError("Content-Type must be application/json", 415);
+  }
+
   // REGISTRATION_MODE gate first: a closed instance does no further work. first_user is
   // re-checked inside the insert transaction so two racing first sign-ups cannot both win.
   const mode = getRegistrationMode();
@@ -59,7 +69,10 @@ export async function POST(request: Request) {
   }
 
   const ip = getClientIp(request);
-  const ipLimit = ip === "unknown" ? REGISTER_LIMIT_UNKNOWN_IP : REGISTER_LIMIT_PER_IP;
+  // Without a client IP all sign-ups share one roomy bucket: it caps account creation on an
+  // open instance; blocking sign-ups for an hour is far less harmful than blocking sign-ins.
+  if (ip === UNKNOWN_CLIENT_IP) warnUnknownClientIpOnce();
+  const ipLimit = ip === UNKNOWN_CLIENT_IP ? REGISTER_LIMIT_UNKNOWN_IP : REGISTER_LIMIT_PER_IP;
   const ipResult = await checkRateLimit(`register:ip:${ip}`, ipLimit);
   if (!ipResult.allowed) {
     return jsonError("Too many requests", 429);

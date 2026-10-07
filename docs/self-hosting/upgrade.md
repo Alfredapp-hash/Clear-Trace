@@ -60,7 +60,8 @@ previous image instead of the `cp` step above (stop the app first; see backup-re
 `docker compose run --rm --no-deps cleartrace node scripts/restore.mjs /app/data/backups/pre-migrate-v0-<timestamp>.db.enc`.
 
 Without `BACKUP_PASSPHRASE` a pre-migrate snapshot is an unencrypted SQLite file (same
-protection as the live database: it lives on the data volume with owner-only permissions).
+protection as the live database: it lives on the data volume with owner-only permissions), and
+a production server logs a `db.premigrate_snapshot_unencrypted` warning when it writes one.
 Either way it is a full copy, so cases erased after the upgrade stay in it until it expires:
 the worker and every backup run delete snapshots older than `BACKUP_SNAPSHOT_RETENTION_DAYS`
 (default 30). Roll back within that window, or raise it before upgrading if you need longer.

@@ -16,12 +16,15 @@ import {
 } from "@/lib/db/schema";
 import type { SessionPayload } from "@/lib/auth/session";
 import {
+  VERIFICATION_ERROR_RETRY_DAYS,
   deriveCaseStatusFromExposures,
   getVerificationData,
+  nextCheckDate,
   runDueVerifications,
   runVerification,
   scheduleMonitoring,
 } from "./service";
+import { reviewCandidate } from "@/lib/discovery/service";
 import { generateRemovalCertificate, NoVerifiedRemovalsError } from "./certificate";
 import { evaluateFetchedPage } from "./live-check";
 import { encryptValue } from "@/lib/crypto/encryption";
@@ -302,5 +305,119 @@ describe("verification — removal truth", () => {
       });
       expect(pausedChecks).toHaveLength(0);
     });
+  });
+});
+
+describe("verification — Sprint 5 fixes", () => {
+  let session: SessionPayload;
+  const PAST = "2000-01-01T00:00:00.000Z";
+
+  beforeAll(async () => {
+    session = await seedWorkflowUser();
+  });
+
+  afterEach(() => {
+    mockedFetch.mockReset();
+  });
+
+  async function ruleOf(id: string) {
+    return db.query.monitoringRules.findFirst({ where: eq(monitoringRules.id, id) });
+  }
+
+  it("nextCheckDate is UTC and clamps monthly to the end of a shorter month", () => {
+    expect(nextCheckDate("monthly", new Date("2026-01-31T23:30:00.000Z"))).toBe(
+      "2026-02-28T23:30:00.000Z",
+    );
+    expect(nextCheckDate("monthly", new Date("2028-01-31T00:00:00.000Z"))).toBe(
+      "2028-02-29T00:00:00.000Z",
+    );
+    expect(nextCheckDate("monthly", new Date("2026-03-15T08:00:00.000Z"))).toBe(
+      "2026-04-15T08:00:00.000Z",
+    );
+    expect(nextCheckDate("daily", new Date("2026-03-08T01:30:00.000Z"))).toBe(
+      "2026-03-09T01:30:00.000Z",
+    );
+    expect(nextCheckDate("weekly", new Date("2026-10-28T12:00:00.000Z"))).toBe(
+      "2026-11-04T12:00:00.000Z",
+    );
+  });
+
+  it("a scheduled check never revives a rejected exposure; its rule is disabled", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session);
+    const exposureId = exposureIds[0]!;
+    await db.update(verifiedExposures).set({ status: "rejected" }).where(eq(verifiedExposures.id, exposureId));
+    const ruleId = uuid();
+    await db.insert(monitoringRules).values({
+      id: ruleId, caseId, exposureId, schedule: "weekly", nextCheckAt: PAST, enabled: true,
+    });
+    mockedFetch.mockImplementation(async (u: string) => fakePage(200, LISTING_PAGE, u));
+
+    const results = await runDueVerifications();
+    expect(results.find((r) => r.ruleId === ruleId)?.skipped).toBe("exposure_excluded");
+    expect(await exposureStatus(exposureId)).toBe("rejected");
+    expect((await ruleOf(ruleId))?.enabled).toBe(false);
+    expect(mockedFetch).not.toHaveBeenCalled();
+
+    // A manual live check is recorded but does not move the exposure out of 'rejected'.
+    await runVerification(session, caseId, exposureId);
+    expect(await exposureStatus(exposureId)).toBe("rejected");
+    await expect(scheduleMonitoring(session, caseId, exposureId)).rejects.toThrow("INVALID_TRANSITION");
+  });
+
+  it("rejecting a confirmed candidate disables its exposure's monitoring rule in the same step", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session);
+    const exposureId = exposureIds[0]!;
+    const { ruleId } = await scheduleMonitoring(session, caseId, exposureId);
+    const exposure = await db.query.verifiedExposures.findFirst({ where: eq(verifiedExposures.id, exposureId) });
+    await reviewCandidate(session, caseId, exposure!.candidateId, "reject");
+    expect(await exposureStatus(exposureId)).toBe("rejected");
+    expect((await ruleOf(ruleId))?.enabled).toBe(false);
+  });
+
+  it("a 'reappearance' stays a reappearance while the listing is still live", async () => {
+    const url = "https://people.example.org/sticky";
+    const { caseId, exposureIds } = await seedWorkflowCase(session, { exposureUrls: [url] });
+    const exposureId = exposureIds[0]!;
+    await db.update(verifiedExposures).set({ status: "reappearance" }).where(eq(verifiedExposures.id, exposureId));
+    mockedFetch.mockImplementation(async () => fakePage(200, LISTING_PAGE, url));
+    const res = await runVerification(session, caseId, exposureId);
+    expect(res.verificationStatus).toBe("still_exposed");
+    expect(await exposureStatus(exposureId)).toBe("reappearance");
+  });
+
+  it("a failed scheduled check is retried after a day, not a full cadence", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session, {
+      exposureUrls: ["https://people.example.org/retry"],
+    });
+    const ruleId = uuid();
+    await db.insert(monitoringRules).values({
+      id: ruleId, caseId, exposureId: exposureIds[0]!, schedule: "monthly", nextCheckAt: PAST, enabled: true,
+    });
+    mockedFetch.mockImplementation(async () => null as never);
+    const now = new Date("2026-10-07T00:00:00.000Z");
+    const results = await runDueVerifications({ now });
+    expect(results.find((r) => r.ruleId === ruleId)?.error).toBeTruthy();
+    expect((await ruleOf(ruleId))?.nextCheckAt).toBe(
+      new Date(now.getTime() + VERIFICATION_ERROR_RETRY_DAYS * 86_400_000).toISOString(),
+    );
+  });
+
+  it("stops after maxRules; the rest stay due for the next tick", async () => {
+    const ids: string[] = [];
+    for (let i = 0; i < 3; i++) {
+      const { caseId, exposureIds } = await seedWorkflowCase(session, {
+        exposureUrls: [`https://people.example.org/budget-${i}`],
+      });
+      const id = uuid();
+      ids.push(id);
+      await db.insert(monitoringRules).values({
+        id, caseId, exposureId: exposureIds[0]!, schedule: "weekly",
+        nextCheckAt: `1999-01-0${i + 1}T00:00:00.000Z`, enabled: true,
+      });
+    }
+    mockedFetch.mockImplementation(async (u: string) => fakePage(404, "", u));
+    const results = await runDueVerifications({ maxRules: 2 });
+    expect(results.map((r) => r.ruleId)).toEqual(ids.slice(0, 2));
+    expect((await ruleOf(ids[2]!))?.nextCheckAt).toBe("1999-01-03T00:00:00.000Z");
   });
 });

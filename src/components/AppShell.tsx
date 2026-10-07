@@ -67,7 +67,7 @@ export function AppShell({
               </span>
               <div className="hidden sm:block">
                 <p className="text-sm font-semibold tracking-tight text-white">ClearTrace</p>
-                <p className="text-[10px] uppercase tracking-[0.14em] text-slate-500">
+                <p className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)]">
                   Privacy command
                 </p>
               </div>

@@ -30,5 +30,5 @@ export const RUTHLESS_POLICY = {
 } as const;
 
 export const RUTHLESS_ATTESTATION =
-  "I understand Ruthless mode maximizes lawful public-source discovery and removal follow-through. " +
+  "I understand Broader search widens the lawful public sources ClearTrace checks; it cannot guarantee any listing is found or removed. " +
   "It does not crawl the dark web, search for SSNs, bypass site protections, or send unapproved messages.";

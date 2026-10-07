@@ -2,6 +2,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { casePath } from "./paths.mjs";
 
 const BASE_URL = (process.env.CLEARTRACE_URL ?? "http://localhost:3000").replace(/\/$/, "");
 const API_KEY = (process.env.CLEARTRACE_API_KEY ?? "").trim();
@@ -72,60 +73,60 @@ server.tool(
 server.tool(
   "cleartrace_get_case",
   "Get a single case by ID",
-  { caseId: z.string().describe("Case UUID") },
-  async ({ caseId }) => textResult(await api(`/api/cases/${caseId}`)),
+  { caseId: z.string().uuid().describe("Case UUID") },
+  async ({ caseId }) => textResult(await api(casePath(caseId))),
 );
 
 server.tool(
   "cleartrace_get_guide",
   "Get workflow guide and agent handoff packs for a case step",
   {
-    caseId: z.string(),
+    caseId: z.string().uuid().describe("Case UUID"),
     step: z.string().optional().describe("Skill id, e.g. discover-public-exposure"),
   },
   async ({ caseId, step }) => {
     const qs = step ? `?step=${encodeURIComponent(step)}` : "";
-    return textResult(await api(`/api/cases/${caseId}/guide${qs}`));
+    return textResult(await api(casePath(caseId, "/guide" + qs)));
   },
 );
 
 server.tool(
   "cleartrace_run_discovery",
   "Run public exposure discovery on a case",
-  { caseId: z.string() },
+  { caseId: z.string().uuid().describe("Case UUID") },
   async ({ caseId }) =>
-    textResult(await api(`/api/cases/${caseId}/discovery`, { method: "POST", body: "{}" })),
+    textResult(await api(casePath(caseId, "/discovery"), { method: "POST", body: "{}" })),
 );
 
 server.tool(
   "cleartrace_broker_sweep",
   "Sweep broker universe for case scope matches",
-  { caseId: z.string() },
+  { caseId: z.string().uuid().describe("Case UUID") },
   async ({ caseId }) =>
-    textResult(await api(`/api/cases/${caseId}/broker-sweep`, { method: "POST", body: "{}" })),
+    textResult(await api(casePath(caseId, "/broker-sweep"), { method: "POST", body: "{}" })),
 );
 
 server.tool(
   "cleartrace_breach_scan",
   "Run HIBP breach intel scan (requires email claim)",
-  { caseId: z.string() },
+  { caseId: z.string().uuid().describe("Case UUID") },
   async ({ caseId }) =>
-    textResult(await api(`/api/cases/${caseId}/breach-scan`, { method: "POST", body: "{}" })),
+    textResult(await api(casePath(caseId, "/breach-scan"), { method: "POST", body: "{}" })),
 );
 
 server.tool(
   "cleartrace_run_next_step",
   "Run the next Hermes workflow step in-app",
-  { caseId: z.string() },
+  { caseId: z.string().uuid().describe("Case UUID") },
   async ({ caseId }) =>
-    textResult(await api(`/api/cases/${caseId}/run-next-step`, { method: "POST", body: "{}" })),
+    textResult(await api(casePath(caseId, "/run-next-step"), { method: "POST", body: "{}" })),
 );
 
 server.tool(
   "cleartrace_get_sla",
   "Get SLA deadlines for a case",
-  { caseId: z.string() },
-  async ({ caseId }) => textResult(await api(`/api/cases/${caseId}/sla`)),
+  { caseId: z.string().uuid().describe("Case UUID") },
+  async ({ caseId }) => textResult(await api(casePath(caseId, "/sla"))),
 );
 
 const transport = new StdioServerTransport();

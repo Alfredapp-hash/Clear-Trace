@@ -54,11 +54,11 @@ describe("ProtectionPanel", () => {
   it("renders the server summary without fetching", () => {
     vi.stubGlobal("fetch", fetchSpy);
     const html = renderToStaticMarkup(<ProtectionPanel caseId="c1" initial={base} />);
-    expect(html).toContain("2026-11-04");
+    expect(html).toContain("Nov 4, 2026");
     expect(html).toContain("Monthly broker re-check");
     expect(html).toContain("Skipped — scheduled discovery is off");
     expect(html).toContain('href="/settings#protection"');
-    expect(html).toContain("Whitepages: re-check 2026-12-01");
+    expect(html).toContain("Whitepages: re-check Dec 1, 2026");
     expect(html).toContain("Action needed");
     expect(html).toContain(">Resume<"); // broker_recheck paused
     expect(fetchSpy).not.toHaveBeenCalled();

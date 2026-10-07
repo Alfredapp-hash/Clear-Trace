@@ -1,4 +1,4 @@
-import { and, desc, eq, ne, sql } from "drizzle-orm";
+import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import {
@@ -82,9 +82,28 @@ export async function processBatch(
   });
   if (!owned) throw new Error("BATCH_NOT_FOUND");
 
+  // Insertion order (createdAt, then rowid): an exposure's resolve_controller step runs
+  // before its create_draft step, which runs before gmail_draft.
   const items = await db.query.remediationBatchItems.findMany({
     where: eq(remediationBatchItems.batchId, batchId),
+    orderBy: [asc(remediationBatchItems.createdAt), asc(sql`rowid`)],
   });
+  // Loaded lazily once per run (not per item), and refreshed after a resolve_controller step
+  // may have created a remediation.
+  let remediationsByExposure: Map<string, { id: string }> | null = null;
+  const remediationFor = async (exposureId: string) => {
+    if (!remediationsByExposure) {
+      const rows = await db.query.remediationCases.findMany({
+        where: eq(remediationCases.caseId, caseId),
+        columns: { id: true, exposureId: true },
+      });
+      remediationsByExposure = new Map();
+      for (const r of rows) {
+        if (!remediationsByExposure.has(r.exposureId)) remediationsByExposure.set(r.exposureId, { id: r.id });
+      }
+    }
+    return remediationsByExposure.get(exposureId);
+  };
 
   let completed = 0;
   const results: Array<{ itemId: string; step: string; ok: boolean; error?: string }> = [];
@@ -94,6 +113,17 @@ export async function processBatch(
       completed++;
       continue;
     }
+    if (item.status === "running") continue; // another run is processing it
+
+    // Conditional claim: two concurrent runs of the same batch never both run a step (e.g.
+    // create two Gmail drafts). Only the run that moves the item out of the status it read
+    // processes it.
+    const claimed = db
+      .update(remediationBatchItems)
+      .set({ status: "running" })
+      .where(and(eq(remediationBatchItems.id, item.id), eq(remediationBatchItems.status, item.status)))
+      .run();
+    if (claimed.changes !== 1) continue;
 
     try {
       let resultJson: Record<string, unknown> = {};
@@ -104,11 +134,9 @@ export async function processBatch(
           caseId,
           item.exposureId,
         );
+        remediationsByExposure = null;
       } else if (item.step === "create_draft") {
-        const remediations = await db.query.remediationCases.findMany({
-          where: eq(remediationCases.caseId, caseId),
-        });
-        const rem = remediations.find((r) => r.exposureId === item.exposureId);
+        const rem = await remediationFor(item.exposureId);
         if (!rem) throw new Error("NO_REMEDIATION");
         // Re-running a batch never stacks drafts: a remediation that already has a live
         // (non-superseded) draft is skipped.
@@ -125,12 +153,7 @@ export async function processBatch(
       } else if (item.step === "gmail_draft") {
         const emailConnector = await resolveEmailConnector(session.organizationId);
         if (emailConnector !== "gmail") throw new Error("GMAIL_CONNECTOR_REQUIRED");
-        const rem = await db.query.remediationCases.findFirst({
-          where: and(
-            eq(remediationCases.caseId, caseId),
-            eq(remediationCases.exposureId, item.exposureId),
-          ),
-        });
+        const rem = await remediationFor(item.exposureId);
         // The newest draft still awaiting approval — never a sent or superseded one.
         const draft = rem
           ? await db.query.messageDrafts.findFirst({

@@ -120,13 +120,13 @@ export function BillingPageClient() {
                 <p>Renews: {new Date(status.currentPeriodEnd).toLocaleDateString()}</p>
               )}
               {!status.stripeConfigured && (
-                <p className="text-slate-500">
+                <p className="text-[var(--muted)]">
                   Stripe is not configured — all Pro features are enabled for self-hosted use.
                 </p>
               )}
             </div>
           ) : (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <p className="text-sm text-[var(--muted)]">Loading…</p>
           )}
         </Card>
 

@@ -36,8 +36,9 @@ import {
 import type { SessionPayload } from "@/lib/auth/session";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { tryDecryptValue } from "@/lib/crypto/encryption";
-import { slaStatusFromDueAt } from "@/lib/enterprise/sla-calculator";
+import { slaStatusFromDueAt, type SlaDeadlineType } from "@/lib/enterprise/sla-calculator";
 import { createStatutoryDropDeadlines } from "@/lib/enterprise/sla-service";
+import { NON_LIVE_EXPOSURE_STATUSES } from "@/lib/protection/broker-evidence";
 import * as brokerCatalog from "@/lib/brokers/universe";
 import { buildDeleteActEscalation } from "@/lib/remediation/templates";
 import { US_STATES, isUsStateCode, parseUsState } from "./us-states";
@@ -245,6 +246,10 @@ export function dropDeadlineAnchor(filedAtIso: string): string {
  * Record that the user filed a DROP request themselves. Inserts the statutory_filings row
  * and the two statutory SLA deadlines in one transaction. CA cases only
  * (STATUTORY_NOT_APPLICABLE otherwise). Never contacts DROP or the CPPA.
+ *
+ * Idempotent per filing day: recording a filing on a UTC day that already has one (a double
+ * submit, a retried request) returns that filing and its deadlines (`duplicate: true`)
+ * instead of inserting a second filing with a second pair of deadlines.
  */
 export async function recordDropFiling(
   session: SessionPayload,
@@ -259,24 +264,68 @@ export async function recordDropFiling(
   const anchorAt = dropDeadlineAnchor(filedAt);
   const now = new Date().toISOString();
   const filingId = uuid();
-  const deadlines = db.transaction((tx) => {
-    tx.insert(statutoryFilings)
-      .values({
-        id: filingId,
-        caseId,
-        organizationId: session.organizationId,
-        mechanism: DROP_MECHANISM,
-        jurisdiction: "CA",
-        filedAt,
-        createdBy: session.role === "api_key" ? null : session.userId,
-        createdAt: now,
-      })
-      .run();
-    return createStatutoryDropDeadlines(
-      { organizationId: session.organizationId, caseId, anchorAt },
-      tx,
-    );
-  });
+  const outcome = db.transaction(
+    (tx) => {
+      const sameDay = tx
+        .select({ id: statutoryFilings.id, filedAt: statutoryFilings.filedAt })
+        .from(statutoryFilings)
+        .where(
+          and(
+            eq(statutoryFilings.caseId, caseId),
+            eq(statutoryFilings.organizationId, session.organizationId),
+            eq(statutoryFilings.mechanism, DROP_MECHANISM),
+          ),
+        )
+        .all()
+        .find((f) => toDay(f.filedAt) === toDay(filedAt));
+      if (sameDay) {
+        const existingAnchor = dropDeadlineAnchor(sameDay.filedAt);
+        const existing = tx
+          .select({
+            id: slaDeadlines.id,
+            deadlineType: slaDeadlines.deadlineType,
+            dueAt: slaDeadlines.dueAt,
+          })
+          .from(slaDeadlines)
+          .where(
+            and(
+              eq(slaDeadlines.caseId, caseId),
+              eq(slaDeadlines.organizationId, session.organizationId),
+              eq(slaDeadlines.anchorAt, existingAnchor),
+              inArray(slaDeadlines.deadlineType, ["statutory_first_pull", "statutory_deletion_due"]),
+            ),
+          )
+          .all();
+        return {
+          duplicate: true as const,
+          filingId: sameDay.id,
+          filedAt: sameDay.filedAt,
+          anchorAt: existingAnchor,
+          deadlines: existing as Array<{ id: string; deadlineType: SlaDeadlineType; dueAt: string }>,
+        };
+      }
+      tx.insert(statutoryFilings)
+        .values({
+          id: filingId,
+          caseId,
+          organizationId: session.organizationId,
+          mechanism: DROP_MECHANISM,
+          jurisdiction: "CA",
+          filedAt,
+          createdBy: session.role === "api_key" ? null : session.userId,
+          createdAt: now,
+        })
+        .run();
+      const deadlines = createStatutoryDropDeadlines(
+        { organizationId: session.organizationId, caseId, anchorAt },
+        tx,
+      );
+      return { duplicate: false as const, filingId, filedAt, anchorAt, deadlines };
+    },
+    { behavior: "immediate" },
+  );
+  if (outcome.duplicate) return outcome;
+  const { deadlines } = outcome;
 
   await logAuditEvent({
     caseId,
@@ -287,7 +336,7 @@ export async function recordDropFiling(
     detail: { filingId, filedAt, anchorAt, deadlineIds: deadlines.map((d) => d.id) },
   });
 
-  return { filingId, filedAt, anchorAt, deadlines };
+  return { duplicate: false, filingId, filedAt, anchorAt, deadlines };
 }
 
 /* ------------------------------------------------------------------------------------- */
@@ -295,12 +344,7 @@ export async function recordDropFiling(
 /* ------------------------------------------------------------------------------------- */
 
 /** Exposure statuses that mean the listing is no longer (or never was) live. */
-const NOT_LIVE_EXPOSURE_STATUSES = new Set([
-  "removed_confirmed",
-  "rejected",
-  "dismissed",
-  "false_positive",
-]);
+const NOT_LIVE_EXPOSURE_STATUSES = NON_LIVE_EXPOSURE_STATUSES;
 
 type RegistryAwareBroker = { id: string; name: string; registries?: readonly string[] | null };
 
@@ -393,9 +437,11 @@ export async function getStatutorySummary(
     });
   }
 
-  // The earliest deletion window that has passed decides eligibility.
+  // The earliest deletion window that has passed decides eligibility. A deadline already
+  // closed as met (the brokers processed the request) never makes the case eligible.
   const passedDeletion = deadlines
     .filter((d) => d.deadlineType === "statutory_deletion_due")
+    .filter((d) => d.status === "pending" || d.status === "missed")
     .filter((d) => new Date(d.dueAt).getTime() <= now.getTime())
     .sort((a, b) => a.dueAt.localeCompare(b.dueAt))[0];
   const escalationEligible =

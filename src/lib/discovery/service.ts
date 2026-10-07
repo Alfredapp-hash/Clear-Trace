@@ -23,7 +23,7 @@ import {
 import type { ExposureCandidate, PrivacyCase, VerifiedExposure } from "@/lib/db/schema";
 import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser, getLatestAuthorization } from "@/lib/cases/service";
-import { recomputeCaseStatus } from "@/lib/verification/service";
+import { disableMonitoringRules, recomputeCaseStatus } from "@/lib/verification/service";
 import { classifyExposure } from "@/lib/remediation/classifier";
 import {
   getAgentDefaults,
@@ -50,6 +50,7 @@ import {
 import { matchStatusForScore, scoreIdentityMatch } from "./identity-match";
 import { MATCHER_RULES, createIdentityAiAssist } from "./identity-match-ai";
 import { recordScopeUsage } from "@/lib/shield/scope-ledger";
+import { auditHost } from "@/lib/security/audit-text";
 
 const DEMO_SOURCES = [
   { type: "people_search", domain: "publicrecords.example", title: "People Search Profile" },
@@ -922,6 +923,8 @@ export async function reviewCandidate(
           .set({ status: "rejected" })
           .where(and(eq(verifiedExposures.id, exposure.id), eq(verifiedExposures.status, "confirmed_exposure")))
           .run();
+        // A closed exposure is never checked again (a later confirm reschedules it).
+        disableMonitoringRules(exposure.id, tx);
       }
       tx.update(exposureCandidates)
         .set({ matchStatus: matchStatusForScore(candidate.confidenceScore ?? 0), reviewedAt: null })
@@ -969,6 +972,8 @@ export async function reviewCandidate(
         .set({ status: "rejected" })
         .where(and(eq(verifiedExposures.id, exposure.id), eq(verifiedExposures.status, "confirmed_exposure")))
         .run();
+      // "Not me": scheduled verification must never check (or revive) this listing again.
+      disableMonitoringRules(exposure.id, tx);
       return true;
     });
     if (exposureRejected) await recomputeCaseStatus(caseId, now);
@@ -1120,7 +1125,7 @@ export async function reviewCandidate(
     organizationId: session.organizationId,
     userId: session.userId,
     eventType: "exposure_confirmed",
-    summary: `Exposure confirmed at ${candidate.canonicalUrl}`,
+    summary: `Exposure confirmed on ${auditHost(candidate.canonicalUrl)}`,
     detail: { candidateId, exposureId },
   });
 

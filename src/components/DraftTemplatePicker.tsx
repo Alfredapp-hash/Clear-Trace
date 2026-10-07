@@ -57,7 +57,7 @@ export function DraftTemplatePicker({
   const active = templates.find((t) => t.id === selected);
 
   if (loading) {
-    return <p className="text-sm text-slate-500">Loading draft templates…</p>;
+    return <p className="text-sm text-[var(--muted)]">Loading draft templates…</p>;
   }
 
   if (error) {
@@ -69,7 +69,7 @@ export function DraftTemplatePicker({
   }
 
   if (!templates.length) {
-    return <p className="text-sm text-slate-500">No templates available.</p>;
+    return <p className="text-sm text-[var(--muted)]">No templates available.</p>;
   }
 
   return (
@@ -93,7 +93,7 @@ export function DraftTemplatePicker({
             }`}
           >
             <p className="text-sm font-medium text-slate-200">{t.label}</p>
-            <p className="mt-1 text-xs text-slate-500">{t.description}</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">{t.description}</p>
             <span className="mt-2 inline-block">
               <Badge tone="info">{humanize(t.remedyType)}</Badge>
             </span>
@@ -103,7 +103,7 @@ export function DraftTemplatePicker({
 
       {active && (
         <div className="rounded-lg border border-slate-800 bg-slate-900/50 p-4">
-          <p className="text-xs uppercase text-slate-500">Preview</p>
+          <p className="text-xs uppercase text-[var(--muted)]">Preview</p>
           <p className="mt-2 text-sm font-medium text-slate-200">
             {active.preview.subject}
           </p>

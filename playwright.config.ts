@@ -6,6 +6,15 @@ const PORT = 3456;
 // E2E runs against its own SQLite file, recreated on every run.
 const E2E_DB = path.resolve(__dirname, "data", "e2e.db");
 const usingExternalServer = !!process.env.PLAYWRIGHT_BASE_URL;
+// E2E_SERVER=prod runs the suite against the standalone production build (`npm run build`
+// first): production CSP, cookies and bundles. The default is the dev server.
+const prodServer = process.env.E2E_SERVER === "prod";
+const PROD_COMMAND = [
+  "rm -rf .next/standalone/.next/static .next/standalone/public",
+  "cp -r .next/static .next/standalone/.next/static",
+  "cp -r public .next/standalone/public",
+  `PORT=${PORT} HOSTNAME=127.0.0.1 node .next/standalone/server.js`,
+].join(" && ");
 
 // Playwright re-evaluates this config in every worker process. Reset the DB only once,
 // in the main process: deleting it after the web server has opened it leaves parts of the
@@ -31,7 +40,7 @@ export default defineConfig({
   webServer: usingExternalServer
     ? undefined
     : {
-        command: `npm run dev -- -p ${PORT}`,
+        command: prodServer ? PROD_COMMAND : `npm run dev -- -p ${PORT}`,
         url: `http://localhost:${PORT}/api/health`,
         // Never reuse a developer's server: it would point at their real DB.
         reuseExistingServer: false,

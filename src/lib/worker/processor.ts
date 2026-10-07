@@ -2,7 +2,7 @@ import { and, eq, gte, lt, sql } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { runDueVerifications } from "@/lib/verification/service";
 import { purgeExpiredArchivedCases } from "@/lib/cases/lifecycle";
-import { db, sqlite } from "@/lib/db";
+import { db, optimizeDatabase, sqlite } from "@/lib/db";
 import { pruneLocalSnapshots, snapshotDirs } from "@/lib/db/snapshots";
 import { log } from "@/lib/log";
 import { rateLimitEvents } from "@/lib/db/schema";
@@ -90,6 +90,10 @@ export async function maybeRunBackgroundJobs(now: Date = new Date()): Promise<Wo
  * 2. ongoing protection schedules (broker sweeps, opt-in discovery, relist re-checks)
  * 3. retention purge (archived cases, then pre-migrate / pre-restore snapshots older than
  *    BACKUP_SNAPSHOT_RETENTION_DAYS, since those full copies still hold erased cases)
+ * 4. PRAGMA optimize (query-planner statistics; best effort)
+ *
+ * The tick is `partial` when a scheduled verification or a protection job failed (each is
+ * retried on a later tick), `error` when the tick itself threw.
  *
  * Writes one job_runs row (counts only) per tick and prunes rows older than 90 days.
  * /api/worker/run, /api/cron/verify and the inline fallback all call this.
@@ -107,6 +111,7 @@ export async function runBackgroundJobs(): Promise<WorkerJobResult> {
 
   try {
     verificationResults = await runDueVerifications();
+    if (verificationResults.some((r) => r.error)) status = "partial";
 
     try {
       const reappeared = verificationResults
@@ -125,6 +130,7 @@ export async function runBackgroundJobs(): Promise<WorkerJobResult> {
 
     retentionResults = await purgeExpiredArchivedCases();
     pruneSnapshotsBestEffort();
+    optimizeDatabase();
   } catch (error) {
     status = "error";
     errorCode = errorCodeOf(error, "WORKER_FAILED");
@@ -170,6 +176,7 @@ function writeJobRun(
         discoveries: protection?.discoveries ?? 0,
         relists: (protection?.relists ?? 0) + (protection?.relistsFromVerification ?? 0),
         resubmissions: protection?.resubmissions ?? 0,
+        optOutsQueued: protection?.optOutsQueued ?? 0,
         protectionErrors: protection?.errors ?? 0,
         purged: retention.purgedCount,
       },

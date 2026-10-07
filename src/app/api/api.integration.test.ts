@@ -1,6 +1,10 @@
 import { describe, expect, it, beforeAll, beforeEach, vi } from "vitest";
 import { cookies } from "next/headers";
+import { v4 as uuid } from "uuid";
+import { and, eq } from "drizzle-orm";
 import { seedTestUser, seedTestCase, readJson } from "@/lib/test/api-helpers";
+import { db } from "@/lib/db";
+import { optOutDispatches, slaDeadlines } from "@/lib/db/schema";
 import { GET as healthGet } from "./health/route";
 import { POST as loginPost } from "./auth/login/route";
 import { GET as casesGet, POST as casesPost } from "./cases/route";
@@ -257,6 +261,68 @@ describe("API routes", () => {
         await optOutGet(new Request("http://localhost"), ctx(caseFixture.caseId)),
       );
       expect(after.dispatches.find((d) => d.id === dispatchId)?.status).toBe("completed");
+    });
+
+    it("POST opt-out dismiss declines a pending or approved dispatch (409 otherwise)", async () => {
+      mockSessionCookie(fixture.token);
+      const seed = async (status: string) => {
+        const id = uuid();
+        await db.insert(optOutDispatches).values({
+          id,
+          caseId: caseFixture.caseId,
+          organizationId: fixture.orgId,
+          brokerId: `dismiss-${status}-${id.slice(0, 6)}`,
+          brokerName: "Example Broker",
+          status,
+        });
+        return id;
+      };
+      const post = (body: Record<string, unknown>) =>
+        optOutPost(jsonPost("http://localhost", body), ctx(caseFixture.caseId));
+
+      const pending = await seed("pending_approval");
+      const approved = await seed("approved");
+      const submitted = await seed("submitted");
+
+      expect((await post({ action: "dismiss" })).status).toBe(400);
+      expect((await post({ action: "dismiss", dispatchId: pending, reason: 5 })).status).toBe(400);
+      expect(
+        (await post({ action: "dismiss", dispatchId: pending, reason: "x".repeat(501) })).status,
+      ).toBe(400);
+
+      const ok = await post({ action: "dismiss", dispatchId: pending, reason: "Not my listing" });
+      expect(ok.status).toBe(200);
+      expect(await readJson(ok)).toEqual({ dismissed: true });
+      expect((await post({ action: "dismiss", dispatchId: approved })).status).toBe(200);
+
+      // Terminal or already sent: refused.
+      expect((await post({ action: "dismiss", dispatchId: pending })).status).toBe(409);
+      expect((await post({ action: "dismiss", dispatchId: submitted })).status).toBe(409);
+      expect((await post({ action: "approve", dispatchId: pending })).status).toBe(409);
+      expect((await post({ action: "dismiss", dispatchId: MISSING_ID })).status).toBe(404);
+
+      const rows = await db.query.optOutDispatches.findMany({
+        where: eq(optOutDispatches.caseId, caseFixture.caseId),
+      });
+      expect(rows.find((r) => r.id === pending)).toMatchObject({
+        status: "dismissed",
+        notes: "Not my listing",
+      });
+      expect(rows.find((r) => r.id === approved)?.status).toBe("dismissed");
+
+      const unknown = await post({ action: "nope" });
+      expect(unknown.status).toBe(400);
+      expect(JSON.stringify(await readJson(unknown))).toContain("dismiss");
+      // The submitted dispatch is still open, so the broker_opt_out deadline stays pending.
+      const deadlines = await db.query.slaDeadlines.findMany({
+        where: and(
+          eq(slaDeadlines.caseId, caseFixture.caseId),
+          eq(slaDeadlines.deadlineType, "broker_opt_out"),
+        ),
+      });
+      expect(deadlines.every((d) => d.status !== "met" || d.notes !== "auto: all opt-outs dismissed")).toBe(
+        true,
+      );
     });
 
     it("POST /api/cases/:id/deindex creates google+bing drafts and tracks outcome", async () => {

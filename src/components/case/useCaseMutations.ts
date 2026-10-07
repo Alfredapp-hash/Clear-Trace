@@ -161,40 +161,92 @@ export function toastsReducer(state: ToastView[], action: ToastAction): ToastVie
   return [...rest, action.toast].slice(-MAX_TOASTS);
 }
 
-/** Toast queue with timers. Errors stay until dismissed or pushed out by newer toasts. */
+/**
+ * Auto-dismiss timers that can be paused (pointer or focus on a toast) and resumed with the
+ * time that was left, so an Undo never expires while someone is reaching for it. Plain
+ * object, no React: exported for tests.
+ */
+export function createToastTimers(onExpire: (id: number) => void) {
+  const entries = new Map<
+    number,
+    { timer: ReturnType<typeof setTimeout> | null; deadline: number; remaining: number }
+  >();
+  const arm = (id: number, ms: number) => {
+    const timer = setTimeout(() => {
+      entries.delete(id);
+      onExpire(id);
+    }, ms);
+    entries.set(id, { timer, deadline: Date.now() + ms, remaining: ms });
+  };
+  return {
+    start(id: number, ms: number) {
+      if (ms > 0) arm(id, ms);
+    },
+    pause(id: number) {
+      const e = entries.get(id);
+      if (!e || e.timer === null) return;
+      clearTimeout(e.timer);
+      entries.set(id, { timer: null, deadline: 0, remaining: Math.max(0, e.deadline - Date.now()) });
+    },
+    resume(id: number) {
+      const e = entries.get(id);
+      if (!e || e.timer !== null) return;
+      // Leave a moment to read the toast again after the pointer or focus moves away.
+      arm(id, Math.max(e.remaining, TOAST_RESUME_MIN_MS));
+    },
+    clear(id: number) {
+      const e = entries.get(id);
+      if (e?.timer) clearTimeout(e.timer);
+      entries.delete(id);
+    },
+    clearAll() {
+      for (const e of entries.values()) if (e.timer) clearTimeout(e.timer);
+      entries.clear();
+    },
+    isPaused(id: number) {
+      return entries.get(id)?.timer === null;
+    },
+  };
+}
+
+/** Least time a resumed toast stays up. */
+export const TOAST_RESUME_MIN_MS = 2000;
+
+/**
+ * Toast queue with timers. Errors stay until dismissed or pushed out by newer toasts; timed
+ * toasts pause while hovered or focused (holdToast / releaseToast from the ToastRegion).
+ */
 export function useToasts() {
   const [toasts, dispatch] = useReducer(toastsReducer, []);
   const nextId = useRef(1);
-  const timers = useRef(new Map<number, ReturnType<typeof setTimeout>>());
+  const timers = useRef<ReturnType<typeof createToastTimers> | null>(null);
+  if (timers.current === null) {
+    timers.current = createToastTimers((id) => dispatch({ type: "dismiss", id }));
+  }
 
   useEffect(() => {
     const pending = timers.current;
-    return () => {
-      for (const t of pending.values()) clearTimeout(t);
-      pending.clear();
-    };
+    return () => pending?.clearAll();
   }, []);
 
   const dismissToast = useCallback((id: number) => {
-    const timer = timers.current.get(id);
-    if (timer) clearTimeout(timer);
-    timers.current.delete(id);
+    timers.current?.clear(id);
     dispatch({ type: "dismiss", id });
   }, []);
 
-  const pushToast = useCallback(
-    (input: ToastInput): number => {
-      const { ttl, ...view } = input;
-      const id = nextId.current++;
-      dispatch({ type: "push", toast: { ...view, id } });
-      const life = ttl ?? (view.tone === "error" ? 0 : view.action ? UNDO_TTL_MS : TOAST_TTL_MS);
-      if (life > 0) timers.current.set(id, setTimeout(() => dismissToast(id), life));
-      return id;
-    },
-    [dismissToast],
-  );
+  const pushToast = useCallback((input: ToastInput): number => {
+    const { ttl, ...view } = input;
+    const id = nextId.current++;
+    dispatch({ type: "push", toast: { ...view, id } });
+    const life = ttl ?? (view.tone === "error" ? 0 : view.action ? UNDO_TTL_MS : TOAST_TTL_MS);
+    timers.current?.start(id, life);
+    return id;
+  }, []);
 
-  return { toasts, pushToast, dismissToast };
+  const holdToast = useCallback((id: number) => timers.current?.pause(id), []);
+  const releaseToast = useCallback((id: number) => timers.current?.resume(id), []);
+
+  return { toasts, pushToast, dismissToast, holdToast, releaseToast };
 }
 
 /* ------------------------------ batch helpers ------------------------------ */
@@ -247,7 +299,7 @@ export function useCaseMutations() {
   const [results, dispatchResult] = useReducer(rowResultsReducer, {});
   /** What to re-run for Retry, per row key. */
   const retries = useRef(new Map<string, { url: string; body: unknown; opts: MutateOptions }>());
-  const { toasts, pushToast, dismissToast } = useToasts();
+  const { toasts, pushToast, dismissToast, holdToast, releaseToast } = useToasts();
 
   const loading = requestKey || (isRefreshing ? refreshKey : "");
   const busy = loading !== "";
@@ -397,6 +449,8 @@ export function useCaseMutations() {
     toasts,
     pushToast,
     dismissToast,
+    holdToast,
+    releaseToast,
     loading,
     busy,
     setError,
@@ -418,6 +472,8 @@ const count = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? on
 export const optOutKey = (dispatchId: string) => `opt-${dispatchId}`;
 export const matchKey = (matchId: string) => `match-${matchId}`;
 export const foundKey = (brokerId: string) => `found-${brokerId}`;
+export const RESIDENCE_KEY = "residence-state";
+export const DROP_FILING_KEY = "drop-filing";
 
 /** "Approved 10 of 12 opt-outs. 2 failed — use Retry on those rows." */
 export function batchSummary(verb: string, ok: number, total: number, one: string, many = `${one}s`): string {
@@ -530,6 +586,26 @@ export function useCaseActions(caseId: string) {
       ),
     optOutAction: (dispatchId: string, action: "approve" | "submit" | "complete") =>
       post(optOutKey(dispatchId), "opt-out-dispatch", { action, dispatchId }, "Could not update this opt-out"),
+    /** Decline an opt-out that was not sent yet (pending_approval / approved). Terminal. */
+    dismissOptOut: (dispatchId: string, reason?: string) =>
+      post(
+        optOutKey(dispatchId),
+        "opt-out-dispatch",
+        { action: "dismiss", dispatchId, ...(reason?.trim() ? { reason: reason.trim() } : {}) },
+        "Could not dismiss this opt-out",
+        say("Opt-out dismissed. Nothing was sent to the broker."),
+      ),
+    /** State of residence: a state code, or null to detect it from the case details again. */
+    setResidenceState: (jurisdictionState: string | null) =>
+      mutate(RESIDENCE_KEY, `${base}/statutory`, { jurisdictionState }, {
+        method: "PATCH",
+        errorMessage: "Could not save the state of residence",
+        onSuccess: say("State of residence saved"),
+      }),
+    /** California DROP: the date the user filed their own request (YYYY-MM-DD). */
+    recordDropFiling: (filedAt: string) =>
+      post(DROP_FILING_KEY, "statutory", { filedAt }, "Could not save the filing date",
+        say("Filing date saved. ClearTrace will track the 45- and 90-day windows.")),
     /** Approve several opt-outs (the per-dispatch API, BATCH_CONCURRENCY at a time). */
     approveAll: async (dispatchIds: string[]) => {
       if (dispatchIds.length === 0) return;

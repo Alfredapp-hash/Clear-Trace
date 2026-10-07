@@ -18,8 +18,10 @@ import {
   optOutDispatches,
   privacyCases,
   protectionSchedules,
+  type OptOutDispatch,
   type ProtectionScheduleKind,
 } from "@/lib/db/schema";
+import brokerIdAliases from "@/lib/brokers/data/id-aliases.json";
 import { BROKER_SWEEP_CADENCE_DAYS, DISCOVERY_CADENCE_DAYS, relistIntervalDays } from "./cadence";
 import { canonicalBrokerId } from "./broker-evidence";
 import { addDays, parseDbTime } from "./time";
@@ -129,7 +131,130 @@ export function backfillProtectionSchedules(now: Date = new Date()): number {
     .all();
   let created = 0;
   for (const c of missing) created += ensureProtectionSchedules(c.id, now);
+  canonicalizeStoredBrokerIds(now);
   return created + backfillCompletedOptOutRechecks(now);
+}
+
+/** Legacy (renamed) broker ids from the catalog's id-aliases.json. */
+const LEGACY_BROKER_IDS: readonly string[] = Object.keys(brokerIdAliases as Record<string, string>);
+
+/**
+ * Rewrite legacy broker ids stored on opt-out dispatches and broker_recheck schedules to the
+ * current catalog id, so one broker never has two re-check schedules (one per id) and every
+ * lookup by broker_id matches. When both an alias and a canonical schedule exist for the
+ * same case, the canonical row is kept, pointed at whichever of the two dispatches is newer,
+ * and the alias row is deleted. Idempotent; a no-op once nothing uses an alias. Returns the
+ * number of rows rewritten or merged.
+ */
+export function canonicalizeStoredBrokerIds(
+  now: Date = new Date(),
+  legacyIds: readonly string[] = LEGACY_BROKER_IDS,
+): number {
+  if (legacyIds.length === 0) return 0;
+  const iso = now.toISOString();
+  return db.transaction(
+    (tx) => {
+      let changed = 0;
+      const dispatches = tx
+        .select({ id: optOutDispatches.id, brokerId: optOutDispatches.brokerId })
+        .from(optOutDispatches)
+        .where(inArray(optOutDispatches.brokerId, [...legacyIds]))
+        .all();
+      for (const d of dispatches) {
+        const canonical = canonicalBrokerId(d.brokerId);
+        if (!canonical || canonical === d.brokerId) continue;
+        tx.update(optOutDispatches).set({ brokerId: canonical }).where(eq(optOutDispatches.id, d.id)).run();
+        changed++;
+      }
+
+      const schedules = tx
+        .select()
+        .from(protectionSchedules)
+        .where(
+          and(
+            eq(protectionSchedules.kind, "broker_recheck"),
+            inArray(protectionSchedules.brokerId, [...legacyIds]),
+          ),
+        )
+        .all();
+      for (const sched of schedules) {
+        const canonical = canonicalBrokerId(sched.brokerId);
+        if (!canonical || canonical === sched.brokerId) continue;
+        const twin = tx
+          .select()
+          .from(protectionSchedules)
+          .where(
+            and(
+              eq(protectionSchedules.caseId, sched.caseId),
+              eq(protectionSchedules.kind, "broker_recheck"),
+              eq(protectionSchedules.brokerId, canonical),
+            ),
+          )
+          .get();
+        if (!twin) {
+          tx.update(protectionSchedules)
+            .set({ brokerId: canonical, updatedAt: iso })
+            .where(eq(protectionSchedules.id, sched.id))
+            .run();
+          changed++;
+          continue;
+        }
+        const createdAtOf = (id: string | null) =>
+          id
+            ? parseDbTime(
+                tx
+                  .select({ createdAt: optOutDispatches.createdAt })
+                  .from(optOutDispatches)
+                  .where(eq(optOutDispatches.id, id))
+                  .get()?.createdAt,
+              )
+            : Number.NaN;
+        const aliasAt = createdAtOf(sched.dispatchId);
+        const twinAt = createdAtOf(twin.dispatchId);
+        if (!Number.isNaN(aliasAt) && (Number.isNaN(twinAt) || aliasAt > twinAt)) {
+          tx.update(protectionSchedules)
+            .set({
+              dispatchId: sched.dispatchId,
+              cadenceDays: sched.cadenceDays,
+              nextRunAt: sched.nextRunAt,
+              updatedAt: iso,
+            })
+            .where(eq(protectionSchedules.id, twin.id))
+            .run();
+        }
+        tx.delete(protectionSchedules).where(eq(protectionSchedules.id, sched.id)).run();
+        changed++;
+      }
+      return changed;
+    },
+    { behavior: "immediate" },
+  );
+}
+
+/**
+ * Completed dispatches still missing next_due_at that are not superseded by a later,
+ * non-dismissed dispatch for the same broker (superseded rows are filtered in SQL so they
+ * are not rescanned on every tick). julianday() compares ISO and datetime('now')
+ * timestamps correctly.
+ */
+export function completedOptOutsMissingRecheck(): OptOutDispatch[] {
+  return db
+    .select()
+    .from(optOutDispatches)
+    .where(
+      and(
+        eq(optOutDispatches.status, "completed"),
+        isNull(optOutDispatches.nextDueAt),
+        isNotNull(optOutDispatches.completedAt),
+        sql`NOT EXISTS (SELECT 1 FROM opt_out_dispatches later
+              WHERE later.case_id = ${optOutDispatches.caseId}
+                AND later.broker_id = ${optOutDispatches.brokerId}
+                AND later.id != ${optOutDispatches.id}
+                AND later.status != 'dismissed'
+                AND julianday(later.created_at) > julianday(${optOutDispatches.createdAt}))`,
+      ),
+    )
+    .all();
 }
 
 /**
@@ -142,17 +267,7 @@ export function backfillProtectionSchedules(now: Date = new Date()): number {
  * number of dispatches backfilled.
  */
 export function backfillCompletedOptOutRechecks(now: Date = new Date()): number {
-  const pending = db
-    .select()
-    .from(optOutDispatches)
-    .where(
-      and(
-        eq(optOutDispatches.status, "completed"),
-        isNull(optOutDispatches.nextDueAt),
-        isNotNull(optOutDispatches.completedAt),
-      ),
-    )
-    .all();
+  const pending = completedOptOutsMissingRecheck();
   if (pending.length === 0) return 0;
 
   const caseIds = [...new Set(pending.map((d) => d.caseId))];
@@ -181,6 +296,7 @@ export function backfillCompletedOptOutRechecks(now: Date = new Date()): number 
           o.id !== d.id &&
           o.caseId === d.caseId &&
           canonicalBrokerId(o.brokerId) === key &&
+          o.status !== "dismissed" &&
           (parseDbTime(o.createdAt) > at ||
             (parseDbTime(o.createdAt) === at && o.status !== "completed")),
       );
@@ -196,7 +312,7 @@ export function backfillCompletedOptOutRechecks(now: Date = new Date()): number 
           .where(and(eq(optOutDispatches.id, d.id), isNull(optOutDispatches.nextDueAt)))
           .run();
         if (res.changes !== 1) return false;
-        if (!d.brokerId) return true;
+        if (!key) return true;
         const existing = tx
           .select({ id: protectionSchedules.id })
           .from(protectionSchedules)
@@ -204,7 +320,7 @@ export function backfillCompletedOptOutRechecks(now: Date = new Date()): number 
             and(
               eq(protectionSchedules.caseId, d.caseId),
               eq(protectionSchedules.kind, "broker_recheck"),
-              eq(protectionSchedules.brokerId, d.brokerId),
+              eq(protectionSchedules.brokerId, key),
             ),
           )
           .get();
@@ -215,7 +331,7 @@ export function backfillCompletedOptOutRechecks(now: Date = new Date()): number 
               caseId: d.caseId,
               organizationId: d.organizationId,
               kind: "broker_recheck",
-              brokerId: d.brokerId,
+              brokerId: key,
               dispatchId: d.id,
               cadenceDays,
               nextRunAt: nextDueAt,
@@ -249,6 +365,8 @@ export function upsertBrokerRecheckSchedule(input: {
   now?: Date;
 }): string {
   const iso = (input.now ?? new Date()).toISOString();
+  // Always keyed by the current catalog id, so a legacy alias never gets a second schedule.
+  const brokerId = canonicalBrokerId(input.brokerId) ?? input.brokerId;
   return db.transaction(
     (tx) => {
       const existing = tx
@@ -258,7 +376,7 @@ export function upsertBrokerRecheckSchedule(input: {
           and(
             eq(protectionSchedules.caseId, input.caseId),
             eq(protectionSchedules.kind, "broker_recheck"),
-            eq(protectionSchedules.brokerId, input.brokerId),
+            eq(protectionSchedules.brokerId, brokerId),
           ),
         )
         .get();
@@ -281,7 +399,7 @@ export function upsertBrokerRecheckSchedule(input: {
           caseId: input.caseId,
           organizationId: input.organizationId,
           kind: "broker_recheck",
-          brokerId: input.brokerId,
+          brokerId,
           dispatchId: input.dispatchId,
           cadenceDays: input.cadenceDays,
           nextRunAt: input.nextRunAt,

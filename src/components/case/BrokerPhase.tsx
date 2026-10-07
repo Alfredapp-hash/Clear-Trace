@@ -1,11 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { Badge, Button, InlineResult, ProgressMeter, type InlineResultView } from "../ui";
+import { Badge, Button, ConfirmDialog, InlineResult, ProgressMeter, type InlineResultView } from "../ui";
 import { BrokerChecklist } from "./BrokerChecklist";
 import { optOutKey } from "./useCaseMutations";
 import type { BrokerChecklistView } from "@/lib/brokers/checklist";
 import { safeHttpUrl } from "@/lib/ui/safe-url";
+// Client-safe (no imports): opt-outs nothing was sent for yet can be dismissed.
+import { DISMISSABLE_OPT_OUT_STATUSES } from "@/lib/opt-out/statuses";
 import { itemStatusLabel, plural, RELISTED_LABEL, resubmissionLabel } from "@/lib/ux/plain-status";
 
 export interface OptOutDispatch {
@@ -26,23 +28,35 @@ export interface OptOutDispatch {
 
 export type OptOutAction = "approve" | "submit" | "complete";
 
-type QueueGroupId = "approval" | "ready" | "waiting" | "done";
+type QueueGroupId = "approval" | "ready" | "waiting" | "done" | "dismissed";
 
 const QUEUE_GROUPS: ReadonlyArray<{ id: QueueGroupId; status: string; title: string }> = [
   { id: "approval", status: "pending_approval", title: "Needs your approval" },
   { id: "ready", status: "approved", title: "Ready: fill in the broker's form" },
   { id: "waiting", status: "submitted", title: "Submitted, waiting" },
   { id: "done", status: "completed", title: "Done" },
+  { id: "dismissed", status: "dismissed", title: "Dismissed" },
 ];
+
+/** Badge tone per dispatch status; dismissed is neutral (the user's own decision). */
+export function dispatchTone(status: string): "success" | "warning" | "info" | "neutral" {
+  if (status === "completed") return "success";
+  if (status === "submitted") return "warning";
+  if (status === "dismissed") return "neutral";
+  return "info";
+}
+
+/** Longest dismissal reason the server keeps. */
+const DISMISS_REASON_MAX = 500;
 
 /** Open queue items at or below which the active groups start expanded. */
 export const QUEUE_EXPAND_LIMIT = 5;
 
 /** Which queue groups start expanded: none for a long queue, so 30 opt-outs stay compact. */
 export function initialQueueOpen(dispatches: ReadonlyArray<{ status: string }>): Record<QueueGroupId, boolean> {
-  const active = dispatches.filter((d) => d.status !== "completed").length;
+  const active = dispatches.filter((d) => d.status !== "completed" && d.status !== "dismissed").length;
   const small = active > 0 && active <= QUEUE_EXPAND_LIMIT;
-  return { approval: small, ready: small, waiting: small, done: false };
+  return { approval: small, ready: small, waiting: small, done: false, dismissed: false };
 }
 
 /** Phase 2 — data-broker opt-outs (an optional track that runs alongside the others). */
@@ -58,6 +72,7 @@ export function BrokerPhase({
   onBrokerSweep,
   onQueue,
   onDispatchAction,
+  onDismiss = () => {},
   onApproveAll = () => {},
   onMarkNotListed = () => {},
   onClearCheck = () => {},
@@ -77,6 +92,8 @@ export function BrokerPhase({
   /** Prepare opt-outs: seen / found brokers, or (includeUnchecked) every unchecked one too. */
   onQueue: (includeUnchecked?: boolean) => void;
   onDispatchAction: (dispatchId: string, action: OptOutAction) => void;
+  /** Decline an opt-out that was not sent yet; `reason` is optional free text. */
+  onDismiss?: (dispatchId: string, reason?: string) => void;
   onApproveAll?: (dispatchIds: string[]) => void;
   onMarkNotListed?: (matchId: string) => void;
   onClearCheck?: (matchId: string) => void;
@@ -86,7 +103,11 @@ export function BrokerPhase({
   const disabled = busy || status === "draft" || casePaused;
   const [open, setOpen] = useState(() => initialQueueOpen(dispatches));
   const [pasteShown, setPasteShown] = useState<Record<string, boolean>>({});
-  const done = dispatches.filter((d) => d.status === "completed").length;
+  const [dismissing, setDismissing] = useState<OptOutDispatch | null>(null);
+  const [dismissReason, setDismissReason] = useState("");
+  // Dismissed opt-outs are the user's decision, not outstanding work: they leave the count.
+  const tracked = dispatches.filter((d) => d.status !== "dismissed");
+  const done = tracked.filter((d) => d.status === "completed").length;
   // Unchecked brokers a proactive queue would add (to_check, or an automatic look was blocked).
   const uncheckedCount = checklist ? checklist.counts.to_check + checklist.counts.needs_manual : 0;
 
@@ -103,7 +124,7 @@ export function BrokerPhase({
           <p className="min-w-0 flex-1 font-medium text-slate-200">{d.brokerName}</p>
           {d.relistedFromId && <Badge tone="danger">{RELISTED_LABEL}</Badge>}
           {resubmits > 0 && <Badge tone="warning">{resubmissionLabel(resubmits)}</Badge>}
-          <Badge tone={d.status === "completed" ? "success" : d.status === "submitted" ? "warning" : "info"}>
+          <Badge tone={dispatchTone(d.status)}>
             {itemStatusLabel(d.status)}
           </Badge>
         </div>
@@ -150,6 +171,20 @@ export function BrokerPhase({
               {loading === key ? "Saving…" : "Broker says it's removed (self-reported)"}
             </Button>
           )}
+          {DISMISSABLE_OPT_OUT_STATUSES.has(d.status) && (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => {
+                setDismissReason("");
+                setDismissing(d);
+              }}
+              disabled={busy || casePaused}
+              aria-label={`Dismiss opt-out for ${d.brokerName}`}
+            >
+              Dismiss
+            </Button>
+          )}
           <InlineResult result={results[key]} onRetry={() => onRetry(key)} />
         </div>
         <div id={pasteId} hidden={!shown}>
@@ -162,6 +197,11 @@ export function BrokerPhase({
         {d.status === "completed" && (
           <p className="mt-2 text-xs text-[var(--muted)]">
             Self-reported by the broker. Removal checks confirm it independently.
+          </p>
+        )}
+        {d.status === "dismissed" && (
+          <p className="mt-2 text-xs text-[var(--muted)]">
+            You dismissed this opt-out. Nothing was sent to this broker from ClearTrace.
           </p>
         )}
       </li>
@@ -217,11 +257,13 @@ export function BrokerPhase({
           <h4 id="opt-out-queue-heading" className="sr-only">
             Opt-out queue
           </h4>
-          <ProgressMeter
-            done={done}
-            total={dispatches.length}
-            label={`${done} of ${plural(dispatches.length, "broker")} done`}
-          />
+          {tracked.length > 0 && (
+            <ProgressMeter
+              done={done}
+              total={tracked.length}
+              label={`${done} of ${plural(tracked.length, "broker")} done`}
+            />
+          )}
           {QUEUE_GROUPS.map((g) => {
             const items = dispatches.filter((d) => d.status === g.status);
             if (items.length === 0) return null;
@@ -267,6 +309,39 @@ export function BrokerPhase({
           })}
         </section>
       )}
+
+      <ConfirmDialog
+        open={dismissing !== null}
+        id="dismiss-opt-out"
+        tone="primary"
+        title={dismissing ? `Dismiss the opt-out for ${dismissing.brokerName}?` : ""}
+        message={
+          <div className="space-y-3">
+            <p>
+              Use this if you don&apos;t want to opt out of this broker, or it was added by
+              mistake. Nothing is sent to the broker, and the opt-out moves to Dismissed. This
+              can&apos;t be undone.
+            </p>
+            <label className="block">
+              <span className="text-xs text-[var(--muted)]">Reason (optional, kept with this opt-out)</span>
+              <textarea
+                value={dismissReason}
+                maxLength={DISMISS_REASON_MAX}
+                rows={2}
+                onChange={(e) => setDismissReason(e.target.value)}
+                className="mt-1 w-full rounded-xl border border-white/10 bg-black/30 p-2 text-sm text-slate-100 focus:border-teal-500/50 focus:ring-2 focus:ring-teal-500/60"
+              />
+            </label>
+          </div>
+        }
+        confirmLabel="Dismiss opt-out"
+        onConfirm={() => {
+          const target = dismissing;
+          setDismissing(null);
+          if (target) onDismiss(target.id, dismissReason.trim() || undefined);
+        }}
+        onCancel={() => setDismissing(null)}
+      />
     </div>
   );
 }

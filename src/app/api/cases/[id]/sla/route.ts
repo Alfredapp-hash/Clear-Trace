@@ -64,6 +64,7 @@ export async function PATCH(
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "SLA_NOT_FOUND") return jsonError("SLA deadline not found", 404);
+    if (msg === "INVALID_TRANSITION") return jsonError("Only a pending deadline can be marked met", 409);
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("SLA tracking requires Pro. Upgrade on Billing.", 402);
     }

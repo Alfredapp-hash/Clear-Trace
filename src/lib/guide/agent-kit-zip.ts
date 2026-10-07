@@ -84,7 +84,7 @@ export function collectAgentKitZipEntries(platform: BuilderPlatform): ZipEntry[]
   const skillsDir = path.join(/*turbopackIgnore: true*/ SKILLPACK_ROOT, "skills");
   entries.push(...walkFiles(skillsDir, `${root}/skills`));
 
-  const mcpFiles = ["index.mjs", "package.json", "README.md", "cursor-mcp.json.example"];
+  const mcpFiles = ["index.mjs", "paths.mjs", "package.json", "README.md", "cursor-mcp.json.example"];
   for (const file of mcpFiles) {
     const filePath = path.join(/*turbopackIgnore: true*/ MCP_ROOT, file);
     if (fs.existsSync(/*turbopackIgnore: true*/ filePath)) {

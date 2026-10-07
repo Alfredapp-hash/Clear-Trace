@@ -1,6 +1,5 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
 import { CaseTimeline } from "@/components/CaseTimeline";
 import { CaseWorkflow } from "@/components/CaseWorkflow";
 import { CaseActions } from "@/components/CaseActions";
@@ -9,8 +8,10 @@ import { WorkflowProgress } from "@/components/WorkflowProgress";
 import { GuidePanel } from "@/components/GuidePanel";
 import {
   authorityLabel,
+  buildCaseProgress,
   caseTypeLabel,
   claimTypeLabel,
+  getCasePhases,
   itemStatusLabel,
   plainStatus,
   relationshipLabel,
@@ -108,8 +109,41 @@ export default async function CaseDetailPage({
   const consentVerified =
     authorization?.status === "verified" && authorization.userAttestation === true;
 
+  // One set of inputs for the workflow and the sidebar progress, so the two always agree.
+  const workflow = {
+    caseId: id,
+    status: privacyCase.status,
+    discoveryReady: connectorHealth.discoveryReady,
+    demoCase,
+    consentVerified,
+    simulateAllowed: verification.simulateAllowed === true,
+    emailAutoSendEnabled,
+    candidates: discovery.candidates,
+    exposures,
+    remediations: remediation.remediations,
+    controllers: remediation.controllers,
+    remedies: remediation.remedies,
+    drafts: remediation.drafts,
+    checks: verification.checks,
+    breachFindings: breach.findings,
+    optOutDispatches,
+    deindexRequests,
+    brokerChecklist,
+  };
+  const phases = getCasePhases(buildCaseProgress(workflow));
+  // Only what the timeline shows goes to the client (no audit detail JSON).
+  const timelineEvents = timeline.events.map((e) => ({
+    id: e.id,
+    eventType: e.eventType,
+    summary: e.summary,
+    createdAt: e.createdAt,
+    eventHash: e.eventHash,
+    prevHash: e.prevHash,
+  }));
+  const EVIDENCE_EXCERPT = 120;
+
   return (
-    <AppShell userName={session.name} orgName={session.organizationName}>
+    <>
       <Link
         href="/cases"
         className="inline-flex items-center gap-1 text-sm text-[var(--muted)] transition hover:text-teal-300"
@@ -131,43 +165,34 @@ export default async function CaseDetailPage({
         </div>
         <div className="flex flex-col items-end gap-3">
           <StatusBadge status={privacyCase.status} />
-          <CaseActions caseId={id} status={privacyCase.status} />
+          <CaseActions caseId={id} status={privacyCase.status} caseTitle={privacyCase.title} />
         </div>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-3">
         {/* Workflow first in the source so phones see the next step first. */}
         <div className="min-w-0 space-y-6 lg:order-2 lg:col-span-2">
-          <CaseWorkflow
-            caseId={id}
-            status={privacyCase.status}
-            discoveryReady={connectorHealth.discoveryReady}
-            demoCase={demoCase}
-            consentVerified={consentVerified}
-            simulateAllowed={verification.simulateAllowed === true}
-            emailAutoSendEnabled={emailAutoSendEnabled}
-            candidates={discovery.candidates}
-            exposures={exposures}
-            remediations={remediation.remediations}
-            controllers={remediation.controllers}
-            remedies={remediation.remedies}
-            drafts={remediation.drafts}
-            checks={verification.checks}
-            breachFindings={breach.findings}
-            optOutDispatches={optOutDispatches}
-            deindexRequests={deindexRequests}
-            brokerChecklist={brokerChecklist}
-          />
+          <CaseWorkflow {...workflow} />
 
-          <ProtectionPanel caseId={id} initial={protection} />
+          <Card>
+            <SectionTitle subtitle="Scheduled re-checks after your requests are sent">
+              Ongoing protection
+            </SectionTitle>
+            <ProtectionPanel caseId={id} initial={protection} />
+          </Card>
 
           {statutory.jurisdictionState === "CA" && (
-            <StatutoryPhase caseId={id} jurisdictionState={statutory.jurisdictionState} initial={statutory} />
+            <Card>
+              <SectionTitle subtitle="California's Delete Request and Opt-out Platform">
+                California DROP
+              </SectionTitle>
+              <StatutoryPhase caseId={id} jurisdictionState={statutory.jurisdictionState} initial={statutory} />
+            </Card>
           )}
 
           <Card variant="elevated">
-            <SectionTitle subtitle="Tamper-evident record of every action">Case timeline</SectionTitle>
-            <CaseTimeline events={timeline} />
+            <SectionTitle subtitle="Hash-linked log of actions on this case">Case timeline</SectionTitle>
+            <CaseTimeline caseId={id} events={timelineEvents} nextCursor={timeline.nextCursor} />
           </Card>
         </div>
 
@@ -179,7 +204,7 @@ export default async function CaseDetailPage({
           />
 
           <Card variant="elevated">
-            <WorkflowProgress caseStatus={privacyCase.status} />
+            <WorkflowProgress phases={phases} status={privacyCase.status} />
           </Card>
 
           <Card>
@@ -244,16 +269,27 @@ export default async function CaseDetailPage({
 
           <Card>
             <SectionTitle>Evidence ({evidence.length})</SectionTitle>
-            <ul className="space-y-2 text-xs text-[var(--muted)]">
-              {evidence.slice(0, 3).map((e) => (
-                <li key={e.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 [overflow-wrap:anywhere]">
-                  {e.redactedExcerpt.slice(0, 120)}…
-                </li>
-              ))}
-            </ul>
+            {evidence.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">No page captures stored yet.</p>
+            ) : (
+              <ul className="space-y-2 text-xs text-[var(--muted)]">
+                {evidence.slice(0, 3).map((e) => (
+                  <li key={e.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] p-3 [overflow-wrap:anywhere]">
+                    {e.redactedExcerpt.length > EVIDENCE_EXCERPT
+                      ? `${e.redactedExcerpt.slice(0, EVIDENCE_EXCERPT)}…`
+                      : e.redactedExcerpt}
+                  </li>
+                ))}
+              </ul>
+            )}
+            {evidence.length > 3 && (
+              <p className="mt-2 text-xs text-[var(--muted)]">
+                Showing 3 of {evidence.length}. The case packet export has all of them.
+              </p>
+            )}
           </Card>
         </div>
       </div>
-    </AppShell>
+    </>
   );
 }

@@ -34,6 +34,8 @@ const PUBLIC_ROUTES = new Set([
   "auth/logout",
   "auth/register",
   "auth/registration-status",
+  // Clears only an already-invalid session cookie, then redirects to /login (Sprint 5, B5).
+  "auth/session-expired",
   "billing/webhook",
   "cron/digest",
   "cron/verify",

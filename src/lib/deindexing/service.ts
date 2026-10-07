@@ -3,10 +3,12 @@ import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import { deindexRequests, verifiedExposures } from "@/lib/db/schema";
 import type { VerifiedExposure } from "@/lib/db/schema";
+import { auditHost } from "@/lib/security/audit-text";
 
 type DeindexRequest = typeof deindexRequests.$inferSelect;
 import { getCaseForUser } from "@/lib/cases/service";
 import { logAuditEvent } from "@/lib/audit/logger";
+import { EXCLUDED_EXPOSURE_STATUSES } from "@/lib/cases/derive-status";
 import { requireBillingFeature } from "@/lib/billing/service";
 import type { SessionPayload } from "@/lib/auth/session";
 import {
@@ -20,7 +22,8 @@ import {
 } from "./playbook";
 
 /** Exposure statuses that never get a deindex draft. */
-const SKIPPED_EXPOSURE_STATUSES = new Set(["rejected", "dismissed", "false_positive"]);
+/** Exposures the user ruled out are never offered for de-indexing. */
+const SKIPPED_EXPOSURE_STATUSES = EXCLUDED_EXPOSURE_STATUSES;
 
 const RISK_RANK: Record<string, number> = { urgent: 4, high: 3, medium: 2, low: 1 };
 
@@ -224,7 +227,7 @@ export async function recordDeindexSubmitted(
     organizationId: session.organizationId,
     userId: session.userId,
     eventType: "deindex_submitted",
-    summary: `Recorded ${row.searchEngine} deindex submission for ${row.sourceUrl}`,
+    summary: `Recorded ${row.searchEngine} deindex submission for a page on ${auditHost(row.sourceUrl)}`,
   });
 }
 

@@ -13,6 +13,9 @@ updates:
       # next and eslint-config-next are pinned exactly and must move together.
       next:
         patterns: ["next", "eslint-config-next"]
+      # react and react-dom are pinned exactly and refuse to run at different versions.
+      react:
+        patterns: ["react", "react-dom", "@types/react", "@types/react-dom"]
       # vitest and its coverage provider share an exact peer version.
       vitest:
         patterns: ["vitest", "@vitest/*"]

@@ -14,6 +14,7 @@ import {
   slaStatusFromDueAt,
   type SlaDeadlineType,
 } from "./sla-calculator";
+import { OPEN_OPT_OUT_STATUSES } from "@/lib/opt-out/statuses";
 
 export async function getOrgSlaPolicy(organizationId: string) {
   const org = await db.query.organizations.findFirst({
@@ -36,6 +37,7 @@ function closePendingDeadlines(
   where: ReturnType<typeof and>,
   notes: string,
   now: string,
+  options: { neverLate?: boolean } = {},
 ): number {
   const rows = tx
     .select({ id: slaDeadlines.id, dueAt: slaDeadlines.dueAt })
@@ -44,7 +46,7 @@ function closePendingDeadlines(
     .all();
   const nowDate = new Date(now);
   for (const row of rows) {
-    const late = slaStatusFromDueAt(row.dueAt, nowDate) === "missed";
+    const late = !options.neverLate && slaStatusFromDueAt(row.dueAt, nowDate) === "missed";
     tx.update(slaDeadlines)
       .set(
         late
@@ -58,10 +60,12 @@ function closePendingDeadlines(
 }
 
 /**
- * Deadlines for one outbound message: removal_verification + follow_up, tied to the
- * remediation and (when known) the exposure so a later live check can resolve them.
- * Sending a follow-up first closes the remediation's previous pending follow_up deadline
- * (the follow-up it was waiting for has now been sent). One transaction.
+ * Deadlines for one outbound message, tied to the remediation and (when known) the exposure
+ * so a later live check can resolve them. The first request gets removal_verification +
+ * follow_up; a follow-up gets only a new follow_up (the original removal_verification
+ * deadline still stands — another one per follow-up would inflate misses). Sending a
+ * follow-up first closes the remediation's previous pending follow_up deadline (the
+ * follow-up it was waiting for has now been sent). One transaction.
  */
 export async function createSlaDeadlinesForSentMessage(input: {
   organizationId: string;
@@ -72,7 +76,9 @@ export async function createSlaDeadlinesForSentMessage(input: {
   isFollowUp?: boolean;
 }) {
   const policy = await getOrgSlaPolicy(input.organizationId);
-  const types: SlaDeadlineType[] = ["removal_verification", "follow_up"];
+  const types: SlaDeadlineType[] = input.isFollowUp
+    ? ["follow_up"]
+    : ["removal_verification", "follow_up"];
   const deadlines = buildDeadlinesForAnchor({
     anchorAt: input.sentAt,
     policy,
@@ -213,13 +219,13 @@ export async function createBrokerOptOutDeadline(input: {
   );
 }
 
-/** Opt-out dispatch statuses that still need work (see opt-out/dispatch.ts). */
-const OPEN_DISPATCH_STATUSES = ["pending_approval", "approved", "submitted"];
-
 /**
- * Close the case's pending broker_opt_out deadline ('auto: all opt-outs completed') once
- * the case has at least one opt-out dispatch and none is still pending_approval,
- * approved or submitted. Safe to call after every dispatch transition (lane 2 does).
+ * Close the case's pending broker_opt_out deadline once the case has at least one opt-out
+ * dispatch and none is still open (pending_approval, approved or submitted; see
+ * opt-out/statuses.ts). With at least one completed dispatch it closes as
+ * 'auto: all opt-outs completed' (met, or missed when finished after the due date). When
+ * every dispatch was dismissed by the user there was no work left to do: it closes as met
+ * ('auto: all opt-outs dismissed'), never missed. Safe to call after every transition.
  */
 export async function resolveBrokerOptOutDeadlineIfDone(
   caseId: string,
@@ -238,8 +244,9 @@ export async function resolveBrokerOptOutDeadlineIfDone(
           ),
         )
         .all();
-      const open = dispatches.filter((d) => OPEN_DISPATCH_STATUSES.includes(d.status)).length;
+      const open = dispatches.filter((d) => OPEN_OPT_OUT_STATUSES.has(d.status)).length;
       if (dispatches.length === 0 || open > 0) return { resolved: false, openDispatches: open };
+      const allDismissed = dispatches.every((d) => d.status === "dismissed");
       const closed = closePendingDeadlines(
         tx,
         and(
@@ -247,8 +254,9 @@ export async function resolveBrokerOptOutDeadlineIfDone(
           eq(slaDeadlines.organizationId, organizationId),
           eq(slaDeadlines.deadlineType, "broker_opt_out"),
         ),
-        "auto: all opt-outs completed",
+        allDismissed ? "auto: all opt-outs dismissed" : "auto: all opt-outs completed",
         now,
+        { neverLate: allDismissed },
       );
       return { resolved: closed > 0, openDispatches: 0 };
     },
@@ -315,7 +323,7 @@ export async function listCaseSlaDeadlines(caseId: string, organizationId: strin
 }
 
 /**
- * Mark a deadline met. Pass `caseId` (the route's case id) so a deadline from another
+ * Mark a pending deadline met (INVALID_TRANSITION otherwise). Pass `caseId` (the route's case id) so a deadline from another
  * case in the same org cannot be modified through this case's URL.
  */
 export async function markSlaDeadlineMet(
@@ -333,11 +341,16 @@ export async function markSlaDeadlineMet(
   if (!row) throw new Error("SLA_NOT_FOUND");
   if (caseId !== undefined && row.caseId !== caseId) throw new Error("SLA_NOT_FOUND");
 
+  // Only a pending deadline can be marked met: a met one keeps its original metAt, and a
+  // missed one must not be rewritten as on time. Conditional so a concurrent close wins.
+  if (row.status !== "pending") throw new Error("INVALID_TRANSITION");
   const now = new Date().toISOString();
-  await db
+  const res = db
     .update(slaDeadlines)
     .set({ status: "met", metAt: now, notes: notes ?? null, updatedAt: now })
-    .where(eq(slaDeadlines.id, deadlineId));
+    .where(and(eq(slaDeadlines.id, deadlineId), eq(slaDeadlines.status, "pending")))
+    .run();
+  if (res.changes !== 1) throw new Error("INVALID_TRANSITION");
 
   return { ok: true };
 }
@@ -363,6 +376,20 @@ export async function refreshMissedSlaDeadlines(organizationId: string) {
   return { updated };
 }
 
+/** Deadline types set by statute (California DROP), not by the org's SLA policy. */
+export const STATUTORY_DEADLINE_TYPES: ReadonlySet<string> = new Set<SlaDeadlineType>([
+  "statutory_first_pull",
+  "statutory_deletion_due",
+]);
+
+function countDeadlines(rows: Array<{ status: string; effectiveStatus: string }>) {
+  return {
+    pending: rows.filter((d) => d.effectiveStatus === "pending").length,
+    missed: rows.filter((d) => d.effectiveStatus === "missed").length,
+    met: rows.filter((d) => d.status === "met").length,
+  };
+}
+
 export async function getCaseSlaSummary(caseId: string, organizationId: string) {
   const policy = await getOrgSlaPolicy(organizationId);
   const deadlines = await listCaseSlaDeadlines(caseId, organizationId);
@@ -374,13 +401,14 @@ export async function getCaseSlaSummary(caseId: string, organizationId: string) 
   });
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
 
+  // Statutory (DROP) windows bind the brokers, not the organization: they are counted
+  // separately and never as the org's own SLA misses.
+  const org = deadlines.filter((d) => !STATUTORY_DEADLINE_TYPES.has(d.deadlineType));
+  const statutory = deadlines.filter((d) => STATUTORY_DEADLINE_TYPES.has(d.deadlineType));
   return {
     policy,
     deadlines,
-    counts: {
-      pending: deadlines.filter((d) => d.effectiveStatus === "pending").length,
-      missed: deadlines.filter((d) => d.effectiveStatus === "missed").length,
-      met: deadlines.filter((d) => d.status === "met").length,
-    },
+    counts: countDeadlines(org),
+    statutoryCounts: countDeadlines(statutory),
   };
 }

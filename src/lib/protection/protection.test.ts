@@ -15,7 +15,7 @@ vi.mock("@/lib/connectors/service", async (importOriginal) => ({
 
 import { and, eq } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
-import { db } from "@/lib/db";
+import { db, optimizeDatabase } from "@/lib/db";
 import {
   auditEvents,
   brokerSweepRuns,
@@ -27,6 +27,8 @@ import {
   exposureCandidates,
   scanRuns,
   searchQueries,
+  slaDeadlines,
+  verificationChecks,
   verifiedExposures,
 } from "@/lib/db/schema";
 import type { SessionPayload } from "@/lib/auth/session";
@@ -39,7 +41,7 @@ import {
   seedWorkflowCase,
   seedWorkflowUser,
 } from "@/lib/verification/test-fixtures";
-import { recordOptOutCompleted } from "@/lib/opt-out/dispatch";
+import { dismissOptOutDispatch, recordOptOutCompleted } from "@/lib/opt-out/dispatch";
 import { runBackgroundJobs } from "@/lib/worker/processor";
 import {
   BROKER_SWEEP_CADENCE_DAYS,
@@ -47,9 +49,19 @@ import {
   PEOPLE_SEARCH_RELIST_DAYS,
   relistIntervalDays,
 } from "./cadence";
-import { ensureProtectionSchedules } from "./schedules";
-import { runDueProtection, scheduledDiscoveryCap } from "./runner";
-import { detectRelists } from "./relist";
+import {
+  canonicalizeStoredBrokerIds,
+  completedOptOutsMissingRecheck,
+  ensureProtectionSchedules,
+} from "./schedules";
+import {
+  countScheduledQueriesThisMonth,
+  discoveryRetryAt,
+  pullForwardOptedInDiscovery,
+  runDueProtection,
+  scheduledDiscoveryCap,
+} from "./runner";
+import { NOT_HONORED_GRACE_DAYS, createResubmissionIfDue, detectRelists } from "./relist";
 import { reviewCandidate } from "@/lib/discovery/service";
 import { getProtectionSummary } from "./summary";
 import { DAY_MS, addDays, parseDbTime, utcMonthStart } from "./time";
@@ -568,5 +580,362 @@ describe("relist detection", () => {
       .where(eq(exposureCandidates.id, exposure!.candidateId));
 
     expect((await detectRelists(caseId, new Date(Date.now() + 120_000))).relists).toBe(0);
+  });
+});
+
+describe("Sprint 5 protection logic", () => {
+  let session: SessionPayload;
+
+  beforeAll(async () => {
+    session = await seedWorkflowUser();
+  });
+
+  beforeEach(() => {
+    vi.mocked(runDiscovery).mockReset();
+    vi.mocked(resolveDiscoveryConnector).mockReset();
+    vi.mocked(resolveDiscoveryConnector).mockResolvedValue(null);
+  });
+
+  async function dispatchesOf(caseId: string) {
+    return db.query.optOutDispatches.findMany({ where: eq(optOutDispatches.caseId, caseId) });
+  }
+
+  it("a dismissed re-submission does not block the next one", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    const id = await seedDispatch(session, caseId, "whitepages", "Whitepages");
+    await recordOptOutCompleted(session, caseId, id, undefined, {
+      now: new Date(Date.now() - 61 * DAY_MS),
+    });
+    const first = createResubmissionIfDue(id);
+    if (!("dispatchId" in first)) throw new Error(`expected a re-submission, got ${first.skipped}`);
+    expect(createResubmissionIfDue(id)).toMatchObject({ skipped: "open_dispatch" });
+
+    await dismissOptOutDispatch(session, caseId, first.dispatchId);
+    const second = createResubmissionIfDue(id);
+    expect("dispatchId" in second).toBe(true);
+    expect((await dispatchesOf(caseId)).map((d) => d.status).sort()).toEqual([
+      "completed",
+      "dismissed",
+      "pending_approval",
+    ]);
+  });
+
+  it("a dismissed relist is not re-queued from the same evidence", async () => {
+    const { caseId } = await seedWorkflowCase(session, {
+      exposureUrls: ["https://www.whitepages.com/name/Jane-Q-Testperson/dismiss"],
+    });
+    const dispatchId = await seedDispatch(session, caseId, "whitepages", "Whitepages");
+    await recordOptOutCompleted(session, caseId, dispatchId, undefined, {
+      now: new Date(Date.now() - 5 * DAY_MS),
+    });
+    const res = await detectRelists(caseId);
+    expect(res.relists).toBe(1);
+    await dismissOptOutDispatch(session, caseId, res.dispatchIds[0]!);
+    expect((await detectRelists(caseId)).relists).toBe(0);
+  });
+
+  it("a listing a live check still finds after completion + grace is 'not honored' evidence", async () => {
+    const url = "https://www.whitepages.com/name/Jane-Q-Testperson/not-honored";
+    const { caseId, exposureIds } = await seedWorkflowCase(session, { exposureUrls: [url] });
+    const exposureId = exposureIds[0]!;
+    const seenLongAgo = new Date(Date.now() - 90 * DAY_MS).toISOString();
+    await db
+      .update(verifiedExposures)
+      .set({ status: "still_exposed", createdAt: seenLongAgo })
+      .where(eq(verifiedExposures.id, exposureId));
+    await db
+      .update(exposureCandidates)
+      .set({ createdAt: seenLongAgo })
+      .where(eq(exposureCandidates.caseId, caseId));
+    const dispatchId = await seedDispatch(session, caseId, "whitepages", "Whitepages");
+    const completedAt = new Date(Date.now() - 40 * DAY_MS);
+    await recordOptOutCompleted(session, caseId, dispatchId, undefined, { now: completedAt });
+
+    const addCheck = (daysAfterCompletion: number, searchStatus: string, status: string) =>
+      db.insert(verificationChecks).values({
+        id: uuid(),
+        caseId,
+        exposureId,
+        status,
+        sourceStatus: searchStatus === "source_still_visible" ? "information_still_visible" : "page_gone",
+        searchStatus,
+        checkedAt: new Date(completedAt.getTime() + daysAfterCompletion * DAY_MS).toISOString(),
+      });
+
+    // Still live, but inside the grace period: not yet held against the broker.
+    await addCheck(NOT_HONORED_GRACE_DAYS - 10, "source_still_visible", "still_exposed");
+    expect((await detectRelists(caseId)).relists).toBe(0);
+    // A simulated check never counts.
+    await addCheck(NOT_HONORED_GRACE_DAYS + 2, "simulated", "simulated_present");
+    expect((await detectRelists(caseId)).relists).toBe(0);
+
+    // Still live after the grace period: the opt-out was not honored.
+    await addCheck(NOT_HONORED_GRACE_DAYS + 5, "source_still_visible", "still_exposed");
+    const res = await detectRelists(caseId);
+    expect(res.relists).toBe(1);
+    const audit = await db.query.auditEvents.findMany({
+      where: and(eq(auditEvents.caseId, caseId), eq(auditEvents.eventType, "relist_detected")),
+    });
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.summary).toContain("not honored");
+    expect(audit[0]!.detailJson ?? "").toContain('"relistReason":"not_honored"');
+    expect(audit[0]!.detailJson ?? "").not.toContain(url);
+  });
+
+  it("a later live check finding the listing gone is not 'not honored' evidence", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session, {
+      exposureUrls: ["https://www.whitepages.com/name/Jane-Q-Testperson/gone"],
+    });
+    const seenLongAgo = new Date(Date.now() - 90 * DAY_MS).toISOString();
+    await db
+      .update(verifiedExposures)
+      .set({ createdAt: seenLongAgo })
+      .where(eq(verifiedExposures.id, exposureIds[0]!));
+    await db
+      .update(exposureCandidates)
+      .set({ createdAt: seenLongAgo })
+      .where(eq(exposureCandidates.caseId, caseId));
+    const dispatchId = await seedDispatch(session, caseId, "whitepages", "Whitepages");
+    const completedAt = new Date(Date.now() - 40 * DAY_MS);
+    await recordOptOutCompleted(session, caseId, dispatchId, undefined, { now: completedAt });
+    for (const [days, searchStatus, status] of [
+      [NOT_HONORED_GRACE_DAYS + 2, "source_still_visible", "still_exposed"],
+      [NOT_HONORED_GRACE_DAYS + 4, "source_not_visible", "removed_confirmed"],
+    ] as const) {
+      await db.insert(verificationChecks).values({
+        id: uuid(),
+        caseId,
+        exposureId: exposureIds[0]!,
+        status,
+        sourceStatus: "x",
+        searchStatus,
+        checkedAt: new Date(completedAt.getTime() + days * DAY_MS).toISOString(),
+      });
+    }
+    expect((await detectRelists(caseId)).relists).toBe(0);
+  });
+
+  it("the monthly discovery cap ignores skipped broker-group rows", async () => {
+    const other = await seedWorkflowUser();
+    const { caseId } = await seedWorkflowCase(other);
+    const runId = uuid();
+    const now = new Date();
+    await db.insert(scanRuns).values({
+      id: runId,
+      caseId,
+      status: "completed",
+      mode: "live",
+      trigger: "scheduled",
+      createdAt: now.toISOString(),
+    });
+    for (const sourceType of ["approved_public_search", "broker_group_skipped", "broker_group_skipped"]) {
+      await db.insert(searchQueries).values({
+        id: uuid(),
+        scanRunId: runId,
+        caseId,
+        queryText: "q",
+        sourceType,
+        createdAt: now.toISOString(),
+      });
+    }
+    expect(countScheduledQueriesThisMonth(other.organizationId, now)).toBe(1);
+  });
+
+  it("legacy broker-id aliases: re-checks key on the canonical id; stored aliases are rewritten", async () => {
+    // Completing a dispatch stored under a legacy id keys the schedule on the current id.
+    const { caseId } = await seedWorkflowCase(session);
+    const legacy = await seedDispatch(session, caseId, "spokeo2", "PeopleSearch");
+    await recordOptOutCompleted(session, caseId, legacy, undefined, {
+      now: new Date("2026-01-01T00:00:00.000Z"),
+    });
+    const recheck = await scheduleOf(caseId, "broker_recheck");
+    expect(recheck?.brokerId).toBe("peoplesearch123");
+
+    // A pre-fix alias schedule next to a canonical one: merged into the canonical row,
+    // pointing at the newer dispatch; the dispatch's stored id is rewritten too.
+    const { caseId: c2 } = await seedWorkflowCase(session);
+    const older = await seedDispatch(session, c2, "peoplesearch123", "PeopleSearch", "completed");
+    const newer = await seedDispatch(session, c2, "spokeo2", "PeopleSearch", "completed");
+    await db
+      .update(optOutDispatches)
+      .set({ createdAt: new Date(Date.now() - 10 * DAY_MS).toISOString() })
+      .where(eq(optOutDispatches.id, newer));
+    for (const [brokerId, dispatchId, nextRunAt] of [
+      ["peoplesearch123", older, "2030-01-01T00:00:00.000Z"],
+      ["spokeo2", newer, "2031-01-01T00:00:00.000Z"],
+    ] as const) {
+      await db.insert(protectionSchedules).values({
+        id: uuid(),
+        caseId: c2,
+        organizationId: session.organizationId,
+        kind: "broker_recheck",
+        brokerId,
+        dispatchId,
+        cadenceDays: 60,
+        nextRunAt,
+        enabled: true,
+      });
+    }
+    expect(canonicalizeStoredBrokerIds(new Date(), ["spokeo2"])).toBeGreaterThan(0);
+    const rows = await db.query.protectionSchedules.findMany({
+      where: and(eq(protectionSchedules.caseId, c2), eq(protectionSchedules.kind, "broker_recheck")),
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      brokerId: "peoplesearch123",
+      dispatchId: newer,
+      nextRunAt: "2031-01-01T00:00:00.000Z",
+    });
+    expect((await dispatchesOf(c2)).every((d) => d.brokerId === "peoplesearch123")).toBe(true);
+    // Idempotent.
+    expect(canonicalizeStoredBrokerIds(new Date(), ["spokeo2"])).toBe(0);
+  });
+
+  it("never re-submits from an older completion when a newer dispatch exists for the broker", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    const older = await seedDispatch(session, caseId, "spokeo2", "PeopleSearch", "completed");
+    await db
+      .update(optOutDispatches)
+      .set({ nextDueAt: PAST, completedAt: PAST })
+      .where(eq(optOutDispatches.id, older));
+    const newer = await seedDispatch(session, caseId, "peoplesearch123", "PeopleSearch", "completed");
+    await db
+      .update(optOutDispatches)
+      .set({
+        createdAt: new Date(Date.now() - DAY_MS).toISOString(),
+        nextDueAt: addDays(new Date(), 30),
+      })
+      .where(eq(optOutDispatches.id, newer));
+    expect(createResubmissionIfDue(older)).toEqual({ skipped: "superseded" });
+    expect(await dispatchesOf(caseId)).toHaveLength(2);
+  });
+
+  it("re-check backfill never selects superseded completions", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    const old = await seedDispatch(session, caseId, "spokeo", "Spokeo", "completed");
+    await db
+      .update(optOutDispatches)
+      .set({ completedAt: PAST, createdAt: "2026-01-01 00:00:00" })
+      .where(eq(optOutDispatches.id, old));
+    const latest = await seedDispatch(session, caseId, "spokeo", "Spokeo", "completed");
+    await db
+      .update(optOutDispatches)
+      .set({ completedAt: PAST, createdAt: "2026-02-01T00:00:00.000Z" })
+      .where(eq(optOutDispatches.id, latest));
+    // A later dismissed dispatch does not supersede.
+    const dismissed = await seedDispatch(session, caseId, "spokeo", "Spokeo", "dismissed");
+    await db
+      .update(optOutDispatches)
+      .set({ createdAt: "2026-03-01T00:00:00.000Z" })
+      .where(eq(optOutDispatches.id, dismissed));
+    const ids = completedOptOutsMissingRecheck().map((d) => d.id);
+    expect(ids).toContain(latest);
+    expect(ids).not.toContain(old);
+  });
+
+  it("skipped discovery retries tomorrow (next month for the cap), and is pulled forward on opt-in", async () => {
+    const now = new Date("2026-10-07T12:00:00.000Z");
+    expect(discoveryRetryAt("skipped_no_connector", now)).toBe("2026-10-08T12:00:00.000Z");
+    expect(discoveryRetryAt("skipped_cap", now)).toBe("2026-11-01T00:00:00.000Z");
+    expect(discoveryRetryAt("skipped_not_opted_in", now)).toBeUndefined();
+    expect(discoveryRetryAt("ok", now)).toBeUndefined();
+
+    const other = await seedWorkflowUser();
+    await setAgentDefaults(other.organizationId, { scheduledDiscovery: true });
+    const { caseId } = await seedWorkflowCase(other);
+    ensureProtectionSchedules(caseId);
+    await makeDue(caseId, "discovery");
+    const res = await runDueProtection();
+    expect(res.results.find((r) => r.caseId === caseId && r.kind === "discovery")?.outcome).toBe(
+      "skipped_no_connector",
+    );
+    const s = await scheduleOf(caseId, "discovery");
+    expect(parseDbTime(s!.nextRunAt)).toBeLessThan(Date.now() + 2 * DAY_MS);
+
+    // Not opted in: a full cadence later, until the org opts in.
+    const third = await seedWorkflowUser();
+    const { caseId: c3 } = await seedWorkflowCase(third);
+    ensureProtectionSchedules(c3);
+    await makeDue(c3, "discovery");
+    await runDueProtection();
+    const waiting = await scheduleOf(c3, "discovery");
+    expect(waiting?.lastOutcome).toBe("skipped_not_opted_in");
+    expect(parseDbTime(waiting!.nextRunAt)).toBeGreaterThan(Date.now() + 89 * DAY_MS);
+    expect(await pullForwardOptedInDiscovery(new Date())).toBe(0);
+    await setAgentDefaults(third.organizationId, { scheduledDiscovery: true });
+    const pullAt = new Date();
+    expect(await pullForwardOptedInDiscovery(pullAt)).toBe(1);
+    expect((await scheduleOf(c3, "discovery"))?.nextRunAt).toBe(pullAt.toISOString());
+  });
+
+  it("a monthly sweep queues pending_approval opt-outs for newly seen brokers (never approved)", async () => {
+    const other = await seedWorkflowUser();
+    const { caseId } = await seedWorkflowCase(other, {
+      status: "awaiting_response",
+      exposureUrls: ["https://www.whitepages.com/name/Jane-Q-Testperson/sweep"],
+    });
+    ensureProtectionSchedules(caseId);
+    await makeDue(caseId, "broker_sweep");
+    const res = await runDueProtection();
+    expect(res.results.find((r) => r.caseId === caseId && r.kind === "broker_sweep")?.outcome).toBe("ok");
+    const rows = await dispatchesOf(caseId);
+    expect(rows.length).toBeGreaterThan(0);
+    expect(rows.map((r) => r.brokerId)).toContain("whitepages");
+    expect(rows.every((r) => r.status === "pending_approval")).toBe(true);
+    expect(res.optOutsQueued).toBeGreaterThanOrEqual(rows.length);
+
+    // The next sweep never duplicates (or revives a dismissed one).
+    await dismissOptOutDispatch(other, caseId, rows[0]!.id);
+    await makeDue(caseId, "broker_sweep");
+    await runDueProtection();
+    expect(await dispatchesOf(caseId)).toHaveLength(rows.length);
+  });
+
+  it("an open re-submission without an SLA deadline gets one back on the next re-check", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    const id = await seedDispatch(session, caseId, "whitepages", "Whitepages");
+    await recordOptOutCompleted(session, caseId, id, undefined, {
+      now: new Date(Date.now() - 61 * DAY_MS),
+    });
+    // The re-submission was queued but its deadline was lost.
+    const first = createResubmissionIfDue(id);
+    expect("dispatchId" in first).toBe(true);
+    await db.delete(slaDeadlines).where(eq(slaDeadlines.caseId, caseId));
+    await db
+      .update(protectionSchedules)
+      .set({ nextRunAt: PAST })
+      .where(and(eq(protectionSchedules.caseId, caseId), eq(protectionSchedules.kind, "broker_recheck")));
+
+    const res = await runDueProtection();
+    expect(res.results.find((r) => r.caseId === caseId && r.kind === "broker_recheck")?.outcome).toBe(
+      "open_dispatch",
+    );
+    const deadlines = await db.query.slaDeadlines.findMany({
+      where: and(
+        eq(slaDeadlines.caseId, caseId),
+        eq(slaDeadlines.deadlineType, "broker_opt_out"),
+        eq(slaDeadlines.status, "pending"),
+      ),
+    });
+    expect(deadlines).toHaveLength(1);
+  });
+
+  it("a failed scheduled verification marks the worker tick partial; PRAGMA optimize runs", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session, {
+      exposureUrls: ["https://people.example.org/worker-partial"],
+    });
+    await db.insert(monitoringRules).values({
+      id: uuid(),
+      caseId,
+      exposureId: exposureIds[0]!,
+      schedule: "weekly",
+      nextCheckAt: "1990-01-01T00:00:00.000Z",
+      enabled: true,
+    });
+    vi.mocked(safeFetchPublicPage).mockImplementation(async () => null as never);
+    const res = await runBackgroundJobs();
+    expect(res.verifications.results.some((r) => r.error)).toBe(true);
+    expect(res.status).toBe("partial");
+    expect(optimizeDatabase()).toBe(true);
   });
 });

@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { Badge, Button, ButtonLink, InlineResult, Input, type InlineResultView } from "../ui";
+import { useState, type ReactNode } from "react";
+import { Badge, Button, ButtonLink, ConfirmDialog, InlineResult, Input, type InlineResultView } from "../ui";
 import { latestResult } from "./useCaseMutations";
 import { DraftTemplatePicker } from "../DraftTemplatePicker";
 import { isEmailAddress, parseStringArray, safeHttpUrl } from "@/lib/ui/safe-url";
@@ -84,6 +84,112 @@ const CONTACT_KIND: Record<string, string> = {
   postal: "Postal address",
 };
 
+/** How a draft is being sent: from the connected email account, or recorded as sent by the user. */
+export type SendVia = "connector" | "manual";
+
+export interface SendConfirmation {
+  title: string;
+  confirmLabel: string;
+  /** "To" / "Removal form" / "Recipient". */
+  recipientLabel: string;
+  recipient: string;
+  subject: string;
+  /** What will (and will not) happen, in one sentence. */
+  effect: string;
+  reviewItems: string[];
+  /** Set when the draft cannot be sent or recorded yet; the confirm button stays disabled. */
+  blockedReason: string | null;
+}
+
+/** Copy for the send / mark-as-sent confirmation (pure; exported for tests). */
+export function sendConfirmation(draft: Pick<Draft, "recipient" | "subject" | "reviewItemsJson">, via: SendVia): SendConfirmation {
+  const recipient = draft.recipient.trim();
+  const isEmail = isEmailAddress(recipient);
+  const formUrl = isEmail ? null : safeHttpUrl(recipient);
+  const recipientLabel = isEmail ? "To" : formUrl ? "Removal form" : "Recipient";
+  const reviewItems = parseStringArray(draft.reviewItemsJson);
+  const blockedReason = !recipient
+    ? "This request has no recipient yet. Find the site's own privacy or removal contact and add it with Edit first."
+    : via === "connector" && !isEmail
+      ? "Only requests addressed to an email address can be sent from your email account."
+      : null;
+  if (via === "connector") {
+    return {
+      title: "Send this request from your email account?",
+      confirmLabel: "Send email",
+      recipientLabel,
+      recipient,
+      subject: draft.subject,
+      effect: "ClearTrace sends this email from your connected account now. It can't be unsent.",
+      reviewItems,
+      blockedReason,
+    };
+  }
+  return {
+    title: formUrl ? "Record that you submitted the form?" : "Record this request as sent?",
+    confirmLabel: formUrl ? "Yes, I submitted it" : "Yes, I sent it",
+    recipientLabel,
+    recipient,
+    subject: draft.subject,
+    effect: formUrl
+      ? "This only records that you filled in the site's removal form yourself. ClearTrace doesn't send anything."
+      : "This only records that you sent this request yourself. ClearTrace doesn't send anything.",
+    reviewItems,
+    blockedReason,
+  };
+}
+
+/** Body of the send confirmation dialog. */
+export function SendConfirmBody({
+  confirmation: c,
+  reviewed,
+  onReviewedChange,
+}: {
+  confirmation: SendConfirmation;
+  reviewed: boolean;
+  onReviewedChange: (checked: boolean) => void;
+}) {
+  const row = (label: string, value: ReactNode) => (
+    <div className="flex flex-wrap gap-x-2">
+      <dt className="text-[var(--muted)]">{label}:</dt>
+      <dd className="min-w-0 text-slate-100 [overflow-wrap:anywhere]">{value}</dd>
+    </div>
+  );
+  return (
+    <div className="space-y-3">
+      <dl className="space-y-1">
+        {row(c.recipientLabel, c.recipient || <span className="text-amber-300">none yet</span>)}
+        {row("Subject", c.subject)}
+      </dl>
+      <p>{c.effect}</p>
+      {c.blockedReason && (
+        <p className="text-amber-300" data-send-blocked="">
+          {c.blockedReason}
+        </p>
+      )}
+      {!c.blockedReason && c.reviewItems.length > 0 && (
+        <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 p-3">
+          <p className="font-medium text-amber-200">Check before sending</p>
+          <ul className="mt-1 list-disc pl-5 text-amber-100/90">
+            {c.reviewItems.map((item) => (
+              <li key={item}>{item}</li>
+            ))}
+          </ul>
+          <label className="mt-2 flex items-start gap-2 text-slate-200">
+            <input
+              type="checkbox"
+              className="mt-1"
+              checked={reviewed}
+              onChange={(e) => onReviewedChange(e.target.checked)}
+            />
+            <span>I&apos;ve checked these items</span>
+          </label>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** Phase 3 — who to contact, the request, sending it, and follow-ups. */
 export function RemediationPhase({
   caseId,
@@ -134,7 +240,25 @@ export function RemediationPhase({
 }) {
   const [editing, setEditing] = useState<DraftEdit | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [pendingSend, setPendingSend] = useState<{ draftId: string; via: SendVia } | null>(null);
+  const [reviewed, setReviewed] = useState(false);
   const disabled = busy || casePaused;
+
+  const sendDraft = pendingSend ? drafts.find((d) => d.id === pendingSend.draftId) : undefined;
+  const confirmation = pendingSend && sendDraft ? sendConfirmation(sendDraft, pendingSend.via) : null;
+
+  function askToSend(draftId: string, via: SendVia) {
+    setReviewed(false);
+    setPendingSend({ draftId, via });
+  }
+
+  function confirmSend() {
+    if (!pendingSend) return;
+    const { draftId, via } = pendingSend;
+    setPendingSend(null);
+    if (via === "connector") onSendViaConnector(draftId);
+    else onRecordSent(draftId);
+  }
 
   async function save() {
     if (!editing) return;
@@ -231,6 +355,9 @@ export function RemediationPhase({
               const bodyId = `draft-body-preview-${draft.id}`;
               const isExpanded = expanded[draft.id] === true;
               const rowResult = latestResult(results, [`sent-${draft.id}`, `send-${draft.id}`, `gmail-${draft.id}`]);
+              // One primary action: send from the connected account when it can, else record it as sent.
+              const connectorPrimary = recipientIsEmail && emailAutoSendEnabled && !sent;
+              const markSentLabel = formUrl ? "I submitted the form" : "Mark as sent";
               return (
                 <div
                   key={draft.id}
@@ -333,71 +460,91 @@ export function RemediationPhase({
                         </ul>
                       )}
                       {!superseded && (
-                        <div className="flex flex-wrap items-center gap-2">
-                          <Button
-                            variant="secondary"
-                            onClick={() =>
-                              setEditing({
-                                id: draft.id,
-                                subject: draft.subject,
-                                body: draft.body,
-                                recipient: draft.recipient,
-                              })
-                            }
-                            disabled={disabled}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            variant="secondary"
-                            onClick={() => onCopy(`Subject: ${draft.subject}\n\n${draft.body}`)}
-                          >
-                            Copy
-                          </Button>
-                          {recipientIsEmail && (
-                            <ButtonLink
-                              variant="secondary"
-                              href={`mailto:${encodeURIComponent(draft.recipient.trim())}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
-                            >
-                              Open in mail app
-                            </ButtonLink>
-                          )}
-                          {formUrl && (
-                            <ButtonLink variant="secondary" href={formUrl} external>
-                              Open removal form
-                            </ButtonLink>
-                          )}
-                          {recipientIsEmail && (
+                        <div className="space-y-2">
+                          <div className="flex flex-wrap items-center gap-2">
+                            {!sent && (
+                              <Button
+                                onClick={() => askToSend(draft.id, connectorPrimary ? "connector" : "manual")}
+                                disabled={disabled}
+                              >
+                                {connectorPrimary
+                                  ? loading === `send-${draft.id}`
+                                    ? "Sending…"
+                                    : "Send from my email account"
+                                  : loading === `sent-${draft.id}`
+                                    ? "Saving…"
+                                    : markSentLabel}
+                              </Button>
+                            )}
                             <Button
-                              variant="secondary"
-                              onClick={() => onPushGmail(draft.id)}
+                              variant={sent ? "secondary" : "ghost"}
+                              onClick={() =>
+                                setEditing({
+                                  id: draft.id,
+                                  subject: draft.subject,
+                                  body: draft.body,
+                                  recipient: draft.recipient,
+                                })
+                              }
                               disabled={disabled}
                             >
-                              {loading === `gmail-${draft.id}` ? "Saving to Gmail…" : "Save as Gmail draft"}
+                              Edit
                             </Button>
-                          )}
-                          {recipientIsEmail && emailAutoSendEnabled && !sent && (
+                            <InlineResult
+                              result={rowResult?.result}
+                              onRetry={rowResult ? () => onRetry(rowResult.key) : undefined}
+                            />
+                          </div>
+                          <div
+                            role="group"
+                            aria-label={sent ? "Copies of this request" : "More ways to send"}
+                            className="flex flex-wrap items-center gap-2"
+                          >
+                            <span className="text-xs text-[var(--muted)]">
+                              {sent ? "Copies:" : "More ways to send:"}
+                            </span>
                             <Button
                               variant="secondary"
-                              onClick={() => onSendViaConnector(draft.id)}
-                              disabled={disabled}
+                              size="sm"
+                              onClick={() => onCopy(`Subject: ${draft.subject}\n\n${draft.body}`)}
                             >
-                              {loading === `send-${draft.id}` ? "Sending…" : "Send from my email account"}
+                              Copy
                             </Button>
-                          )}
-                          {!sent && (
-                            <Button onClick={() => onRecordSent(draft.id)} disabled={disabled}>
-                              {loading === `sent-${draft.id}`
-                                ? "Saving…"
-                                : formUrl
-                                  ? "I submitted the form"
-                                  : "Mark as sent"}
-                            </Button>
-                          )}
-                          <InlineResult
-                            result={rowResult?.result}
-                            onRetry={rowResult ? () => onRetry(rowResult.key) : undefined}
-                          />
+                            {recipientIsEmail && (
+                              <ButtonLink
+                                variant="secondary"
+                                size="sm"
+                                href={`mailto:${encodeURIComponent(draft.recipient.trim())}?subject=${encodeURIComponent(draft.subject)}&body=${encodeURIComponent(draft.body)}`}
+                              >
+                                Open in mail app
+                              </ButtonLink>
+                            )}
+                            {formUrl && (
+                              <ButtonLink variant="secondary" size="sm" href={formUrl} external>
+                                Open removal form
+                              </ButtonLink>
+                            )}
+                            {recipientIsEmail && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => onPushGmail(draft.id)}
+                                disabled={disabled}
+                              >
+                                {loading === `gmail-${draft.id}` ? "Saving to Gmail…" : "Save as Gmail draft"}
+                              </Button>
+                            )}
+                            {connectorPrimary && !sent && (
+                              <Button
+                                variant="secondary"
+                                size="sm"
+                                onClick={() => askToSend(draft.id, "manual")}
+                                disabled={disabled}
+                              >
+                                {loading === `sent-${draft.id}` ? "Saving…" : markSentLabel}
+                              </Button>
+                            )}
+                          </div>
                         </div>
                       )}
                     </>
@@ -424,6 +571,25 @@ export function RemediationPhase({
           </article>
         );
       })}
+      <ConfirmDialog
+        open={confirmation !== null}
+        id="send-confirm"
+        tone="primary"
+        title={confirmation?.title ?? ""}
+        message={
+          confirmation && (
+            <SendConfirmBody confirmation={confirmation} reviewed={reviewed} onReviewedChange={setReviewed} />
+          )
+        }
+        confirmLabel={confirmation?.confirmLabel ?? ""}
+        confirmDisabled={
+          !confirmation ||
+          confirmation.blockedReason !== null ||
+          (confirmation.reviewItems.length > 0 && !reviewed)
+        }
+        onConfirm={confirmSend}
+        onCancel={() => setPendingSend(null)}
+      />
     </div>
   );
 }

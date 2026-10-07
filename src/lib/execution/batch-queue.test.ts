@@ -21,10 +21,10 @@ vi.mock("./gmail", () => ({
 }));
 
 import { db } from "@/lib/db";
-import { messageDrafts } from "@/lib/db/schema";
+import { messageDrafts, remediationBatchItems } from "@/lib/db/schema";
 import type { SessionPayload } from "@/lib/auth/session";
 import { createGmailDraft } from "./gmail";
-import { createRemediationBatch } from "./batch-queue";
+import { createRemediationBatch, processBatch } from "./batch-queue";
 import { approveAndRecordSent } from "@/lib/remediation/service";
 import { seedWorkflowCase, seedWorkflowUser } from "@/lib/verification/test-fixtures";
 
@@ -95,5 +95,54 @@ describe("remediation batch queue", () => {
     expect(result.status).toBe("completed");
     expect(mockedGmail).toHaveBeenCalledTimes(1);
     expect(mockedGmail.mock.calls[0]?.[1]).toMatchObject({ subject: "Newest follow-up" });
+  });
+
+  it("two concurrent runs of a batch push each Gmail draft once, steps in insertion order", async () => {
+    const { caseId, exposureIds } = await seedWorkflowCase(session, {
+      status: "confirmed_exposure",
+      exposureUrls: [
+        `https://www.spokeo.com/Batch-${uuid().slice(0, 6)}`,
+        `https://www.spokeo.com/Batch-${uuid().slice(0, 6)}`,
+      ],
+    });
+    const created = await createRemediationBatch(session, caseId, exposureIds, [
+      "resolve_controller",
+      "create_draft",
+      "gmail_draft",
+    ]);
+    expect(created.status).toBe("completed");
+    // Steps ran in insertion order: each exposure's controller → draft → gmail.
+    expect(created.results.map((r) => r.step)).toEqual([
+      "resolve_controller",
+      "create_draft",
+      "gmail_draft",
+      "resolve_controller",
+      "create_draft",
+      "gmail_draft",
+    ]);
+
+    // Re-queue the Gmail steps and run the batch twice at once.
+    await db
+      .update(remediationBatchItems)
+      .set({ status: "pending" })
+      .where(eq(remediationBatchItems.batchId, created.batchId));
+    await db
+      .update(remediationBatchItems)
+      .set({ status: "completed" })
+      .where(eq(remediationBatchItems.step, "resolve_controller"));
+    await db
+      .update(remediationBatchItems)
+      .set({ status: "completed" })
+      .where(eq(remediationBatchItems.step, "create_draft"));
+    mockedGmail.mockClear();
+    await Promise.all([
+      processBatch(session, caseId, created.batchId),
+      processBatch(session, caseId, created.batchId),
+    ]);
+    expect(mockedGmail).toHaveBeenCalledTimes(2);
+    const items = await db.query.remediationBatchItems.findMany({
+      where: eq(remediationBatchItems.batchId, created.batchId),
+    });
+    expect(items.every((i) => i.status === "completed")).toBe(true);
   });
 });

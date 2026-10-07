@@ -1,9 +1,9 @@
 {
   "name": "cleartrace",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "private": true,
   "cleartrace": {
-    "schemaVersion": 2
+    "schemaVersion": 3
   },
   "bin": {
     "create-cleartrace": "./scripts/create-cleartrace.mjs"
@@ -22,6 +22,7 @@
     "test:coverage": "vitest run --coverage",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui",
+    "test:e2e:prod": "next build && E2E_SERVER=prod playwright test",
     "audit:prod": "npm audit --omit=dev --audit-level=high",
     "create-cleartrace": "node scripts/create-cleartrace.mjs",
     "materialize-kits": "tsx scripts/materialize-kits.ts",
@@ -30,38 +31,38 @@
   "dependencies": {
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^12.11.1",
-    "drizzle-orm": "^0.45.2",
-    "gray-matter": "^4.0.3",
-    "jose": "^6.2.3",
-    "jszip": "^3.10.1",
-    "next": "16.3.8",
+    "drizzle-orm": "^0.45.3",
+    "jose": "^6.2.12",
+    "jszip": "^3.10.2",
+    "next": "16.4.0",
     "nodemailer": "^10.0.15",
-    "react": "19.2.4",
-    "react-dom": "19.2.4",
-    "stripe": "^22.2.2",
-    "uuid": "^14.0.0",
-    "zod": "^4.4.3"
+    "react": "19.3.0",
+    "react-dom": "19.3.0",
+    "stripe": "^22.6.2",
+    "uuid": "^14.0.2",
+    "zod": "^4.6.5"
   },
   "devDependencies": {
-    "@playwright/test": "^1.61.0",
-    "@tailwindcss/postcss": "^4",
-    "@types/bcryptjs": "^2.4.6",
+    "@playwright/test": "^1.63.0",
+    "@tailwindcss/postcss": "^4.3.3",
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^20",
+    "@types/node": "^24",
     "@types/nodemailer": "^8.0.2",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@types/uuid": "^10.0.0",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
     "@vitest/coverage-v8": "^4.1.9",
-    "drizzle-kit": "^0.31.10",
-    "eslint": "^9",
-    "eslint-config-next": "16.3.8",
-    "tailwindcss": "^4",
-    "tsx": "^4.19.4",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^9.39.5",
+    "eslint-config-next": "16.4.0",
+    "tailwindcss": "^4.3.3",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^4.1.9"
   },
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
+  },
+  "overrides": {
+    "source-map-js": "^1.2.2"
   }
 }

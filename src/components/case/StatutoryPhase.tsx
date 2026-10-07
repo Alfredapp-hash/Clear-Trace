@@ -1,38 +1,31 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Badge, Button, Input, Label } from "../ui";
+import { useId, useState } from "react";
+import { Badge, Button, InlineResult, Input, Label } from "../ui";
+import { DROP_FILING_KEY, useCaseActions } from "./useCaseMutations";
 import type { StatutorySummary } from "@/lib/statutory/drop";
 import {
   DROP_EARLIEST_FILING_DATE,
   DROP_IDENTIFIER_TYPES,
   DROP_OFFICIAL_URL,
 } from "@/lib/statutory/constants";
-import { US_STATES } from "@/lib/statutory/us-states";
+import { formatDate } from "@/lib/ux/plain-status";
+import { RESIDENCE_STATE_FIELD_ID } from "./ResidenceState";
 
 const DEADLINE_LABELS: Record<string, string> = {
   statutory_first_pull: "Registered brokers must have picked up your request",
   statutory_deletion_due: "Registered brokers must have processed (deleted) it",
 };
 
-function formatDay(iso: string): string {
-  const d = new Date(iso);
-  return Number.isNaN(d.getTime())
-    ? iso
-    : d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric", timeZone: "UTC" });
-}
-
-function statusTone(status: string): "success" | "warning" | "danger" | "info" {
-  if (status === "met") return "success";
-  if (status === "missed") return "danger";
-  return "info";
-}
-
-function statusLabel(status: string): string {
-  if (status === "met") return "Done";
-  if (status === "missed") return "Window passed";
-  return "Waiting";
+/**
+ * Deadline badge. "met" and "missed" describe the statutory window, not what a broker did:
+ * ClearTrace can't see whether a broker picked up or processed a DROP request, so a passed
+ * window is neutral and points the user at their listings. Exported for tests.
+ */
+export function deadlineBadge(status: string): { tone: "success" | "neutral" | "info"; label: string } {
+  if (status === "met") return { tone: "success", label: "Done" };
+  if (status === "missed") return { tone: "neutral", label: "Window ended — check your listings" };
+  return { tone: "info", label: "Waiting" };
 }
 
 /**
@@ -50,64 +43,30 @@ export default function StatutoryPhase({
   jurisdictionState: string | null;
   initial: StatutorySummary;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const a = useCaseActions(caseId);
   const [filedAt, setFiledAt] = useState("");
-  const [busy, setBusy] = useState<"" | "file" | "state">("");
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [ready, setReady] = useState<Record<string, boolean>>({});
-  const [changingState, setChangingState] = useState(false);
-  const [stateChoice, setStateChoice] = useState("");
   const dateId = useId();
-  const stateId = useId();
 
   const state = jurisdictionState ?? initial.jurisdictionState;
   if (state !== "CA") return null;
 
   const today = new Date().toISOString().slice(0, 10);
-  const disabled = busy !== "" || isPending;
+  const disabled = a.busy;
 
-  async function send(method: "POST" | "PATCH", body: unknown, kind: "file" | "state") {
-    setBusy(kind);
+  // Through callApi (useCaseActions): same error copy and refresh as the rest of the case page.
+  async function recordFiling() {
     setError(null);
     setNotice(null);
-    try {
-      const res = await fetch(`/api/cases/${caseId}/statutory`, {
-        method,
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "That didn't work — try again.");
-        return false;
-      }
-      startTransition(() => router.refresh());
-      return true;
-    } catch {
-      setError("Couldn't reach ClearTrace — check your connection and try again.");
-      return false;
-    } finally {
-      setBusy("");
-    }
-  }
-
-  async function recordFiling() {
     if (!filedAt) {
       setError("Enter the date you filed your DROP request.");
       return;
     }
-    if (await send("POST", { filedAt }, "file")) {
+    if (await a.recordDropFiling(filedAt)) {
       setFiledAt("");
-      setNotice("Filing date saved. We'll track the 45- and 90-day windows.");
-    }
-  }
-
-  async function changeState() {
-    if (!stateChoice) return;
-    if (await send("PATCH", { jurisdictionState: stateChoice }, "state")) {
-      setChangingState(false);
+      setNotice("Filing date saved. ClearTrace will track the 45- and 90-day windows.");
     }
   }
 
@@ -184,41 +143,45 @@ export default function StatutoryPhase({
             className="max-w-[12rem]"
           />
           <Button variant="secondary" onClick={recordFiling} disabled={disabled}>
-            {busy === "file" ? "Saving…" : "Save filing date"}
+            {a.loading === DROP_FILING_KEY ? "Saving…" : "Save filing date"}
           </Button>
+          <InlineResult result={a.results[DROP_FILING_KEY]} onRetry={() => a.retry(DROP_FILING_KEY)} />
         </div>
         {initial.filings.length > 0 && (
           <p className="mt-2 text-xs text-[var(--muted)]">
             Recorded filing{initial.filings.length === 1 ? "" : "s"}:{" "}
-            {initial.filings.map((f) => formatDay(f.filedAt)).join(", ")}
+            {initial.filings.map((f) => formatDate(f.filedAt)).join(", ")}
           </p>
         )}
       </div>
 
       {initial.deadlines.length > 0 && (
         <div>
-          <h4 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.12em] text-slate-300">
             Deadlines
-          </h4>
+          </h3>
           <ul className="space-y-2">
-            {initial.deadlines.map((d) => (
+            {initial.deadlines.map((d) => {
+              const badge = deadlineBadge(d.effectiveStatus);
+              return (
               <li
                 key={d.id}
                 className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/[0.08] bg-white/[0.02] px-3 py-2"
               >
                 <span className="text-slate-300">
-                  {DEADLINE_LABELS[d.deadlineType] ?? d.deadlineType} — by {formatDay(d.dueAt)}
+                  {DEADLINE_LABELS[d.deadlineType] ?? d.deadlineType} — by {formatDate(d.dueAt)}
                 </span>
-                <Badge tone={statusTone(d.effectiveStatus)}>{statusLabel(d.effectiveStatus)}</Badge>
+                <Badge tone={badge.tone}>{badge.label}</Badge>
               </li>
-            ))}
+              );
+            })}
           </ul>
         </div>
       )}
 
       {initial.escalationEligible && (
         <div className="rounded-xl border border-amber-500/20 bg-amber-500/5 p-4">
-          <h4 className="font-medium text-amber-200">Still listed after 90 days</h4>
+          <h3 className="font-medium text-amber-200">Still listed after 90 days</h3>
           <p className="mt-1 text-slate-300">
             These listings are on brokers registered with the California Privacy Protection
             Agency and still show your information after the DROP processing window:
@@ -254,40 +217,10 @@ export default function StatutoryPhase({
         {initial.jurisdictionSource === "auto"
           ? "California was detected from the location on this case."
           : "You set this case to California."}{" "}
-        {!changingState ? (
-          <button
-            type="button"
-            className="text-teal-300 hover:underline"
-            onClick={() => setChangingState(true)}
-          >
-            Not a California resident?
-          </button>
-        ) : (
-          <span className="mt-2 flex flex-wrap items-center gap-2">
-            <label htmlFor={stateId} className="sr-only">
-              State of residence
-            </label>
-            <select
-              id={stateId}
-              value={stateChoice}
-              onChange={(e) => setStateChoice(e.target.value)}
-              className="rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-slate-100"
-            >
-              <option value="">Choose your state</option>
-              {US_STATES.filter((s) => s.code !== "CA").map((s) => (
-                <option key={s.code} value={s.code}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <Button size="sm" variant="secondary" onClick={changeState} disabled={disabled || !stateChoice}>
-              {busy === "state" ? "Saving…" : "Save"}
-            </Button>
-            <Button size="sm" variant="ghost" onClick={() => setChangingState(false)}>
-              Cancel
-            </Button>
-          </span>
-        )}
+        <a href={`#${RESIDENCE_STATE_FIELD_ID}`} className="text-teal-300 hover:underline">
+          Not a California resident? Change your state of residence
+        </a>
+        .
       </div>
 
       <div aria-live="polite">

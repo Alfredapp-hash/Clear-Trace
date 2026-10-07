@@ -42,7 +42,7 @@ export function CopyBlock({
         </Button>
       </div>
       {preview && (
-        <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/[0.06] bg-black/30 p-3 text-[11px] leading-relaxed text-slate-500">
+        <pre className="max-h-32 overflow-auto whitespace-pre-wrap rounded-xl border border-white/[0.06] bg-black/30 p-3 text-[11px] leading-relaxed text-[var(--muted)]">
           {preview}
           {content.split("\n").length > previewLines && "\n…"}
         </pre>

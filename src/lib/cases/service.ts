@@ -17,6 +17,7 @@ import {
 } from "@/lib/crypto/encryption";
 import { logAuditEvent } from "@/lib/audit/logger";
 import type { SessionPayload } from "@/lib/auth/session";
+import { clampPageLimit, decodePageCursor, olderThan, toPage } from "@/lib/cases/page-cursor";
 
 export async function listCasesForUser(session: SessionPayload) {
   return db.query.privacyCases.findMany({
@@ -254,11 +255,27 @@ export async function getIdentityClaimsRedacted(caseId: string) {
   }));
 }
 
-export async function getCaseTimeline(caseId: string) {
-  return db.query.auditEvents.findMany({
-    where: eq(auditEvents.caseId, caseId),
-    orderBy: [desc(auditEvents.createdAt)],
+/**
+ * One page of a case's audit timeline, newest first. Bounded: `limit` defaults to
+ * DEFAULT_PAGE_LIMIT (max MAX_PAGE_LIMIT); pass the returned `nextCursor` back as `cursor`
+ * for older events. A page is a window onto the hash chain, not the whole chain: checking
+ * integrity needs every row in chain order (verifyAuditChain in lib/audit/logger).
+ */
+export async function getCaseTimeline(
+  caseId: string,
+  opts: { limit?: number; cursor?: string | null } = {},
+): Promise<{ events: (typeof auditEvents.$inferSelect)[]; nextCursor: string | null }> {
+  const limit = clampPageLimit(opts.limit);
+  const cursor = decodePageCursor(opts.cursor);
+  const rows = await db.query.auditEvents.findMany({
+    where: cursor
+      ? and(eq(auditEvents.caseId, caseId), olderThan(auditEvents.createdAt, auditEvents.id, cursor))
+      : eq(auditEvents.caseId, caseId),
+    orderBy: [desc(auditEvents.createdAt), desc(auditEvents.id)],
+    limit: limit + 1,
   });
+  const page = toPage(rows, limit);
+  return { events: page.items, nextCursor: page.nextCursor };
 }
 
 export async function getLatestAuthorization(caseId: string) {

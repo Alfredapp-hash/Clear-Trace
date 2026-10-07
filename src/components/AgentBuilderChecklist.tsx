@@ -79,7 +79,7 @@ export function AgentBuilderChecklist() {
       <div className="mt-4 space-y-6">
         {phases.map((phase) => (
           <div key={phase}>
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">
               {phase}
             </p>
             <ul className="space-y-2">
@@ -111,15 +111,15 @@ export function AgentBuilderChecklist() {
                       >
                         {item.label}
                       </span>
-                      <span className="mt-1 block text-xs leading-relaxed text-slate-500">
+                      <span className="mt-1 block text-xs leading-relaxed text-[var(--muted)]">
                         {item.description}
                       </span>
                     </span>
                   </label>
                   {(item.docPath || item.externalUrl) && (
-                    <p className="mt-1.5 pl-7 text-[11px] text-slate-600 [overflow-wrap:anywhere]">
+                    <p className="mt-1.5 pl-7 text-[11px] text-[var(--muted)] [overflow-wrap:anywhere]">
                       {item.docPath && (
-                        <span className="font-mono text-slate-500">{item.docPath}</span>
+                        <span className="font-mono text-[var(--muted)]">{item.docPath}</span>
                       )}
                       {item.externalUrl && (
                         <a
@@ -141,7 +141,7 @@ export function AgentBuilderChecklist() {
       </div>
 
       {completed < total && (
-        <p className="mt-4 text-xs text-slate-600">
+        <p className="mt-4 text-xs text-[var(--muted)]">
           Progress saved in this browser. Download the agent kit zip when you reach the Agent IDE
           phase.
         </p>

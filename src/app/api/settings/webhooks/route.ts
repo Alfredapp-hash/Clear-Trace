@@ -59,7 +59,7 @@ export async function POST(request: Request) {
     if (msg === "BILLING_UPGRADE_REQUIRED") {
       return jsonError("Enterprise webhooks require Pro. Upgrade on Billing.", 402);
     }
-    if (msg === "INVALID_URL") return jsonError("Webhook URL must be http(s)", 400);
+    if (msg === "INVALID_URL") return jsonError("Webhook URL must be a public https:// address", 400);
     throw error;
   }
 }
@@ -98,7 +98,7 @@ export async function PATCH(request: Request) {
       return jsonError("Enterprise webhooks require Pro. Upgrade on Billing.", 402);
     }
     if (msg === "WEBHOOK_NOT_FOUND") return jsonError("Webhook not found", 404);
-    if (msg === "INVALID_URL") return jsonError("Webhook URL must be http(s)", 400);
+    if (msg === "INVALID_URL") return jsonError("Webhook URL must be a public https:// address", 400);
     throw error;
   }
 }

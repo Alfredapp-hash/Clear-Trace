@@ -31,6 +31,8 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = {
   themeColor: "#14b8a6",
+  // Dark-only UI: tells the browser to render native controls dark before CSS loads.
+  colorScheme: "dark",
 };
 
 export default function RootLayout({
