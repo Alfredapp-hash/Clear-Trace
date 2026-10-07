@@ -1,7 +1,7 @@
 import fs from "fs";
 import path from "path";
-import matter from "gray-matter";
 import { z } from "zod";
+import { parseFrontMatter } from "./front-matter";
 import {
   getCatalogEntry,
   getWorkflowSkillIds,
@@ -134,6 +134,12 @@ function mergeSkillDefinition(
 }
 
 export function loadSkillRegistry(force = false): SkillDefinition[] {
+  // Production images ship a fixed skills/ directory: load it once per process. In dev the
+  // mtime check below picks up SKILL.md edits without a restart.
+  if (!force && cachedRegistry && process.env.NODE_ENV === "production") {
+    return cachedRegistry;
+  }
+
   const skillFiles = listSkillFiles(resolveSkillsDir());
   const mtime = skillFilesMtime(skillFiles);
 
@@ -144,7 +150,12 @@ export function loadSkillRegistry(force = false): SkillDefinition[] {
   const skills: SkillDefinition[] = [];
   for (const skillPath of skillFiles) {
     const raw = fs.readFileSync(/*turbopackIgnore: true*/ skillPath, "utf8");
-    const parsed = matter(raw);
+    let parsed: ReturnType<typeof parseFrontMatter>;
+    try {
+      parsed = parseFrontMatter(raw);
+    } catch (err) {
+      throw new Error(`${skillPath}: ${err instanceof Error ? err.message : String(err)}`);
+    }
     const frontMatter = skillFrontMatterSchema.parse(parsed.data);
 
     skills.push(mergeSkillDefinition(frontMatter, parsed.content, skillPath));

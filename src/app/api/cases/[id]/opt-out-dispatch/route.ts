@@ -3,7 +3,9 @@ import { requireCaseAccess } from "@/lib/auth/case-access";
 import { requireBillingFeature } from "@/lib/billing/service";
 import { ensureDatabase } from "@/lib/db/init";
 import {
+  DISMISS_REASON_MAX,
   approveOptOutDispatch,
+  dismissOptOutDispatch,
   listOptOutDispatches,
   queueOptOutDispatchesFromSweep,
   recordOptOutCompleted,
@@ -93,7 +95,22 @@ export async function POST(
       return jsonOk({ completed: true });
     }
 
-    return jsonError("Unknown action. Use queue, approve, submit, or complete.", 400);
+    if (action === "dismiss") {
+      const dispatchId = body.dispatchId;
+      if (typeof dispatchId !== "string" || !dispatchId) return jsonError("dispatchId required", 400);
+      const reason = body.reason;
+      if (reason !== undefined && typeof reason !== "string") {
+        return jsonError("reason must be a string", 400);
+      }
+      if (typeof reason === "string" && reason.length > DISMISS_REASON_MAX) {
+        return jsonError(`reason must be at most ${DISMISS_REASON_MAX} characters`, 400);
+      }
+      // Only pending_approval / approved can be dismissed; anything else is a 409.
+      await dismissOptOutDispatch(session, id, dispatchId, reason);
+      return jsonOk({ dismissed: true });
+    }
+
+    return jsonError("Unknown action. Use queue, approve, submit, complete, or dismiss.", 400);
   } catch (error) {
     const msg = error instanceof Error ? error.message : "Unknown error";
     if (msg === "CASE_NOT_FOUND") return jsonError("Case not found", 404);

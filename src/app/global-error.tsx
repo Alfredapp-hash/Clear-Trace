@@ -30,7 +30,7 @@ export default function GlobalError({
         <main role="alert" style={{ maxWidth: 480 }}>
           <h1 style={{ fontSize: 24, margin: "0 0 12px" }}>ClearTrace hit an error</h1>
           <p style={{ fontSize: 14, lineHeight: 1.6, color: "#cbd5e1", margin: 0 }}>
-            Nothing was sent or changed because of this error. Try again in a moment.
+            ClearTrace hit an error while loading. If you had just started an action, it may or may not have finished — check before trying it again.
           </p>
           {error.digest && (
             <p style={{ fontSize: 12, color: "#8b95a8", marginTop: 12 }}>

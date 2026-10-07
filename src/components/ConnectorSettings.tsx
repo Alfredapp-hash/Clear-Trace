@@ -655,9 +655,11 @@ export function ConnectorSettings({ initialData }: { initialData: ConnectorSetti
               }
             />
             <span>
-              <strong className="text-amber-100">Ruthless mode</strong> — maximum lawful coverage:
-              all discovery scopes (including HIBP breach intel), 40 SERP queries, full broker universe,
-              daily monitoring, expedited SLAs. No dark-web crawl or unapproved sends.
+              <strong className="text-amber-100">Broader search (Ruthless mode)</strong> — searches
+              every category (including breach checks), runs up to 40 search queries, covers the
+              full list of people-search sites, re-checks daily and uses shorter internal deadlines.
+              It widens the search; it can&apos;t guarantee anything is found or removed. No
+              dark-web crawling, and nothing is sent without your approval.
             </span>
           </label>
           <label className="flex cursor-pointer items-start gap-3 text-sm text-slate-400">

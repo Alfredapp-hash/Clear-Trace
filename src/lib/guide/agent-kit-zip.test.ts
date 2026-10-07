@@ -12,6 +12,8 @@ describe("agent kit zip", () => {
     expect(paths.some((p) => p.includes("AGENTS.md"))).toBe(true);
     expect(paths.some((p) => p.includes("skills/discover-public-exposure/SKILL.md"))).toBe(true);
     expect(paths.some((p) => p.includes("mcp-server/index.mjs"))).toBe(true);
+    // index.mjs imports ./paths.mjs; the kit must ship it or the MCP server cannot start.
+    expect(paths.some((p) => p.includes("mcp-server/paths.mjs"))).toBe(true);
     expect(paths.some((p) => p.includes("docs/PRD.md"))).toBe(true);
   });
 

@@ -75,8 +75,22 @@ describe("StatutoryPhase", () => {
         })}
       />,
     );
-    expect(html).toContain("Window passed");
+    // B6: a passed window is not evidence a broker did anything wrong — neutral, not red.
+    expect(html).toContain("Window ended — check your listings");
+    expect(html).not.toContain("Window passed");
+    expect(html).not.toMatch(/rose-500\/10[^>]*>Window ended/);
+    expect(html).toContain("<h3");
+    expect(html).not.toContain("<h4");
     expect(html).toContain("Spokeo — https://www.spokeo.com/x");
     expect(html).toContain("Delete Act complaint");
+  });
+
+  it("has no state picker of its own: it links to the one residence control (B10)", () => {
+    const html = renderToStaticMarkup(
+      <StatutoryPhase caseId="c1" jurisdictionState="CA" initial={summary()} />,
+    );
+    expect(html).not.toContain("<select");
+    expect(html).toContain('href="#residence-state"');
+    expect(html).toContain("Not a California resident? Change your state of residence");
   });
 });

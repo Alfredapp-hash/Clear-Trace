@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
 import { getSessionSecret } from "@/lib/auth/secret";
+import { hasJsonContentType } from "@/lib/security/request-guards";
 
 /** Pages and endpoints reachable without a session cookie. */
 const PUBLIC_PATHS = [
@@ -91,12 +92,38 @@ export function hasAcceptableBodyType(request: NextRequest): boolean {
   return !hasBody;
 }
 
+/**
+ * Endpoints that create a session from credentials. They need CSRF protection even without
+ * a session cookie: a forged cross-site sign-in would log the victim into the attacker's
+ * account ("login CSRF"), and whatever they then enter would land there.
+ */
+const CREDENTIAL_ENTRY_PATHS = new Set(["/api/auth/login", "/api/auth/register"]);
+
+/**
+ * A browser request that is not same-origin. Browsers always label cross-origin POSTs
+ * (Sec-Fetch-Site, else Origin), so a request with neither header is a non-browser client
+ * (curl, a setup script) and cannot carry a victim's ambient context.
+ */
+export function isCrossOriginBrowserRequest(request: NextRequest): boolean {
+  if (!request.headers.has("sec-fetch-site") && !request.headers.has("origin")) return false;
+  return !isSameOriginRequest(request);
+}
+
 function csrfCheck(request: NextRequest, pathname: string): NextResponse | null {
   if (SAFE_METHODS.has(request.method.toUpperCase())) return null;
   if (CSRF_EXEMPT_PREFIXES.some((p) => matchesPrefix(pathname, p))) return null;
   // Only cookie-authenticated requests can be forged cross-site; cookie-less calls (curl,
   // first-run registration from a script) are left to the route's own auth.
-  if (!request.cookies.has(SESSION_COOKIE)) return null;
+  if (!request.cookies.has(SESSION_COOKIE)) {
+    if (!CREDENTIAL_ENTRY_PATHS.has(pathname)) return null;
+    if (isCrossOriginBrowserRequest(request)) {
+      return NextResponse.json({ error: "Cross-origin request blocked" }, { status: 403 });
+    }
+    if (!hasJsonContentType(request)) {
+      return NextResponse.json({ error: "Content-Type must be application/json" }, { status: 415 });
+    }
+    return null;
+  }
 
   if (!isSameOriginRequest(request)) {
     return NextResponse.json({ error: "Cross-origin request blocked" }, { status: 403 });

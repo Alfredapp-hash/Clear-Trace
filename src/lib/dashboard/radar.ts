@@ -1,46 +1,71 @@
-import { and, desc, eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import { db } from "@/lib/db";
-import {
-  privacyCases,
-  exposureCandidates,
-  verifiedExposures,
-} from "@/lib/db/schema";
+import { exposureCandidates, verifiedExposures } from "@/lib/db/schema";
 import { assessExposureImpact } from "@/lib/ux/impact-score";
 import { isActiveCaseStatus, isRemovedCaseStatus } from "@/lib/ux/case-status";
+import { listDashboardCases, type DashboardCase } from "./actions";
 
-function ownerScope(userId: string, organizationId?: string) {
-  return organizationId
-    ? and(eq(privacyCases.ownerUserId, userId), eq(privacyCases.organizationId, organizationId))
-    : eq(privacyCases.ownerUserId, userId);
+/** How many of the most recently updated cases the radar covers. */
+export const RADAR_CASE_LIMIT = 10;
+
+function groupByCase<T extends { caseId: string }>(rows: T[]): Map<string, T[]> {
+  const out = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = out.get(row.caseId);
+    if (list) list.push(row);
+    else out.set(row.caseId, [row]);
+  }
+  return out;
 }
 
-export async function getExposureRadar(userId: string, organizationId?: string) {
-  const cases = await db.query.privacyCases.findMany({
-    where: ownerScope(userId, organizationId),
-    orderBy: [desc(privacyCases.updatedAt)],
-    limit: 10,
-  });
+/**
+ * Per-case listing counts for already-loaded cases (expected most-recently-updated first).
+ * Rows are fetched once for all radar cases and grouped by case id in a single pass.
+ */
+export async function buildExposureRadar(cases: DashboardCase[]) {
+  const radarCases = cases.slice(0, RADAR_CASE_LIMIT);
+  const caseIds = radarCases.map((c) => c.id);
+  if (caseIds.length === 0) return [];
 
-  const caseIds = cases.map((c) => c.id);
-  const [allCandidates, allExposures] =
-    caseIds.length > 0
-      ? await Promise.all([
-          db.query.exposureCandidates.findMany({
-            where: inArray(exposureCandidates.caseId, caseIds),
-          }),
-          db.query.verifiedExposures.findMany({
-            where: inArray(verifiedExposures.caseId, caseIds),
-          }),
-        ])
-      : [[], []];
+  const [allCandidates, allExposures] = await Promise.all([
+    db
+      .select({
+        id: exposureCandidates.id,
+        caseId: exposureCandidates.caseId,
+        canonicalUrl: exposureCandidates.canonicalUrl,
+        sourceType: exposureCandidates.sourceType,
+        matchStatus: exposureCandidates.matchStatus,
+      })
+      .from(exposureCandidates)
+      .where(inArray(exposureCandidates.caseId, caseIds))
+      .all(),
+    db
+      .select({
+        caseId: verifiedExposures.caseId,
+        candidateId: verifiedExposures.candidateId,
+        canonicalUrl: verifiedExposures.canonicalUrl,
+        status: verifiedExposures.status,
+        riskLevel: verifiedExposures.riskLevel,
+        informationSummary: verifiedExposures.informationSummary,
+        sensitivity: verifiedExposures.sensitivity,
+        exposureClass: verifiedExposures.exposureClass,
+      })
+      .from(verifiedExposures)
+      .where(inArray(verifiedExposures.caseId, caseIds))
+      .all(),
+  ]);
+  const candidatesByCase = groupByCase(allCandidates);
+  const exposuresByCase = groupByCase(allExposures);
 
-  const radar = [];
-  for (const c of cases) {
-    const exposures = allExposures.filter((e) => e.caseId === c.id);
+  return radarCases.map((c) => {
+    const exposures = exposuresByCase.get(c.id) ?? [];
     const promoted = new Set(exposures.map((e) => e.candidateId));
     // Confirmed candidates are represented by their exposure row; don't count them twice.
-    const candidates = allCandidates.filter(
-      (x) => x.caseId === c.id && x.matchStatus !== "confirmed_match" && !promoted.has(x.id),
+    const candidates = (candidatesByCase.get(c.id) ?? []).filter(
+      (x) =>
+        x.matchStatus !== "confirmed_match" &&
+        x.matchStatus !== "rejected" &&
+        !promoted.has(x.id),
     );
 
     const surfaces = [
@@ -56,37 +81,41 @@ export async function getExposureRadar(userId: string, organizationId?: string) 
           sourceType: e.exposureClass,
         }),
       })),
-      ...candidates
-        .filter((x) => x.matchStatus !== "rejected")
-        .map((x) => ({
-          url: x.canonicalUrl,
-          status: x.matchStatus,
-          type: "candidate" as const,
-          impact: assessExposureImpact({
-            url: x.canonicalUrl,
-            sourceType: x.sourceType,
-          }),
-        })),
+      ...candidates.map((x) => ({
+        url: x.canonicalUrl,
+        status: x.matchStatus,
+        type: "candidate" as const,
+        impact: assessExposureImpact({ url: x.canonicalUrl, sourceType: x.sourceType }),
+      })),
     ];
 
-    radar.push({
+    return {
       caseId: c.id,
       caseTitle: c.title,
       caseStatus: c.status,
       surfaceCount: surfaces.length,
-      highImpact: surfaces.filter((s) => s.impact.label === "high" || s.impact.label === "critical").length,
+      highImpact: surfaces.filter((s) => s.impact.label === "high" || s.impact.label === "critical")
+        .length,
       surfaces: surfaces.slice(0, 5),
-    });
-  }
+    };
+  });
+}
 
-  return radar;
+export async function getExposureRadar(userId: string, organizationId?: string) {
+  return buildExposureRadar(await listDashboardCases(userId, organizationId));
+}
+
+export function computeVictoryStats(cases: Pick<DashboardCase, "status">[]) {
+  const removed = cases.filter((c) => isRemovedCaseStatus(c.status)).length;
+  const active = cases.filter((c) => isActiveCaseStatus(c.status)).length;
+  return {
+    totalCases: cases.length,
+    removed,
+    active,
+    winRate: cases.length ? removed / cases.length : 0,
+  };
 }
 
 export async function getVictoryStats(userId: string, organizationId?: string) {
-  const cases = await db.query.privacyCases.findMany({
-    where: ownerScope(userId, organizationId),
-  });
-  const removed = cases.filter((c) => isRemovedCaseStatus(c.status)).length;
-  const active = cases.filter((c) => isActiveCaseStatus(c.status)).length;
-  return { totalCases: cases.length, removed, active, winRate: cases.length ? removed / cases.length : 0 };
+  return computeVictoryStats(await listDashboardCases(userId, organizationId));
 }

@@ -151,13 +151,13 @@ describe("REGISTRATION_MODE (routes)", () => {
   // loaded runner a dozen of them can exceed the 5s default.
   const LOCKOUT_TEST_TIMEOUT_MS = 30_000;
 
-  it("TRUST_PROXY=1: 10 bad logins from IP A do not block a correct login from IP B", async () => {
+  it("TRUST_PROXY=1: bad logins from IP A do not block a correct login from IP B", async () => {
     process.env.REGISTRATION_MODE = "open";
     process.env.TRUST_PROXY = "1";
     const email = uniqueEmail("lockout");
     expect((await register(email, { "x-forwarded-for": "198.51.100.200" })).status).toBe(200);
 
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 5; i++) {
       const res = await login(email, "wrong-password!", "203.0.113.10");
       expect(res.status, `attempt ${i + 1}`).toBe(401);
     }
@@ -167,14 +167,16 @@ describe("REGISTRATION_MODE (routes)", () => {
     expect((await login(email, "long-enough-password", "198.51.100.7")).status).toBe(200);
   }, LOCKOUT_TEST_TIMEOUT_MS);
 
-  it("without TRUST_PROXY the per-email bucket still locks after 10 attempts", async () => {
+  it("without TRUST_PROXY the per-email failures back off after 5 attempts", async () => {
     process.env.REGISTRATION_MODE = "open";
     const email = uniqueEmail("nolproxy");
     expect((await register(email)).status).toBe(200);
-    for (let i = 0; i < 10; i++) {
+    for (let i = 0; i < 5; i++) {
       expect((await login(email, "wrong-password!", "203.0.113.11")).status).toBe(401);
     }
-    expect((await login(email, "long-enough-password", "198.51.100.8")).status).toBe(429);
+    const blocked = await login(email, "long-enough-password", "198.51.100.8");
+    expect(blocked.status).toBe(429);
+    expect(Number(blocked.headers.get("retry-after"))).toBeGreaterThan(0);
   }, LOCKOUT_TEST_TIMEOUT_MS);
 
   it("no rate_limit_events key contains '@'", async () => {

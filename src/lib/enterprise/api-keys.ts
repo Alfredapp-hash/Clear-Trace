@@ -142,7 +142,17 @@ export async function authenticateApiKey(
   if (!org) return null;
 
   let actingUserId = row.createdByUserId ?? null;
-  if (!actingUserId) {
+  if (actingUserId) {
+    // A key acts as its creator: once they leave the organization (membership removed, or
+    // the account deleted), the key stops working instead of outliving their access.
+    const creatorMembership = await db.query.memberships.findFirst({
+      where: and(
+        eq(memberships.userId, actingUserId),
+        eq(memberships.organizationId, row.organizationId),
+      ),
+    });
+    if (!creatorMembership) return null;
+  } else {
     const firstMember = await db.query.memberships.findFirst({
       where: eq(memberships.organizationId, row.organizationId),
       orderBy: [asc(memberships.createdAt)],

@@ -27,5 +27,23 @@ sqlite.pragma("foreign_keys = ON");
 sqlite.pragma("synchronous = FULL");
 // Erased case data is overwritten with zeros on disk instead of lingering in free pages.
 sqlite.pragma("secure_delete = ON");
+// Long-lived connection: let SQLite refresh query-planner statistics where they are stale
+// (0x10002 = also consider tables with no stats yet; bounded work). The worker tick runs a
+// plain `PRAGMA optimize` too (see optimizeDatabase). Best effort, never fatal.
+try {
+  sqlite.pragma("optimize = 0x10002");
+} catch {
+  // e.g. a read-only file; the planner just keeps its current statistics
+}
+
+/** `PRAGMA optimize` (cheap when nothing changed). Best effort; returns false on failure. */
+export function optimizeDatabase(): boolean {
+  try {
+    sqlite.pragma("optimize");
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 export const db = drizzle(sqlite, { schema });

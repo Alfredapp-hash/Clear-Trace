@@ -11,34 +11,6 @@ import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "./service";
 import { log } from "@/lib/log";
 
-export async function updateCaseStatus(
-  session: SessionPayload,
-  caseId: string,
-  status: string,
-  eventType: string,
-  summary: string,
-) {
-  const privacyCase = await getCaseForUser(caseId, session);
-  if (!privacyCase) throw new Error("CASE_NOT_FOUND");
-
-  const now = new Date().toISOString();
-  await db
-    .update(privacyCases)
-    .set({ status, updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
-
-  await logAuditEvent({
-    caseId,
-    organizationId: session.organizationId,
-    userId: session.userId,
-    eventType,
-    summary,
-    detail: { previousStatus: privacyCase.status, newStatus: status },
-  });
-
-  return { status };
-}
-
 /** Statuses in which the case is on hold: no workflow step may run until it is resumed. */
 export const INACTIVE_CASE_STATUSES: ReadonlySet<string> = new Set(["paused", "archived"]);
 
@@ -169,11 +141,15 @@ export async function reopenCase(session: SessionPayload, caseId: string, reason
   if (!privacyCase) throw new Error("CASE_NOT_FOUND");
   if (!REOPENABLE_STATUSES.has(privacyCase.status)) throw new Error("INVALID_TRANSITION");
 
+  // Conditional on the status that was read: a pause/archive or workflow step that landed
+  // meanwhile wins, and the reopen is refused rather than overwriting it.
   const now = new Date().toISOString();
-  await db
+  const res = db
     .update(privacyCases)
     .set({ status: "reopened", updatedAt: now })
-    .where(eq(privacyCases.id, caseId));
+    .where(and(eq(privacyCases.id, caseId), eq(privacyCases.status, privacyCase.status)))
+    .run();
+  if (res.changes !== 1) throw new Error("CONFLICT");
 
   // The free-text reason is not stored in the audit log (it can contain PII and the log outlives the case).
   await logAuditEvent({

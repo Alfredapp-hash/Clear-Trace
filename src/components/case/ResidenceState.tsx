@@ -1,12 +1,15 @@
 "use client";
 
-import { useId, useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
-import { Button } from "../ui";
+import { useState } from "react";
+import { Button, InlineResult } from "../ui";
+import { RESIDENCE_KEY, useCaseActions } from "./useCaseMutations";
 import { US_STATES } from "@/lib/statutory/us-states";
 
 /** Value of the "work it out from the case details" option (clears a user override). */
 export const DETECT_STATE = "";
+
+/** id of the state select; the California DROP card links here to change the state. */
+export const RESIDENCE_STATE_FIELD_ID = "residence-state";
 
 function stateName(code: string | null): string | null {
   if (!code) return null;
@@ -16,7 +19,8 @@ function stateName(code: string | null): string | null {
 /**
  * State of residence for a case, shown on every case (not only California ones), so a
  * Californian whose location was not detected, or who chose another state by mistake, can
- * set California and get the DROP guidance. PATCH /api/cases/[id]/statutory; choosing
+ * set California and get the DROP guidance. The case page's only state control (the DROP
+ * card links here). PATCH /api/cases/[id]/statutory through useCaseActions; choosing
  * "Detect from case details" clears the override and re-detects from the claims.
  */
 export default function ResidenceState({
@@ -28,39 +32,16 @@ export default function ResidenceState({
   jurisdictionState: string | null;
   jurisdictionSource: string | null;
 }) {
-  const router = useRouter();
-  const [isPending, startTransition] = useTransition();
+  const a = useCaseActions(caseId);
   const saved = jurisdictionSource === "user" && jurisdictionState ? jurisdictionState : DETECT_STATE;
   const [choice, setChoice] = useState(saved);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const selectId = useId();
 
   const name = stateName(jurisdictionState);
   const how =
     !name ? "Not set" : jurisdictionSource === "user" ? `${name} (set by you)` : `${name} (detected from the case details)`;
 
-  async function save() {
-    setBusy(true);
-    setError(null);
-    try {
-      const res = await fetch(`/api/cases/${caseId}/statutory`, {
-        method: "PATCH",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jurisdictionState: choice === DETECT_STATE ? null : choice }),
-      });
-      const data = (await res.json().catch(() => ({}))) as { error?: string };
-      if (!res.ok) {
-        setError(data.error ?? "That didn't work — try again.");
-        return;
-      }
-      startTransition(() => router.refresh());
-    } catch {
-      setError("Couldn't reach ClearTrace — check your connection and try again.");
-    } finally {
-      setBusy(false);
-    }
-  }
+  const saving = a.loading === RESIDENCE_KEY;
+  const save = () => a.setResidenceState(choice === DETECT_STATE ? null : choice);
 
   return (
     <div className="mt-4 border-t border-white/[0.06] pt-3 text-sm">
@@ -74,11 +55,11 @@ export default function ResidenceState({
         </p>
       )}
       <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
-        <label htmlFor={selectId} className="sr-only">
+        <label htmlFor={RESIDENCE_STATE_FIELD_ID} className="sr-only">
           State of residence
         </label>
         <select
-          id={selectId}
+          id={RESIDENCE_STATE_FIELD_ID}
           value={choice}
           onChange={(e) => setChoice(e.target.value)}
           className="min-w-0 flex-1 rounded-lg border border-white/10 bg-black/30 px-2 py-1 text-slate-100"
@@ -90,11 +71,13 @@ export default function ResidenceState({
             </option>
           ))}
         </select>
-        <Button size="sm" variant="secondary" onClick={save} disabled={busy || isPending || choice === saved}>
-          {busy ? "Saving…" : "Save state"}
+        <Button size="sm" variant="secondary" onClick={save} disabled={a.busy || choice === saved}>
+          {saving ? "Saving…" : "Save state"}
         </Button>
       </div>
-      <div aria-live="polite">{error && <p className="mt-1 text-xs text-rose-300">{error}</p>}</div>
+      <div aria-live="polite" className="mt-1">
+        <InlineResult result={a.results[RESIDENCE_KEY]} onRetry={() => a.retry(RESIDENCE_KEY)} />
+      </div>
     </div>
   );
 }

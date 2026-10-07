@@ -1,4 +1,4 @@
-import { and, desc, eq, lte } from "drizzle-orm";
+import { and, asc, desc, eq, lte } from "drizzle-orm";
 import { v4 as uuid } from "uuid";
 import { db } from "@/lib/db";
 import {
@@ -18,7 +18,11 @@ import { logAuditEvent } from "@/lib/audit/logger";
 import { hashContent } from "@/lib/tools/text-extractor";
 import type { SessionPayload } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
-import { FROZEN_CASE_STATUSES, deriveCaseStatusFromExposures } from "@/lib/cases/derive-status";
+import {
+  EXCLUDED_EXPOSURE_STATUSES,
+  FROZEN_CASE_STATUSES,
+  deriveCaseStatusFromExposures,
+} from "@/lib/cases/derive-status";
 import { performLiveExposureCheck, type LiveCheckResult } from "./live-check";
 import { resolveExposureDeadlinesOnRemoval } from "@/lib/enterprise/sla-service";
 import {
@@ -48,14 +52,28 @@ const PRE_VERIFICATION_STATUSES = new Set([
   "awaiting_response",
 ]);
 
-function nextCheckDate(schedule: string, from = new Date()): string {
-  const d = new Date(from);
-  if (schedule === "daily") d.setDate(d.getDate() + 1);
-  else if (schedule === "weekly") d.setDate(d.getDate() + 7);
-  else if (schedule === "monthly") d.setMonth(d.getMonth() + 1);
-  else d.setDate(d.getDate() + 7);
+/**
+ * Next check time for a schedule, in UTC (the server's local zone never shifts it). Monthly
+ * keeps the day of month, clamped to the last day of a shorter month (Jan 31 → Feb 28/29).
+ */
+export function nextCheckDate(schedule: string, from = new Date()): string {
+  const d = new Date(from.getTime());
+  if (schedule === "daily") d.setUTCDate(d.getUTCDate() + 1);
+  else if (schedule === "monthly") {
+    const day = d.getUTCDate();
+    d.setUTCDate(1);
+    d.setUTCMonth(d.getUTCMonth() + 1);
+    const lastDay = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    d.setUTCDate(Math.min(day, lastDay));
+  } else d.setUTCDate(d.getUTCDate() + 7); // weekly, and the default
   return d.toISOString();
 }
+
+/** Scheduled verification budget per worker tick; the rest stay due for the next tick. */
+export const VERIFICATION_BUDGET_MS = 10 * 60 * 1000;
+export const VERIFICATION_MAX_RULES = 100;
+/** A scheduled check that failed is retried after this many days instead of a full cadence. */
+export const VERIFICATION_ERROR_RETRY_DAYS = 1;
 
 /** Pure derivation lives in cases/derive-status (shared with the schema migration). */
 export { deriveCaseStatusFromExposures };
@@ -106,6 +124,8 @@ export async function scheduleMonitoring(
     ),
   });
   if (!exposure) throw new Error("EXPOSURE_NOT_FOUND");
+  // A listing the user ruled out ("not me", dismissed) is never monitored.
+  if (EXCLUDED_EXPOSURE_STATUSES.has(exposure.status)) throw new Error("INVALID_TRANSITION");
 
   const nextCheckAt = nextCheckDate(schedule);
   const now = new Date().toISOString();
@@ -172,6 +192,10 @@ interface RecordedLiveCheck {
 /**
  * Persist a live check and apply its (conclusive-only) effect on the exposure and case.
  * Inconclusive outcomes never set removed_confirmed and never trigger reappearance.
+ * An exposure the user ruled out (rejected / dismissed / false_positive) keeps its status:
+ * the check is recorded, but never turns a "not me" listing back into evidence. A
+ * 'reappearance' stays a reappearance while the listing is still live (it is not demoted to
+ * still_exposed by the next check).
  */
 async function recordLiveCheck(input: {
   caseId: string;
@@ -183,6 +207,7 @@ async function recordLiveCheck(input: {
   const now = new Date().toISOString();
 
   const wasRemoved = exposure.status === "removed_confirmed";
+  const excluded = EXCLUDED_EXPOSURE_STATUSES.has(exposure.status);
   let checkStatus: string;
   let exposureStatus: string | null = null;
   let searchStatus: string;
@@ -195,6 +220,9 @@ async function recordLiveCheck(input: {
         isReappearance = true;
         checkStatus = "reappearance_detected";
         exposureStatus = "reappearance";
+      } else if (exposure.status === "reappearance") {
+        checkStatus = "still_exposed";
+        exposureStatus = "reappearance"; // sticky until a live check confirms removal
       } else {
         checkStatus = "still_exposed";
         exposureStatus = "still_exposed";
@@ -220,6 +248,11 @@ async function recordLiveCheck(input: {
         : live.outcome === "absent"
           ? "information_absent"
           : "unknown";
+
+  if (excluded) {
+    exposureStatus = null;
+    isReappearance = false;
+  }
 
   const evidenceId = uuid();
   await db.insert(contentEvidence).values({
@@ -401,14 +434,27 @@ async function recordSimulatedCheck(
   };
 }
 
-export async function runDueVerifications() {
-  const nowDate = new Date();
+/**
+ * Run due scheduled verifications, oldest first. Stops claiming after `budgetMs` or
+ * `maxRules` (the rest stay due for the next tick). A rule whose exposure the user ruled out
+ * is disabled instead of checked. A check that fails is retried after
+ * VERIFICATION_ERROR_RETRY_DAYS instead of a full cadence; its result carries `error`.
+ */
+export async function runDueVerifications(
+  options: { now?: Date; budgetMs?: number; maxRules?: number } = {},
+) {
+  const nowDate = options.now ?? new Date();
   const now = nowDate.toISOString();
+  const budgetMs = options.budgetMs ?? VERIFICATION_BUDGET_MS;
+  const maxRules = options.maxRules ?? VERIFICATION_MAX_RULES;
+  const started = Date.now();
   const dueRules = await db.query.monitoringRules.findMany({
     where: and(
       eq(monitoringRules.enabled, true),
       lte(monitoringRules.nextCheckAt, now),
     ),
+    orderBy: [asc(monitoringRules.nextCheckAt)],
+    limit: maxRules,
   });
 
   const results: Array<{
@@ -421,10 +467,12 @@ export async function runDueVerifications() {
   }> = [];
 
   for (const rule of dueRules) {
+    if (Date.now() - started > budgetMs) break;
     // Atomic claim: advance nextCheckAt only if nobody else did first.
+    const nextAt = nextCheckDate(rule.schedule, nowDate);
     const claim = db
       .update(monitoringRules)
-      .set({ nextCheckAt: nextCheckDate(rule.schedule, nowDate) })
+      .set({ nextCheckAt: nextAt })
       .where(
         and(
           eq(monitoringRules.id, rule.id),
@@ -452,6 +500,12 @@ export async function runDueVerifications() {
       });
       if (!exposure) {
         results.push({ ruleId: rule.id, skipped: "exposure_missing" });
+        continue;
+      }
+      if (EXCLUDED_EXPOSURE_STATUSES.has(exposure.status)) {
+        // Ruled out by the user: stop monitoring it for good.
+        disableMonitoringRules(rule.exposureId);
+        results.push({ ruleId: rule.id, skipped: "exposure_excluded" });
         continue;
       }
 
@@ -485,11 +539,35 @@ export async function runDueVerifications() {
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : "SCHEDULED_CHECK_FAILED";
+      // Retry soon rather than a full cadence later (only if nobody moved the rule since).
+      db.update(monitoringRules)
+        .set({
+          nextCheckAt: new Date(
+            nowDate.getTime() + VERIFICATION_ERROR_RETRY_DAYS * DAY_MS,
+          ).toISOString(),
+        })
+        .where(and(eq(monitoringRules.id, rule.id), eq(monitoringRules.nextCheckAt, nextAt)))
+        .run();
       results.push({ ruleId: rule.id, error: message });
     }
   }
 
   return results;
+}
+
+/**
+ * Disable every enabled monitoring rule for an exposure (it was ruled out by the user).
+ * Pass the caller's transaction to do it atomically with the status change.
+ */
+export function disableMonitoringRules(
+  exposureId: string,
+  tx: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0] = db,
+): number {
+  return tx
+    .update(monitoringRules)
+    .set({ enabled: false })
+    .where(and(eq(monitoringRules.exposureId, exposureId), eq(monitoringRules.enabled, true)))
+    .run().changes;
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;

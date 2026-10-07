@@ -5,7 +5,7 @@ export default function BillingPage() {
   return (
     <Suspense
       fallback={
-        <div className="ct-ambient flex min-h-screen items-center justify-center text-sm text-slate-500">
+        <div className="ct-ambient flex min-h-screen items-center justify-center text-sm text-[var(--muted)]">
           Loading billing…
         </div>
       }

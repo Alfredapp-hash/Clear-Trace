@@ -11,6 +11,7 @@ import {
 } from "@/lib/db/schema";
 import { getScheduledDiscoveryStatus } from "./runner";
 import { parseDbTime } from "./time";
+import { OPEN_OPT_OUT_STATUSES } from "@/lib/opt-out/statuses";
 
 export interface ProtectionScheduleView {
   kind: ProtectionScheduleKind;
@@ -34,7 +35,6 @@ export interface ProtectionSummary {
   scheduledDiscovery: { enabled: boolean; capRemaining: number };
 }
 
-const OPEN_STATUSES = new Set(["pending_approval", "approved", "submitted"]);
 const KIND_ORDER: Record<ProtectionScheduleKind, number> = {
   broker_sweep: 0,
   discovery: 1,
@@ -90,7 +90,7 @@ export async function getProtectionSummary(
     nextScanAt: scanTimes[0] ?? null,
     relistsFound: dispatches.filter((d) => d.relistedFromId).length,
     resubmissionsDue: dispatches.filter(
-      (d) => OPEN_STATUSES.has(d.status) && (d.resubmitCount > 0 || !!d.relistedFromId),
+      (d) => OPEN_OPT_OUT_STATUSES.has(d.status) && (d.resubmitCount > 0 || !!d.relistedFromId),
     ).length,
     scheduledDiscovery: { enabled: discovery.enabled, capRemaining: discovery.capRemaining },
   };

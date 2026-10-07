@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import Stripe from "stripe";
 import { v4 as uuid } from "uuid";
 import { eq } from "drizzle-orm";
@@ -6,6 +6,7 @@ import { ensureDatabase } from "@/lib/db/init";
 import { db } from "@/lib/db";
 import { organizations } from "@/lib/db/schema";
 import { shouldIgnoreSubscriptionEvent } from "@/lib/billing/service";
+import { getStripe } from "@/lib/billing/stripe";
 import { POST as webhookPost } from "./billing/webhook/route";
 
 const WEBHOOK_SECRET = "whsec_vitest_billing_secret";
@@ -47,7 +48,20 @@ function signedRequest(body: string, signature?: string): Request {
   });
 }
 
+/**
+ * What `stripe.subscriptions.retrieve` returns (the webhook re-reads every subscription
+ * before writing). `subscription()` registers its object here, so by default Stripe agrees
+ * with the event; a test overrides an entry to simulate a stale / out-of-order event.
+ */
+const stripeSubscriptions = new Map<string, Record<string, unknown>>();
+
 function subscription(id: string, status: string, orgId: string, customer: string) {
+  const sub = subscriptionObject(id, status, orgId, customer);
+  stripeSubscriptions.set(id, sub);
+  return sub;
+}
+
+function subscriptionObject(id: string, status: string, orgId: string, customer: string) {
   const periodEnd = Math.floor(Date.now() / 1000) + 30 * 24 * 60 * 60;
   return {
     id,
@@ -88,6 +102,13 @@ describe("Stripe webhook (billing integration)", () => {
 
   beforeEach(() => {
     Object.assign(process.env, ENV);
+    stripeSubscriptions.clear();
+    vi.restoreAllMocks();
+    vi.spyOn(getStripe().subscriptions, "retrieve").mockImplementation((async (id: string) => {
+      const sub = stripeSubscriptions.get(id);
+      if (!sub) throw new Error(`No such subscription: ${id}`);
+      return sub;
+    }) as never);
   });
 
   afterAll(() => {
@@ -151,6 +172,7 @@ describe("Stripe webhook (billing integration)", () => {
 
   it("a paid checkout grants pro", async () => {
     const orgId = await createOrg();
+    subscription("sub_paid", "active", orgId, "cus_paid");
     const body = eventBody("checkout.session.completed", {
       id: "cs_paid",
       object: "checkout.session",
@@ -257,6 +279,85 @@ describe("Stripe webhook (billing integration)", () => {
     expect(org.plan).toBe("free");
     expect(org.subscriptionStatus).toBe("incomplete");
     expect(org.stripeSubscriptionId).toBe("sub_new");
+  });
+});
+
+describe("Stripe webhook — out-of-order events (re-read from Stripe)", () => {
+  const saved: Record<string, string | undefined> = {};
+  beforeAll(() => {
+    ensureDatabase();
+    for (const k of Object.keys(ENV)) saved[k] = process.env[k];
+  });
+  beforeEach(() => {
+    Object.assign(process.env, ENV);
+    stripeSubscriptions.clear();
+    vi.restoreAllMocks();
+    vi.spyOn(getStripe().subscriptions, "retrieve").mockImplementation((async (id: string) => {
+      const sub = stripeSubscriptions.get(id);
+      if (!sub) throw new Error(`No such subscription: ${id}`);
+      return sub;
+    }) as never);
+  });
+  afterAll(() => {
+    vi.restoreAllMocks();
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+
+  it("a stale 'active' update delivered after the cancellation does not re-grant pro", async () => {
+    const orgId = await createOrg({
+      plan: "free",
+      subscriptionStatus: "canceled",
+      stripeCustomerId: "cus_stale",
+      stripeSubscriptionId: "sub_stale",
+    });
+    // Stripe's current truth: canceled. The (late) event still says active.
+    subscription("sub_stale", "canceled", orgId, "cus_stale");
+    const body = eventBody(
+      "customer.subscription.updated",
+      subscriptionObject("sub_stale", "active", orgId, "cus_stale"),
+    );
+    expect((await webhookPost(signedRequest(body))).status).toBe(200);
+    const org = await getOrg(orgId);
+    expect(org.plan).toBe("free");
+    expect(org.subscriptionStatus).toBe("canceled");
+  });
+
+  it("a late checkout.session.completed for a since-canceled subscription does not grant pro", async () => {
+    const orgId = await createOrg();
+    subscription("sub_late", "canceled", orgId, "cus_late");
+    const body = eventBody("checkout.session.completed", {
+      id: "cs_late",
+      object: "checkout.session",
+      payment_status: "paid",
+      customer: "cus_late",
+      subscription: "sub_late",
+      metadata: { organizationId: orgId },
+    });
+    expect((await webhookPost(signedRequest(body))).status).toBe(200);
+    const org = await getOrg(orgId);
+    expect(org.plan).toBe("free");
+    expect(org.subscriptionStatus).toBe("canceled");
+  });
+
+  it("returns 503 (so Stripe retries) and changes nothing when Stripe cannot be reached", async () => {
+    const orgId = await createOrg({
+      plan: "pro",
+      subscriptionStatus: "active",
+      stripeCustomerId: "cus_down",
+      stripeSubscriptionId: "sub_down",
+    });
+    // Not registered in stripeSubscriptions → retrieve throws.
+    const body = eventBody(
+      "customer.subscription.deleted",
+      subscriptionObject("sub_down", "canceled", orgId, "cus_down"),
+    );
+    expect((await webhookPost(signedRequest(body))).status).toBe(503);
+    const org = await getOrg(orgId);
+    expect(org.plan).toBe("pro");
+    expect(org.subscriptionStatus).toBe("active");
   });
 });
 

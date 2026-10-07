@@ -34,6 +34,7 @@ import { apiKeys, familyMembers, memberships, organizations, users } from "@/lib
 import { createSession, type SessionPayload } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import SettingsPage from "./page";
+import SettingsLayout from "./layout";
 import SkillsPage from "../skills/page";
 import SecurityPage from "../security/page";
 
@@ -128,7 +129,8 @@ describe("settings page (server render)", () => {
 
   it("renders the real user and workspace names, never 'User' / 'Workspace' fallbacks", async () => {
     mockSessionCookie(seeded.ownerToken);
-    const html = renderToStaticMarkup(await SettingsPage());
+    // The shell (with the names) comes from the segment layout, which wraps the page.
+    const html = renderToStaticMarkup(await SettingsLayout({ children: await SettingsPage() }));
 
     expect(textOfTestId(html, "shell-user-name")).toBe(seeded.ownerName);
     expect(textOfTestId(html, "shell-org-name")).toBe(seeded.orgName);
@@ -257,6 +259,14 @@ describe("settings page (server render)", () => {
     mockSessionCookie(seeded.memberToken);
     const html = renderToStaticMarkup(await SettingsPage());
     expect(html).toContain('<section id="developer"');
+  });
+
+  it("settings layout redirects a request without a valid session to login", async () => {
+    mockSessionCookie(null);
+    await expect(SettingsLayout({ children: null })).rejects.toMatchObject({
+      kind: "redirect",
+      target: "/api/auth/session-expired?from=%2Fsettings",
+    });
   });
 
   it("server-gates /skills and /security for standard members (404)", async () => {

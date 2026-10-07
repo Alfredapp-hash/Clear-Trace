@@ -251,16 +251,30 @@ const DATE_TIME_FMT = new Intl.DateTimeFormat("en-US", {
   timeZone: "UTC",
 });
 
-/** Deterministic (UTC) date so server and client renders match. */
+/**
+ * Parse a stored timestamp. SQLite's datetime('now') default ("2026-10-07 12:00:00") has no
+ * zone and `new Date` would read it as local time, so it is read as UTC like every other
+ * stored value.
+ */
+function parseStoredDate(value: string): Date {
+  const sqlite = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2}(\.\d+)?)?$/.test(value);
+  return new Date(sqlite ? `${value.replace(" ", "T")}Z` : value);
+}
+
+/**
+ * Deterministic (UTC) date, e.g. "Oct 7, 2026", so server and client renders match. The one
+ * date format for the app: use this (or formatDateTime) instead of local helpers.
+ */
 export function formatDate(value: string | null | undefined): string {
   if (!value) return "";
-  const d = new Date(value);
+  const d = parseStoredDate(value);
   return Number.isNaN(d.getTime()) ? value : DATE_FMT.format(d);
 }
 
+/** Date and time in UTC, e.g. "Oct 7, 2026, 12:00 PM UTC". */
 export function formatDateTime(value: string | null | undefined): string {
   if (!value) return "";
-  const d = new Date(value);
+  const d = parseStoredDate(value);
   return Number.isNaN(d.getTime()) ? value : `${DATE_TIME_FMT.format(d)} UTC`;
 }
 
@@ -753,7 +767,8 @@ export function buildCaseProgress(d: CaseProgressData): CaseProgressInput {
     unsentRequests: requests.filter((r) => r.open && r.unsent).length,
     sentRequests: requests.filter((r) => r.sent).length,
     checksRun: d.checks.length,
-    optOutTotal: d.optOutDispatches.length,
+    // A dismissed opt-out was declined by the user: it is neither work left nor work done.
+    optOutTotal: d.optOutDispatches.filter((x) => x.status !== "dismissed").length,
     optOutDone: d.optOutDispatches.filter((x) => x.status === "completed").length,
     deindexTotal: d.deindexRequests.length,
     deindexDone: d.deindexRequests.filter((x) => x.status === "resolved" || x.status === "rejected")

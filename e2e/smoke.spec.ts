@@ -25,6 +25,8 @@ test("register and complete case intake", async ({ page }) => {
   await page.getByRole("button", { name: "Continue" }).click();
   await page.getByRole("checkbox").check();
   await page.getByRole("button", { name: "Continue" }).click();
+  // Intake requires the full name to search for (Sprint 5, B9).
+  await page.getByLabel("Full name", { exact: true }).fill("Jordan Testcase");
   await page.getByRole("button", { name: "Complete intake" }).click();
 
   await expect(page).toHaveURL(/\/cases\/[a-f0-9-]+/);

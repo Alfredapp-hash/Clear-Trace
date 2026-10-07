@@ -16,6 +16,8 @@ describe("ResidenceState", () => {
     expect(html).toContain("Not set");
     expect(html).toContain('<option value="CA">California</option>');
     expect(html).toContain("Detect from case details");
+    // The DROP card links here (#residence-state).
+    expect(html).toContain('id="residence-state"');
   });
 
   it("a user who chose another state can switch back to California (CA is offered)", () => {

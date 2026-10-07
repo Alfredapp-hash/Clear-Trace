@@ -280,6 +280,16 @@ describe("unfinished work is never hidden by a status change", () => {
   };
   const data = (over: Partial<Data>): Data => ({ ...base, ...over });
 
+  it("a dismissed opt-out is not counted, so the broker phase can still finish", () => {
+    const p = buildCaseProgress(
+      data({
+        optOutDispatches: [{ status: "completed" }, { status: "dismissed" }],
+      } as Partial<Data>),
+    );
+    expect(p.optOutTotal).toBe(1);
+    expect(p.optOutDone).toBe(1);
+  });
+
   it("confirming 1 of 6 matches keeps the other 5 in front of the user", () => {
     const p = buildCaseProgress(
       data({

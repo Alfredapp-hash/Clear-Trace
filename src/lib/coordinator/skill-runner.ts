@@ -12,6 +12,7 @@ import { and, desc, eq, ne, sql } from "drizzle-orm";
 import { getRecommendedSkill } from "./hermes";
 import { COMPLETED_STATUS_SKILL, STATUS_INDEX } from "@/lib/skills/catalog";
 import { advanceCaseStatus, isBlockedCaseStatus } from "@/lib/cases/status-transitions";
+import { EXCLUDED_EXPOSURE_STATUSES } from "@/lib/cases/derive-status";
 import {
   listFollowUpEligibleRemediations,
   type FollowUpEligibility,
@@ -83,7 +84,7 @@ async function caseExposures(caseId: string) {
   const exposures = await db.query.verifiedExposures.findMany({
     where: eq(verifiedExposures.caseId, caseId),
   });
-  return exposures.filter((e) => !["rejected", "dismissed", "false_positive"].includes(e.status));
+  return exposures.filter((e) => !EXCLUDED_EXPOSURE_STATUSES.has(e.status));
 }
 
 /**

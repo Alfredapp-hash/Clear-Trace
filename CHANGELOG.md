@@ -2,6 +2,50 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.5.0] — Unreleased
+
+Sprint 5: audit & upgrades. A four-lane audit (logic, UI/UX, security, platform) and its fixes.
+See [docs/sprint/SPRINT-5-AUDIT.md](./docs/sprint/SPRINT-5-AUDIT.md) for every finding with file references.
+
+### Platform & dependencies
+- **Node 24 LTS** everywhere: Docker base image (pinned by digest), CI, `engines`, `.nvmrc`, README
+- **Next 16.4.0, React / react-dom 19.3.0** (moved together), zod 4.6.5, jose 6.2.12, drizzle-orm 0.45.3, stripe 22.6.2, jszip 3.10.2 and dev-tool patch releases; stub `@types/uuid` / `@types/bcryptjs` removed; `@types/node` ^24
+- **Advisories** — `source-map-js` (high, GHSA-68fv-2mgg-jv7q) fixed via override; `gray-matter` (unmaintained, moderate js-yaml/sprintf-js advisories) replaced by a strict built-in front-matter parser. `npm audit --omit=dev`: 0 vulnerabilities
+- **CI** — e2e job runs against the standalone production build (`E2E_SERVER=prod`, `npm run test:e2e:prod`); `.next/cache` is cached; Dependabot groups react packages
+- **SQLite** — `PRAGMA optimize` at open and after each worker tick; schema v3 adds `verification_checks(exposure_id, checked_at)`
+
+### Protection logic
+- A scheduled check never revives an exposure the user rejected; rejecting disables its monitoring rules
+- Opt-outs can be **dismissed** (`POST /api/cases/[id]/opt-out-dispatch {"action":"dismiss"}`), a terminal status that unblocks relist checks and re-submissions and closes the broker SLA deadline; the user can re-queue a dismissed broker, the monthly sweep does not
+- A listing still live 30+ days after its opt-out was completed is flagged "opt-out not honored" and re-queued; reappearances stay reappearances
+- The monthly broker sweep queues pending-approval opt-outs for newly seen brokers (never auto-approved, never CPPA-registry brokers)
+- Discovery cap counts only sent queries; skipped discovery retries next day / next month; verifications are budgeted, retry failed checks after a day and mark the tick partial
+- Legacy broker-id aliases are canonicalized (no duplicate schedules or early re-submissions); follow-ups no longer add removal-verification deadlines; DROP filings are idempotent and statutory deadlines are reported separately from org SLAs
+- Batch items are claimed atomically (no duplicate Gmail drafts); monthly re-check dates are computed in UTC and clamp to month end
+
+### Security & privacy
+- **Login** — only failed attempts count, with per-account exponential backoff; no shared "unknown IP" bucket, so nobody can lock out every login when `TRUST_PROXY` is unset; `Retry-After` on 429
+- Login/register require same-origin JSON even without a session cookie (login CSRF)
+- Audit summaries record the site host, not the full people-search URL; webhooks must be `https://` (legacy `http://` webhooks are no longer delivered)
+- Stripe webhooks re-read the subscription before writing (out-of-order events)
+- MCP server validates and encodes case ids; progress report is owner-scoped; API keys stop working when their creator leaves the org; unencrypted pre-migrate snapshots warn in production
+- New route tests (api-keys, webhooks, authorization, export, billing); `src/app/api` coverage gate raised to 66/51/72/69
+
+### Case page
+- Sending from your email account and "Mark as sent" now confirm first, showing recipient, subject and any "check before sending" items; one primary action per draft
+- Ongoing protection and California DROP panels have headings; one residence-state control; DROP badge reads "Window ended — check your listings" instead of implying a violation
+- Sidebar progress uses the same phases as the main workflow (a paused case no longer shows 0%)
+- Confirm dialogs return focus; toasts pause on hover/focus; long lists collapse with "Show all"; one date format
+- `GET /api/cases/[id]` returns the 50 most recent timeline events and agent runs with cursors (`timelineCursor`, `runsCursor`); the timeline is described as a hash-linked log, not "tamper-evident"
+
+### App shell, dashboard & intake
+- Cases and settings share a layout with the navigation; loading skeletons and error pages keep the nav; a foreign case still returns a real 404; a revoked session cookie lands on /login instead of a redirect loop
+- Case delete and archive, key revoke, webhook delete and member removal use in-page confirmations with consequence copy; delete requires typing the case title
+- Error pages no longer claim "nothing was sent or changed"
+- Dashboard: "Needs your attention" first, plain 3-step onboarding, no connector jargon, activity limited to your own cases; loads cases once with grouped queries
+- Intake: required full name, removable details, announced errors and focus management, plainer labels; "Ruthless mode" is presented as "Broader search" with scope-only copy
+- Dark `color-scheme` for native controls; WCAG AA contrast for muted text
+
 ## [1.4.0] — Unreleased
 
 Sprint 4: ongoing protection & broker coverage. ClearTrace keeps watching after the first

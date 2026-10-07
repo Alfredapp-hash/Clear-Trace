@@ -129,6 +129,7 @@ export function CaseWorkflow(props: CaseWorkflowProps) {
         onBrokerSweep={a.brokerSweep}
         onQueue={a.queueOptOuts}
         onDispatchAction={a.optOutAction}
+        onDismiss={a.dismissOptOut}
         onApproveAll={a.approveAll}
         onMarkNotListed={a.markNotListed}
         onClearCheck={a.clearCheck}
@@ -237,7 +238,12 @@ export function CaseWorkflow(props: CaseWorkflowProps) {
         Results and errors: fixed at the bottom of the viewport and announced to screen readers.
         Outside the Card: its backdrop-filter would make it the containing block of a fixed child.
       */}
-      <ToastRegion toasts={a.toasts} onDismiss={a.dismissToast} />
+      <ToastRegion
+        toasts={a.toasts}
+        onDismiss={a.dismissToast}
+        onHold={a.holdToast}
+        onRelease={a.releaseToast}
+      />
     </>
   );
 }

@@ -120,7 +120,7 @@ export function Input({
 }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={`w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-slate-100 shadow-inner shadow-black/20 placeholder:text-slate-500 transition focus:border-teal-500/50 focus:bg-black/40 focus:ring-2 focus:ring-teal-500/60 ${className}`}
+      className={`w-full rounded-xl border border-white/10 bg-black/30 px-3.5 py-2.5 text-sm text-slate-100 shadow-inner shadow-black/20 placeholder:text-[var(--muted)] transition focus:border-teal-500/50 focus:bg-black/40 focus:ring-2 focus:ring-teal-500/60 ${className}`}
       {...props}
     />
   );
@@ -393,10 +393,33 @@ const TOAST_TONES: Record<ToastTone, string> = {
   error: "border-rose-500/40 bg-rose-950/95 text-rose-100",
 };
 
-function ToastItem({ toast, onDismiss }: { toast: ToastView; onDismiss: (id: number) => void }) {
+/** Pause / resume a toast's auto-dismiss timer while the pointer or focus is on it. */
+export interface ToastHoldHandlers {
+  onHold?: (id: number) => void;
+  onRelease?: (id: number) => void;
+}
+
+function ToastItem({
+  toast,
+  onDismiss,
+  onHold,
+  onRelease,
+}: { toast: ToastView; onDismiss: (id: number) => void } & ToastHoldHandlers) {
+  // Resume only when neither the pointer nor focus is still on the toast.
+  const release = (el: HTMLElement, focusLeaving: boolean) => {
+    const focused = !focusLeaving && el.contains(document.activeElement);
+    const hovered = focusLeaving && el.matches(":hover");
+    if (!focused && !hovered) onRelease?.(toast.id);
+  };
   return (
     <div
       data-toast-tone={toast.tone}
+      onMouseEnter={() => onHold?.(toast.id)}
+      onMouseLeave={(e) => release(e.currentTarget, false)}
+      onFocus={() => onHold?.(toast.id)}
+      onBlur={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) release(e.currentTarget, true);
+      }}
       className={`pointer-events-auto flex w-full max-w-md items-start gap-3 rounded-xl border px-4 py-3 text-sm shadow-[0_12px_40px_-12px_rgba(0,0,0,0.7)] backdrop-blur ${TOAST_TONES[toast.tone]}`}
     >
       <p className="min-w-0 flex-1 [overflow-wrap:anywhere]">
@@ -440,10 +463,12 @@ function ToastItem({ toast, onDismiss }: { toast: ToastView; onDismiss: (id: num
 export function ToastRegion({
   toasts,
   onDismiss,
+  onHold,
+  onRelease,
 }: {
   toasts: ReadonlyArray<ToastView>;
   onDismiss: (id: number) => void;
-}) {
+} & ToastHoldHandlers) {
   const errors = toasts.filter((t) => t.tone === "error");
   const others = toasts.filter((t) => t.tone !== "error");
   return (
@@ -453,26 +478,39 @@ export function ToastRegion({
     >
       <div role="status" aria-live="polite" className="flex w-full flex-col items-center gap-2 sm:items-end">
         {others.map((t) => (
-          <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
+          <ToastItem key={t.id} toast={t} onDismiss={onDismiss} onHold={onHold} onRelease={onRelease} />
         ))}
       </div>
       <div role="alert" aria-live="assertive" className="flex w-full flex-col items-center gap-2 sm:items-end">
         {errors.map((t) => (
-          <ToastItem key={t.id} toast={t} onDismiss={onDismiss} />
+          <ToastItem key={t.id} toast={t} onDismiss={onDismiss} onHold={onHold} onRelease={onRelease} />
         ))}
       </div>
     </div>
   );
 }
 
-/** Opens a <dialog> modally once it mounts (a ref callback, so no hooks are needed). */
-function openModal(el: HTMLDialogElement | null) {
-  if (el && !el.open && typeof el.showModal === "function") el.showModal();
+/**
+ * Opens a <dialog> modally once it mounts and, when it unmounts, returns focus to whatever
+ * had it before (the button that opened it). A ref callback with a React 19 cleanup, so
+ * ui.tsx stays hook-free for server pages. Exported for tests.
+ */
+export function openModal(el: HTMLDialogElement | null): (() => void) | undefined {
+  if (!el) return undefined;
+  const doc = el.ownerDocument;
+  const active = doc?.activeElement;
+  const trigger = active && active !== doc.body && !el.contains(active) ? (active as HTMLElement) : null;
+  if (!el.open && typeof el.showModal === "function") el.showModal();
+  return () => {
+    if (el.open && typeof el.close === "function") el.close();
+    if (trigger?.isConnected && typeof trigger.focus === "function") trigger.focus();
+  };
 }
 
 /**
- * Accessible confirmation dialog (native <dialog>: focus is trapped, Escape cancels).
- * Replaces window.confirm(). Render it with `open` from the caller's state.
+ * Accessible confirmation dialog (native <dialog>: focus is trapped, Escape cancels, and
+ * focus goes back to the opening control on close). Replaces window.confirm(). Render it
+ * with `open` from the caller's state.
  */
 export function ConfirmDialog({
   open,
@@ -482,6 +520,7 @@ export function ConfirmDialog({
   confirmLabel,
   cancelLabel = "Cancel",
   tone = "danger",
+  confirmDisabled = false,
   onConfirm,
   onCancel,
 }: {
@@ -492,6 +531,8 @@ export function ConfirmDialog({
   confirmLabel: string;
   cancelLabel?: string;
   tone?: "danger" | "primary";
+  /** Keep the confirm button disabled (say why in `message`). */
+  confirmDisabled?: boolean;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
@@ -518,7 +559,7 @@ export function ConfirmDialog({
         <Button variant="ghost" onClick={onCancel} autoFocus>
           {cancelLabel}
         </Button>
-        <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm}>
+        <Button variant={tone === "danger" ? "danger" : "primary"} onClick={onConfirm} disabled={confirmDisabled}>
           {confirmLabel}
         </Button>
       </div>

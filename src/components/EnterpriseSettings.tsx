@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Button, Card, Input, Label, SectionTitle } from "@/components/ui";
+import { Button, Card, ConfirmDialog, Input, Label, SectionTitle } from "@/components/ui";
 import { callApi } from "@/lib/ui/call-api";
 
 export interface ApiKeyRow {
@@ -50,6 +50,8 @@ export function EnterpriseSettings({
   const [whSecret, setWhSecret] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState("");
+  const [pendingRevoke, setPendingRevoke] = useState<ApiKeyRow | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<WebhookRow | null>(null);
 
   function applyLoaded({ keysRes, whRes }: Awaited<ReturnType<typeof loadAll>>) {
     if (keysRes.ok) setKeys(keysRes.data.keys ?? []);
@@ -103,7 +105,6 @@ export function EnterpriseSettings({
   }
 
   async function revokeKey(id: string) {
-    if (!confirm("Revoke this API key? Integrations using it will stop working.")) return;
     await mutate(`revoke-${id}`, `/api/settings/api-keys?id=${encodeURIComponent(id)}`, "DELETE", undefined, "Failed to revoke key");
   }
 
@@ -127,7 +128,6 @@ export function EnterpriseSettings({
   }
 
   async function deleteWebhook(id: string) {
-    if (!confirm("Delete this webhook?")) return;
     await mutate(`delete-${id}`, `/api/settings/webhooks?id=${encodeURIComponent(id)}`, "DELETE", undefined, "Failed to delete webhook");
   }
 
@@ -135,7 +135,7 @@ export function EnterpriseSettings({
     <div className="mt-8 space-y-6">
       <Card variant="elevated">
         <SectionTitle>Enterprise API keys</SectionTitle>
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-2 text-sm text-[var(--muted)]">
           Programmatic access for cases, broker sweeps, and SLA reads. Use{" "}
           <code className="text-slate-400">Authorization: Bearer ct_live_…</code>
         </p>
@@ -170,20 +170,20 @@ export function EnterpriseSettings({
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={() => revokeKey(key.id)}
+                onClick={() => setPendingRevoke(key)}
                 disabled={!!loading}
               >
                 Revoke
               </Button>
             </li>
           ))}
-          {!keys.length && <li className="text-slate-500">No API keys yet.</li>}
+          {!keys.length && <li className="text-[var(--muted)]">No API keys yet.</li>}
         </ul>
       </Card>
 
       <Card variant="elevated">
         <SectionTitle>Outbound webhooks</SectionTitle>
-        <p className="mt-2 text-sm text-slate-500">
+        <p className="mt-2 text-sm text-[var(--muted)]">
           Signed HMAC deliveries for case events (separate from the generic_webhook connector).
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-3">
@@ -234,7 +234,7 @@ export function EnterpriseSettings({
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => deleteWebhook(wh.id)}
+                  onClick={() => setPendingDelete(wh)}
                   disabled={!!loading}
                 >
                   Delete
@@ -242,7 +242,7 @@ export function EnterpriseSettings({
               </div>
             </li>
           ))}
-          {!webhooks.length && <li className="text-slate-500">No webhooks configured.</li>}
+          {!webhooks.length && <li className="text-[var(--muted)]">No webhooks configured.</li>}
         </ul>
       </Card>
 
@@ -251,6 +251,45 @@ export function EnterpriseSettings({
           {error}
         </p>
       )}
+
+      <ConfirmDialog
+        open={pendingRevoke !== null}
+        id="confirm-revoke-key"
+        title="Revoke this API key?"
+        message={
+          <p>
+            Anything using <strong>{pendingRevoke?.name}</strong> (
+            <code>{pendingRevoke?.keyPrefix}…</code>) will stop working right away. This
+            cannot be undone — you would need to create a new key.
+          </p>
+        }
+        confirmLabel="Revoke key"
+        onConfirm={() => {
+          const key = pendingRevoke;
+          setPendingRevoke(null);
+          if (key) void revokeKey(key.id);
+        }}
+        onCancel={() => setPendingRevoke(null)}
+      />
+
+      <ConfirmDialog
+        open={pendingDelete !== null}
+        id="confirm-delete-webhook"
+        title="Delete this webhook?"
+        message={
+          <p>
+            <strong>{pendingDelete?.name}</strong> will stop receiving case events. To pause
+            deliveries instead, use Disable. Deleting cannot be undone.
+          </p>
+        }
+        confirmLabel="Delete webhook"
+        onConfirm={() => {
+          const wh = pendingDelete;
+          setPendingDelete(null);
+          if (wh) void deleteWebhook(wh.id);
+        }}
+        onCancel={() => setPendingDelete(null)}
+      />
     </div>
   );
 }

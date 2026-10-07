@@ -21,7 +21,11 @@ import {
 import { BROKER_UNIVERSE } from "@/lib/brokers/universe";
 import type { SessionPayload } from "@/lib/auth/session";
 import { seedWorkflowCase, seedWorkflowUser } from "@/lib/verification/test-fixtures";
-import { listOptOutDispatches, queueOptOutDispatchesFromSweep } from "./dispatch";
+import {
+  dismissOptOutDispatch,
+  listOptOutDispatches,
+  queueOptOutDispatchesFromSweep,
+} from "./dispatch";
 import { runBrokerSweep } from "@/lib/enterprise/broker-sweep";
 import { reviewCandidate } from "@/lib/discovery/service";
 import { verifiedExposures } from "@/lib/db/schema";
@@ -110,6 +114,29 @@ describe("queue opt-outs from a sweep", () => {
     const res = await queueOptOutDispatchesFromSweep(session, caseId);
     expect(res.created).toBe(3);
     expect((await dispatchesOf(caseId)).map((d) => d.brokerId).sort()).toEqual([...found].sort());
+  });
+
+  it("a dismissed broker can be re-queued by the user, but not by the automatic sweep path", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    await seedSweep(session, caseId, ["spokeo", "whitepages"], []);
+    expect((await queueOptOutDispatchesFromSweep(session, caseId)).created).toBe(2);
+    const spokeo = (await dispatchesOf(caseId)).find((d) => d.brokerId === "spokeo")!;
+    await dismissOptOutDispatch(session, caseId, spokeo.id);
+
+    // Automatic (monthly sweep): the user said no, so the dismissed broker stays skipped.
+    const auto = await queueOptOutDispatchesFromSweep(session, caseId, { skipDismissed: true });
+    expect(auto).toMatchObject({ created: 0, skippedExisting: 2 });
+
+    // The user queues again: the dismissed broker comes back as pending_approval; the open
+    // whitepages dispatch is never duplicated.
+    const manual = await queueOptOutDispatchesFromSweep(session, caseId);
+    expect(manual).toMatchObject({ created: 1, skippedExisting: 1 });
+    const rows = await dispatchesOf(caseId);
+    expect(rows.filter((d) => d.brokerId === "spokeo").map((d) => d.status).sort()).toEqual([
+      "dismissed",
+      "pending_approval",
+    ]);
+    expect(rows.filter((d) => d.brokerId === "whitepages")).toHaveLength(1);
   });
 
   it("includeUnchecked queues to_check rows too, but never registry brokers", async () => {

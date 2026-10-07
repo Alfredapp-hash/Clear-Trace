@@ -1,7 +1,6 @@
 import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { redirect } from "next/navigation";
-import { AppShell } from "@/components/AppShell";
 import { AgentBuilderKit } from "@/components/AgentBuilderKit";
 import { AgentSetupGuide } from "@/components/AgentSetupGuide";
 import { ConnectorSettings, type ConnectorSettingsData } from "@/components/ConnectorSettings";
@@ -117,7 +116,7 @@ export default async function SettingsPage() {
   const sections = showDeveloper ? [...SECTIONS, DEVELOPER_SECTION] : [...SECTIONS];
 
   return (
-    <AppShell userName={session.name} orgName={session.organizationName}>
+    <>
       <PageHeader
         eyebrow="Configuration"
         title="Settings"
@@ -246,6 +245,6 @@ export default async function SettingsPage() {
           </section>
         )}
       </div>
-    </AppShell>
+    </>
   );
 }

@@ -584,6 +584,21 @@ describe("pause / archive / resume / reopen", () => {
     await expect(reopenCase(done.session, done.caseId, "x")).resolves.toEqual({ status: "reopened" });
   });
 
+  it("two concurrent reopens: one wins, the other is refused (one audit event)", async () => {
+    const { session, caseId } = await caseIn("removed_confirmed");
+    const results = await Promise.allSettled([
+      reopenCase(session, caseId, "x"),
+      reopenCase(session, caseId, "y"),
+    ]);
+    expect(results.filter((r) => r.status === "fulfilled")).toHaveLength(1);
+    const rejected = results.find((r) => r.status === "rejected") as PromiseRejectedResult;
+    expect(String(rejected.reason)).toMatch(/CONFLICT|INVALID_TRANSITION/);
+    const events = sqlite
+      .prepare("SELECT COUNT(*) AS n FROM audit_events WHERE case_id = ? AND event_type = 'case_reopened'")
+      .get(caseId) as { n: number };
+    expect(events.n).toBe(1);
+  });
+
   it("purge still sees an archived case after the marker is stored", async () => {
     const { session, caseId } = await caseIn("sent");
     await archiveCase(session, caseId);

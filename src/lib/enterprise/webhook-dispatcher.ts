@@ -70,6 +70,8 @@ async function deliverWebhook(
     ),
   });
   if (!webhook) return false;
+  // Webhooks saved before v1.5 may still be http://; never send signed case events in clear.
+  if (!/^https:\/\//i.test(webhook.url)) return false;
 
   const secret = await getWebhookSigningSecret(webhookId);
   if (!secret) return false;

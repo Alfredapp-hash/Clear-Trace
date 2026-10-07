@@ -14,10 +14,10 @@ vi.mock("@/lib/enterprise/webhook-dispatcher", () => ({ dispatchEnterpriseWebhoo
 import { v4 as uuid } from "uuid";
 import { db, sqlite } from "@/lib/db";
 import { ensureDatabase } from "@/lib/db/init";
-import { slaDeadlines } from "@/lib/db/schema";
+import { memberships, slaDeadlines, users } from "@/lib/db/schema";
 import { logAuditEvent } from "@/lib/audit/logger";
 import { seedTestCase, seedTestUser } from "@/lib/test/api-helpers";
-import { buildProgressReportForOrg } from "./progress-report";
+import { buildProgressReport, buildProgressReportForOrg } from "./progress-report";
 
 describe("progress report", () => {
   beforeAll(() => ensureDatabase());
@@ -87,5 +87,61 @@ describe("progress report", () => {
     expect(report.summary.overdueSlas).toBe(0);
     expect(report.summary.pendingSlas).toBe(0);
     expect(report.markdown).toContain("| Missed SLAs | 0 |");
+  });
+
+  it("buildProgressReport(session) covers only the caller's own cases, SLAs and activity", async () => {
+    const owner = await seedTestUser();
+    const otherUserId = uuid();
+    await db.insert(users).values({
+      id: otherUserId,
+      email: `progress-other-${otherUserId.slice(0, 8)}@test.local`,
+      name: "Other Member",
+      passwordHash: "x",
+      role: "user",
+    });
+    await db.insert(memberships).values({
+      id: uuid(),
+      userId: otherUserId,
+      organizationId: owner.orgId,
+      role: "user",
+    });
+    const mine = await seedTestCase(owner);
+    const theirs = await seedTestCase({ ...owner, userId: otherUserId });
+
+    const past = new Date(Date.now() - 86_400_000).toISOString();
+    await db.insert(slaDeadlines).values({
+      id: uuid(),
+      organizationId: owner.orgId,
+      caseId: theirs.caseId,
+      deadlineType: "response",
+      anchorAt: past,
+      dueAt: past,
+      status: "missed",
+    });
+    await logAuditEvent({
+      caseId: theirs.caseId,
+      organizationId: owner.orgId,
+      userId: otherUserId,
+      eventType: "case_paused",
+      summary: "Case paused",
+    });
+    await logAuditEvent({
+      caseId: mine.caseId,
+      organizationId: owner.orgId,
+      userId: owner.userId,
+      eventType: "case_resumed",
+      summary: "Case resumed",
+    });
+
+    const report = await buildProgressReport(owner.session);
+    expect(report.summary.totalCases).toBe(1);
+    expect(report.summary.overdueSlas).toBe(0);
+    expect(report.recentActivity.map((a) => a.caseId)).not.toContain(theirs.caseId);
+    expect(report.recentActivity.map((a) => a.caseId)).toContain(mine.caseId);
+
+    // The org-wide variant (weekly digest to an org recipient) still sees both.
+    const orgWide = await buildProgressReportForOrg(owner.orgId, "Org");
+    expect(orgWide.summary.totalCases).toBe(2);
+    expect(orgWide.summary.overdueSlas).toBe(1);
   });
 });

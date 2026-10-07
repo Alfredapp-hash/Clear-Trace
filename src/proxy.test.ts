@@ -270,4 +270,53 @@ describe("proxy", () => {
       expect(isPassThrough(register)).toBe(true);
     });
   });
+
+  describe("login CSRF guard on credential endpoints (no session cookie)", () => {
+    const creds = JSON.stringify({ email: "a@b.test", password: "x" });
+
+    it("blocks cross-site browser POSTs to login and register", async () => {
+      for (const path of ["/api/auth/login", "/api/auth/register"]) {
+        const bySite = await proxy(
+          make(path, { method: "POST", body: creds, headers: { ...JSON_BODY, "sec-fetch-site": "cross-site" } }),
+        );
+        expect(bySite.status, path).toBe(403);
+        const byOrigin = await proxy(
+          make(path, { method: "POST", body: creds, headers: { ...JSON_BODY, origin: "https://evil.example.org" } }),
+        );
+        expect(byOrigin.status, path).toBe(403);
+      }
+    });
+
+    it("refuses non-JSON bodies (text/plain, form posts) with 415", async () => {
+      for (const contentType of ["text/plain", "application/x-www-form-urlencoded", "multipart/form-data; boundary=x"]) {
+        const res = await proxy(
+          make("/api/auth/login", {
+            method: "POST",
+            body: creds,
+            headers: { "content-type": contentType, "sec-fetch-site": "same-origin" },
+          }),
+        );
+        expect(res.status, contentType).toBe(415);
+      }
+      // Not even from a non-browser client: the route only accepts JSON.
+      const curl = await proxy(make("/api/auth/login", { method: "POST", body: creds }));
+      expect(curl.status).toBe(415);
+    });
+
+    it("lets the app's own same-origin JSON sign-in and scripted (header-less) JSON calls through", async () => {
+      const page = await proxy(
+        make("/api/auth/login", { method: "POST", body: creds, headers: { ...JSON_BODY, "sec-fetch-site": "same-origin" } }),
+      );
+      expect(isPassThrough(page)).toBe(true);
+      const script = await proxy(make("/api/auth/register", { method: "POST", body: creds, headers: JSON_BODY }));
+      expect(isPassThrough(script)).toBe(true);
+    });
+
+    it("leaves other cookie-less endpoints to their own auth (401, not a CSRF error)", async () => {
+      const res = await proxy(
+        make("/api/cases", { method: "POST", body: "x", headers: { "content-type": "text/plain", "sec-fetch-site": "cross-site" } }),
+      );
+      expect(res.status).toBe(401);
+    });
+  });
 });

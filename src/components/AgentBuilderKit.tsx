@@ -17,6 +17,7 @@ export function AgentBuilderKit() {
   const [platform, setPlatform] = useState<BuilderPlatform>("cursor");
   const [sectionIdx, setSectionIdx] = useState(0);
   const [zipLoading, setZipLoading] = useState(false);
+  const [zipError, setZipError] = useState("");
 
   const kit = useMemo(() => buildAgentBuilderKit(platform), [platform]);
   const activeSection = kit.sections[sectionIdx];
@@ -34,6 +35,7 @@ export function AgentBuilderKit() {
 
   async function downloadZip() {
     setZipLoading(true);
+    setZipError("");
     try {
       const res = await fetch(
         `/api/settings/agent-builder-kit?platform=${platform}&format=zip`,
@@ -50,7 +52,9 @@ export function AgentBuilderKit() {
       a.click();
       setTimeout(() => URL.revokeObjectURL(url), 1000);
     } catch (e) {
-      alert(e instanceof Error ? e.message : "Zip download failed");
+      setZipError(
+        `The kit could not be downloaded${e instanceof Error && e.message ? ` (${e.message})` : ""}. Try again, or use Download markdown.`,
+      );
     } finally {
       setZipLoading(false);
     }
@@ -77,7 +81,7 @@ export function AgentBuilderKit() {
         </SectionTitle>
         <p className="mt-2 text-sm leading-relaxed text-slate-400">
           Replicate what ClearTrace built: full skill pack in-repo, zip export with{" "}
-          <code className="text-slate-500">.cursor/rules</code> + <code className="text-slate-500">AGENTS.md</code>,
+          <code className="text-[var(--muted)]">.cursor/rules</code> + <code className="text-[var(--muted)]">AGENTS.md</code>,
           MCP server stub, scaffold CLI, and GitHub template link.
         </p>
 
@@ -112,7 +116,7 @@ export function AgentBuilderKit() {
               className={`rounded-lg px-3 py-1.5 text-xs font-medium transition ${
                 platform === p.id
                   ? "bg-teal-500/20 text-teal-300"
-                  : "text-slate-500 hover:bg-white/5 hover:text-slate-300"
+                  : "text-[var(--muted)] hover:bg-white/5 hover:text-slate-300"
               }`}
             >
               {p.label}
@@ -122,7 +126,7 @@ export function AgentBuilderKit() {
 
         <p className="mt-4 text-sm text-slate-400">{kit.description}</p>
 
-        <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm text-slate-500">
+        <ol className="mt-4 list-decimal space-y-1.5 pl-5 text-sm text-[var(--muted)]">
           {kit.quickStartSteps.map((step) => (
             <li key={step}>{step}</li>
           ))}
@@ -145,10 +149,18 @@ export function AgentBuilderKit() {
             Download markdown
           </button>
         </div>
+        {zipError && (
+          <p
+            role="alert"
+            className="mt-3 rounded-xl border border-rose-500/20 bg-rose-500/10 px-3 py-2 text-sm text-rose-200"
+          >
+            {zipError}
+          </p>
+        )}
 
         <div className="mt-6 grid gap-4 lg:grid-cols-2">
           <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               Scaffold CLI
             </p>
             <p className="mt-2 text-sm text-slate-400">
@@ -161,11 +173,11 @@ export function AgentBuilderKit() {
             />
           </div>
           <div className="rounded-xl border border-white/[0.06] bg-black/20 p-4">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
               MCP server (Cursor)
             </p>
             <p className="mt-2 text-sm text-slate-400">
-              Add to Cursor MCP settings — create <code className="text-slate-500">ct_live_</code> key
+              Add to Cursor MCP settings — create <code className="text-[var(--muted)]">ct_live_</code> key
               in Enterprise settings first.
             </p>
             <CopyBlock label="mcp.json snippet" content={mcpConfig} previewLines={6} />
@@ -181,7 +193,7 @@ export function AgentBuilderKit() {
               className={`rounded-lg px-2.5 py-1 text-[11px] font-medium transition ${
                 sectionIdx === i
                   ? "bg-white/10 text-white"
-                  : "text-slate-500 hover:bg-white/5 hover:text-slate-300"
+                  : "text-[var(--muted)] hover:bg-white/5 hover:text-slate-300"
               }`}
             >
               {s.label}
@@ -194,7 +206,7 @@ export function AgentBuilderKit() {
             <p className="text-sm text-slate-400">
               {activeSection.description}
               {activeSection.filename && (
-                <span className="ml-2 font-mono text-xs text-slate-600">
+                <span className="ml-2 font-mono text-xs text-[var(--muted)]">
                   → {activeSection.filename}
                 </span>
               )}

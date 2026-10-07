@@ -42,6 +42,7 @@ vi.mock("./webhooks", () => ({
 }));
 
 import { connectorFetch } from "@/lib/connectors/connection/http";
+import { db } from "@/lib/db";
 
 describe("enterprise webhook dispatcher", () => {
   beforeEach(() => {
@@ -66,6 +67,22 @@ describe("enterprise webhook dispatcher", () => {
       organizationId: "org-1",
       eventType: "unknown_event",
       summary: "noop",
+    });
+    expect(connectorFetch).not.toHaveBeenCalled();
+  });
+
+  it("never delivers to a legacy http:// webhook", async () => {
+    vi.mocked(db.query.enterpriseWebhooks.findFirst).mockResolvedValueOnce({
+      id: "wh-1",
+      organizationId: "org-1",
+      url: "http://example.com/hook",
+      enabled: true,
+      failureCount: 0,
+    } as never);
+    await dispatchEnterpriseWebhooks({
+      organizationId: "org-1",
+      eventType: "case_created",
+      summary: "Case created",
     });
     expect(connectorFetch).not.toHaveBeenCalled();
   });

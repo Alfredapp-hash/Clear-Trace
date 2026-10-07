@@ -179,6 +179,44 @@ describe("California DROP service", () => {
     );
   });
 
+  it("recording the same filing day twice is idempotent (one filing, one pair of deadlines)", async () => {
+    const { caseId } = await caCase();
+    const first = await recordDropFiling(session, caseId, "2026-09-01");
+    const again = await recordDropFiling(session, caseId, "2026-09-01T15:30:00.000Z");
+    expect(first.duplicate).toBe(false);
+    expect(again).toMatchObject({ duplicate: true, filingId: first.filingId, filedAt: first.filedAt });
+    expect(again.deadlines.map((d) => d.id).sort()).toEqual(first.deadlines.map((d) => d.id).sort());
+    expect(
+      await db.query.statutoryFilings.findMany({ where: eq(statutoryFilings.caseId, caseId) }),
+    ).toHaveLength(1);
+    const rows = await db.query.slaDeadlines.findMany({
+      where: and(
+        eq(slaDeadlines.caseId, caseId),
+        inArray(slaDeadlines.deadlineType, ["statutory_first_pull", "statutory_deletion_due"]),
+      ),
+    });
+    expect(rows).toHaveLength(2);
+
+    // A different day is a separate filing.
+    expect((await recordDropFiling(session, caseId, "2026-09-02")).duplicate).toBe(false);
+  });
+
+  it("a deletion deadline already closed as met never makes the case escalation-eligible", async () => {
+    const { caseId } = await caCase([], ["https://www.spokeo.com/Jane-Q-Testperson/met"]);
+    await recordDropFiling(session, caseId, "2026-08-15");
+    await db
+      .update(slaDeadlines)
+      .set({ status: "met" })
+      .where(and(eq(slaDeadlines.caseId, caseId), eq(slaDeadlines.deadlineType, "statutory_deletion_due")));
+    const summary = await getStatutorySummary(
+      caseId,
+      session.organizationId,
+      new Date("2026-11-14T00:00:00.000Z"),
+    );
+    expect(summary.escalationEligible).toBe(false);
+    expect(summary.escalationDraft).toBeNull();
+  });
+
   it("a filing on a non-CA case is STATUTORY_NOT_APPLICABLE and writes nothing", async () => {
     const { caseId } = await seedWorkflowCase(session, {
       claims: [{ claimType: "city_state", value: "Austin, TX" }],

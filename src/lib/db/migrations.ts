@@ -1001,6 +1001,15 @@ function migrateV2(conn: Conn): void {
   supersedeDuplicateBrokerOptOutDeadlines(conn);
 }
 
+/** v3 (Sprint 5): latest-check-per-exposure lookups (relist, follow-up, certificate). */
+export const V3_INDEXES: readonly string[] = [
+  "CREATE INDEX IF NOT EXISTS idx_verification_checks_exposure_checked ON verification_checks(exposure_id, checked_at)",
+];
+
+function migrateV3(conn: Conn): void {
+  for (const statement of V3_INDEXES) conn.exec(statement);
+}
+
 /* ==========================================================================================
  * Runner
  * ======================================================================================== */
@@ -1014,6 +1023,7 @@ export interface Migration {
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "v1_baseline", up: applyBaselineSchema },
   { version: 2, name: "v2_ongoing_protection", up: migrateV2 },
+  { version: 3, name: "v3_verification_checks_exposure_index", up: migrateV3 },
 ];
 
 export const LATEST_SCHEMA_VERSION: number = MIGRATIONS[MIGRATIONS.length - 1].version;
@@ -1073,7 +1083,14 @@ function writePreMigrateSnapshot(
   } catch {
     // best effort (e.g. filesystems without POSIX modes)
   }
-  if (!passphrase) return file;
+  if (!passphrase) {
+    // The snapshot is a full plaintext copy of the database, kept for the retention window
+    // (including cases erased after the upgrade). Say so loudly in production.
+    if (process.env.NODE_ENV === "production") {
+      log.warn("db.premigrate_snapshot_unencrypted", { errorCode: "BACKUP_PASSPHRASE_UNSET" });
+    }
+    return file;
+  }
   const encrypted = `${file}.enc`;
   try {
     encryptFileSync(file, encrypted, passphrase);

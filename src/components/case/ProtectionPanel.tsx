@@ -11,6 +11,7 @@ import { useState } from "react";
 import { Badge, Button } from "@/components/ui";
 import { callApi } from "@/lib/ui/call-api";
 import type { ProtectionScheduleView, ProtectionSummary } from "@/lib/protection/summary";
+import { formatDate } from "@/lib/ux/plain-status";
 
 type Kind = ProtectionScheduleView["kind"];
 
@@ -42,10 +43,9 @@ function outcomeLabel(outcome: string | null): string | null {
   return OUTCOME_LABEL[outcome] ?? outcome.replaceAll("_", " ");
 }
 
-function formatDate(value: string | null): string {
-  if (!value) return "—";
-  const d = new Date(value.includes("T") ? value : `${value.replace(" ", "T")}Z`);
-  return Number.isNaN(d.getTime()) ? value : d.toISOString().slice(0, 10);
+/** The app's one date format (UTC); "—" when there is no date. */
+function day(value: string | null | undefined): string {
+  return formatDate(value) || "—";
 }
 
 export default function ProtectionPanel({
@@ -89,7 +89,7 @@ export default function ProtectionPanel({
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
           <dt className="text-xs uppercase tracking-[0.12em] text-slate-400">Next scan</dt>
           <dd className="mt-1 font-medium text-white" data-testid="protection-next-scan">
-            {initial.nextScanAt ? formatDate(initial.nextScanAt) : "Not scheduled"}
+            {initial.nextScanAt ? day(initial.nextScanAt) : "Not scheduled"}
           </dd>
         </div>
         <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] p-3">
@@ -143,10 +143,10 @@ export default function ProtectionPanel({
                   </Button>
                 </div>
                 <p className="mt-1 text-slate-400">
-                  Next: {enabled && next ? formatDate(next) : "—"}
+                  Next: {enabled && next ? day(next) : "—"}
                   {last?.lastRunAt && (
                     <>
-                      {" · "}Last: {formatDate(last.lastRunAt)}
+                      {" · "}Last: {day(last.lastRunAt)}
                       {outcomeLabel(last.lastOutcome) && ` (${outcomeLabel(last.lastOutcome)})`}
                     </>
                   )}
@@ -170,7 +170,7 @@ export default function ProtectionPanel({
                   <ul className="mt-2 space-y-1 text-xs text-slate-400">
                     {rows.map((r) => (
                       <li key={`${r.brokerId}`}>
-                        {r.brokerName ?? r.brokerId}: re-check {formatDate(r.nextRunAt)}
+                        {r.brokerName ?? r.brokerId}: re-check {day(r.nextRunAt)}
                       </li>
                     ))}
                   </ul>

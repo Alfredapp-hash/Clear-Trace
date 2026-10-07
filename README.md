@@ -18,7 +18,7 @@ Repo owner: enable **Template repository** in Settings — see [`.github/ENABLE_
 
 ## Requirements
 
-- Node.js 22+
+- Node.js 24+ (LTS)
 - npm 10+
 - Docker 24+ with Compose v2 (for the supported deployment)
 
@@ -142,7 +142,7 @@ All settings are environment variables; `.env.example` lists every one with comm
 | `REGISTRATION_MODE` | Who may self-register. `first_user` (default): sign-up is open only until the first account exists, then `POST /api/auth/register` returns `403 {"error":"REGISTRATION_CLOSED"}` and the login page hides its register link. `invite`: sign-up is always closed; there is **no invite flow yet**, so this simply locks registration. `open`: anyone who can reach the app may register (the pre-1.3 behaviour; the Playwright e2e suite uses it because it registers several accounts — the CI Docker smoke job keeps the `first_user` default and asserts a second sign-up gets 403). `GET /api/auth/registration-status` reports the current state. |
 | `INLINE_WORKER` | `1` always runs background jobs from dashboard loads (scheduled after the response, at most once per 5 minutes). `0` never does. Unset: only when `WORKER_SECRET` is unset (no cron sidecar). Leave unset (or `0`) when `worker-cron` or another scheduler calls `/api/worker/run`. |
 | `DEVELOPER_MODE` | `1` shows **Settings → Developer** (Skill registry, Sentinel) to every signed-in user and lets them run the Sentinel release gate. Without it, Developer is shown to organization owners/admins, and running the gate needs a `developer` or `admin` account role. |
-| `TRUST_PROXY` | `1` only behind a reverse proxy you control that sets `X-Forwarded-For`. Rate limits then use the client IP, and the login lockout is per email **and** IP (so failed attempts from one address do not lock the owner out elsewhere). |
+| `TRUST_PROXY` | `1` only behind a reverse proxy you control that sets `X-Forwarded-For`. Rate limits then use the client IP, and the login lockout is per email **and** IP (so failed attempts from one address do not lock the owner out elsewhere). Without it there is no per-IP login limit, only the per-account backoff on failed passwords (a warning is logged once). |
 | `BACKUP_PASSPHRASE`, `BACKUP_KEEP` | Encrypted backups (`scripts/backup.mjs`): scrypt passphrase for AES-256-GCM, and how many backups to keep (default 7). See [backup-restore.md](./docs/self-hosting/backup-restore.md). |
 | `LOG_LEVEL` | `debug`, `info` (default), `warn`, `error` or `silent`. Logs are JSON lines with allowlisted fields only. |
 | `CLEARTRACE_URL` | Health URL `scripts/restore.mjs` probes to make sure the app is stopped (default `http://127.0.0.1:3000/api/health`). |

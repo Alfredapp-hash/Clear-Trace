@@ -1,4 +1,3 @@
-import { AppShell } from "@/components/AppShell";
 import {
   ButtonLink,
   EmptyState,
@@ -11,8 +10,23 @@ import { ensureDatabase } from "@/lib/db/init";
 import { listCasesForUser } from "@/lib/cases/service";
 import { caseTypeLabel, formatDate, plainStatus } from "@/lib/ux/plain-status";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
+import { CaseListSkeleton } from "@/components/Skeletons";
 
-export default async function CasesPage() {
+/**
+ * The list streams in behind a skeleton inside the shell. This is a Suspense boundary in the
+ * page rather than cases/loading.tsx on purpose: a segment loading.tsx would also wrap
+ * /cases/[id] and start streaming (status 200) before its ownership check could return 404.
+ */
+export default function CasesPage() {
+  return (
+    <Suspense fallback={<CaseListSkeleton />}>
+      <CaseList />
+    </Suspense>
+  );
+}
+
+async function CaseList() {
   ensureDatabase();
   const session = await getSession();
   if (!session) redirect("/login");
@@ -20,11 +34,11 @@ export default async function CasesPage() {
   const cases = await listCasesForUser(session);
 
   return (
-    <AppShell userName={session.name} orgName={session.organizationName}>
+    <>
       <PageHeader
         eyebrow="Workflows"
         title="Privacy cases"
-        description="Each case finds where your information appears, asks sites to remove it, and checks that it is gone."
+        description="Each case looks for where your information appears, helps you ask sites to remove it, and re-checks whether it is still there."
         action={
           <ButtonLink href="/cases/new" size="lg">New case</ButtonLink>
         }
@@ -56,6 +70,6 @@ export default async function CasesPage() {
           ))}
         </ul>
       )}
-    </AppShell>
+    </>
   );
 }

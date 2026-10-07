@@ -15,11 +15,15 @@ export const DEFAULT_WEBHOOK_EVENTS = [
   "case_exported",
 ] as const;
 
-/** Syntactic check + SSRF check (public destination only). */
-async function isValidWebhookUrl(url: string): Promise<boolean> {
+/**
+ * https only (payloads carry case events and are signed, not encrypted) + SSRF check (public
+ * destination only). Local/private hosts are refused by the SSRF guard anyway, so there is no
+ * plain-http exception for localhost.
+ */
+export async function isValidWebhookUrl(url: string): Promise<boolean> {
   try {
-    await assertSafeUrl(url.trim());
-    return true;
+    const parsed = await assertSafeUrl(url.trim());
+    return parsed.protocol === "https:";
   } catch {
     return false;
   }

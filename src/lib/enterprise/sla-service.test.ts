@@ -35,6 +35,9 @@ import { buildProgressReportForOrg } from "@/lib/reports/progress-report";
 import {
   createBrokerOptOutDeadline,
   createSlaDeadlinesForSentMessage,
+  createStatutoryDropDeadlines,
+  getCaseSlaSummary,
+  markSlaDeadlineMet,
   resolveBrokerOptOutDeadlineIfDone,
   resolveExposureDeadlinesOnRemoval,
 } from "./sla-service";
@@ -151,6 +154,9 @@ describe("SLA deadlines that resolve themselves", () => {
     const followUps = (await deadlinesFor(caseId)).filter((d) => d.deadlineType === "follow_up");
     expect(followUps.map((d) => d.status).sort()).toEqual(["met", "pending"]);
     expect(followUps.find((d) => d.status === "met")?.notes).toBe("auto: follow-up sent");
+    // A follow-up adds no second removal_verification deadline (it would inflate misses).
+    const removal = (await deadlinesFor(caseId)).filter((d) => d.deadlineType === "removal_verification");
+    expect(removal).toHaveLength(1);
   });
 });
 
@@ -243,6 +249,45 @@ describe("broker opt-out deadline", () => {
     expect(next.created).toBe(true);
   });
 
+  it("dismissed dispatches are not open; a dismissed-only case closes the deadline as met, even late", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    // Anchored long ago: the deadline is past due.
+    await createBrokerOptOutDeadline({
+      organizationId: session.organizationId,
+      caseId,
+      anchorAt: new Date(Date.now() - 400 * 86_400_000).toISOString(),
+    });
+    await addDispatch(caseId, "dismissed");
+    const open = await addDispatch(caseId, "pending_approval");
+    expect(await resolveBrokerOptOutDeadlineIfDone(caseId, session.organizationId)).toEqual({
+      resolved: false,
+      openDispatches: 1,
+    });
+    await db.update(optOutDispatches).set({ status: "dismissed" }).where(eq(optOutDispatches.id, open));
+    expect((await resolveBrokerOptOutDeadlineIfDone(caseId, session.organizationId)).resolved).toBe(true);
+    const row = await db.query.slaDeadlines.findFirst({
+      where: and(eq(slaDeadlines.caseId, caseId), eq(slaDeadlines.deadlineType, "broker_opt_out")),
+    });
+    expect(row).toMatchObject({ status: "met", notes: "auto: all opt-outs dismissed" });
+  });
+
+  it("completed + dismissed closes as completed (missed when late)", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    await createBrokerOptOutDeadline({
+      organizationId: session.organizationId,
+      caseId,
+      anchorAt: new Date(Date.now() - 400 * 86_400_000).toISOString(),
+    });
+    await addDispatch(caseId, "dismissed");
+    await addDispatch(caseId, "completed");
+    expect((await resolveBrokerOptOutDeadlineIfDone(caseId, session.organizationId)).resolved).toBe(true);
+    const row = await db.query.slaDeadlines.findFirst({
+      where: and(eq(slaDeadlines.caseId, caseId), eq(slaDeadlines.deadlineType, "broker_opt_out")),
+    });
+    expect(row?.status).toBe("missed");
+    expect(row?.notes).toContain("auto: all opt-outs completed");
+  });
+
   it("never touches another organization's case", async () => {
     const other = await seedWorkflowUser();
     const { caseId } = await seedWorkflowCase(session);
@@ -250,5 +295,53 @@ describe("broker opt-out deadline", () => {
     await addDispatch(caseId, "completed");
     expect((await resolveBrokerOptOutDeadlineIfDone(caseId, other.organizationId)).resolved).toBe(false);
     expect(await pendingOptOut(caseId)).toHaveLength(1);
+  });
+});
+
+describe("SLA summary and manual marking", () => {
+  let session: SessionPayload;
+
+  beforeAll(async () => {
+    session = await seedWorkflowUser();
+  });
+
+  it("statutory DROP deadlines are counted separately, never as the org's SLA misses", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    // Long past: both statutory windows are missed.
+    createStatutoryDropDeadlines({
+      organizationId: session.organizationId,
+      caseId,
+      anchorAt: new Date(Date.now() - 400 * 86_400_000).toISOString(),
+    });
+    await createBrokerOptOutDeadline({ organizationId: session.organizationId, caseId });
+
+    const summary = await getCaseSlaSummary(caseId, session.organizationId);
+    expect(summary.counts).toEqual({ pending: 1, missed: 0, met: 0 });
+    expect(summary.statutoryCounts).toEqual({ pending: 0, missed: 2, met: 0 });
+    expect(summary.deadlines).toHaveLength(3);
+  });
+
+  it("markSlaDeadlineMet only closes a pending deadline", async () => {
+    const { caseId } = await seedWorkflowCase(session);
+    const { id } = await createBrokerOptOutDeadline({ organizationId: session.organizationId, caseId });
+    await markSlaDeadlineMet(id, session.organizationId, "done", caseId);
+    const first = await db.query.slaDeadlines.findFirst({ where: eq(slaDeadlines.id, id) });
+    expect(first?.status).toBe("met");
+
+    // Already met: refused, and the original metAt is kept.
+    await expect(markSlaDeadlineMet(id, session.organizationId, "again", caseId)).rejects.toThrow(
+      "INVALID_TRANSITION",
+    );
+    const after = await db.query.slaDeadlines.findFirst({ where: eq(slaDeadlines.id, id) });
+    expect(after).toMatchObject({ metAt: first?.metAt, notes: "done" });
+
+    // A missed deadline can't be rewritten as on time.
+    await db.update(slaDeadlines).set({ status: "missed" }).where(eq(slaDeadlines.id, id));
+    await expect(markSlaDeadlineMet(id, session.organizationId, undefined, caseId)).rejects.toThrow(
+      "INVALID_TRANSITION",
+    );
+    expect((await db.query.slaDeadlines.findFirst({ where: eq(slaDeadlines.id, id) }))?.status).toBe(
+      "missed",
+    );
   });
 });

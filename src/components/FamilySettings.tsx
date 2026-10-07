@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Badge, Button, Card, Input, Label, SectionTitle } from "./ui";
+import { Badge, Button, Card, ConfirmDialog, Input, Label, SectionTitle } from "./ui";
 import { callApi, type ApiResult } from "@/lib/ui/call-api";
 import { humanize } from "@/lib/ux/plain-status";
 
@@ -40,6 +40,7 @@ export function FamilySettings({
   const [relationship, setRelationship] = useState("spouse");
   const [notes, setNotes] = useState("");
   const [loading, setLoading] = useState("");
+  const [pendingRemove, setPendingRemove] = useState<FamilyMember | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -102,7 +103,6 @@ export function FamilySettings({
   }
 
   async function removeMember(id: string) {
-    if (!confirm("Remove this household member?")) return;
     setLoading(`remove-${id}`);
     setError("");
     setMessage("");
@@ -127,8 +127,8 @@ export function FamilySettings({
         Family & household
       </SectionTitle>
       <p className="mt-2 text-sm text-slate-400">
-        Link cases to a household member — similar to Incogni/Optery family plans. Each member
-        gets their own case with separate identity claims.
+        Link cases to a household member. Each member gets their own case with separate
+        identity details.
       </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
@@ -153,12 +153,12 @@ export function FamilySettings({
             >
               <div>
                 <p className="font-medium text-slate-200">{m.displayName}</p>
-                <p className="text-xs text-slate-500">{RELATIONSHIPS.find((r) => r.id === m.relationship)?.label ?? humanize(m.relationship)}</p>
+                <p className="text-xs text-[var(--muted)]">{RELATIONSHIPS.find((r) => r.id === m.relationship)?.label ?? humanize(m.relationship)}</p>
               </div>
               <Button
                 variant="ghost"
                 className="!px-3 !py-1 text-xs"
-                onClick={() => removeMember(m.id)}
+                onClick={() => setPendingRemove(m)}
                 disabled={loading === `remove-${m.id}`}
               >
                 Remove
@@ -208,6 +208,25 @@ export function FamilySettings({
           </Button>
         </div>
       )}
+      <ConfirmDialog
+        open={pendingRemove !== null}
+        id="confirm-remove-member"
+        title="Remove this household member?"
+        message={
+          <p>
+            <strong>{pendingRemove?.displayName}</strong> will be removed from your household.
+            Their cases are kept, but they will no longer be linked to this person. This frees
+            up a seat.
+          </p>
+        }
+        confirmLabel="Remove member"
+        onConfirm={() => {
+          const member = pendingRemove;
+          setPendingRemove(null);
+          if (member) void removeMember(member.id);
+        }}
+        onCancel={() => setPendingRemove(null)}
+      />
     </Card>
   );
 }
