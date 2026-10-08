@@ -2,6 +2,11 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.8.1] — Unreleased
+
+- **Link check** — bot walls are recognised by markup as well as title (PerimeterX, Incapsula, Cloudflare challenge, "Checking your browser", "Access … denied"); redirects onto known privacy-request vendors (OneTrust, TrustArc, Transcend, Ketch, Osano, Securiti, …) count as ok with a note
+- **Catalog** — nuwber, idtrue, backgroundalert and clustrmaps are offline (no public address records / 127.0.0.1), not locally blocked as recorded in v1.7.0; notes corrected, kept active so the weekly check sees them return
+
 ## [1.8.0] — Unreleased
 
 Sprint 8: reliability. See [docs/sprint/SPRINT-8.md](./docs/sprint/SPRINT-8.md).
