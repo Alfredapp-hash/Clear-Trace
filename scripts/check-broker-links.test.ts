@@ -66,4 +66,25 @@ describe("check-broker-links", () => {
     expect(md).not.toContain("a|b");
     expect(markdownReport([{ ...base, status: "ok", statusCode: 200 }], "2026-10-08")).toContain("Nothing needs attention.");
   });
+
+  it("recognises bot walls by title or markup, not only Cloudflare's title", async () => {
+    const walled = (body: string, statusCode = 403) => checkLink(target, async () => page({ statusCode, body, finalUrl: "https://x.com/optout" }));
+    expect((await walled("<title>Checking your browser</title>")).status).toBe("bot_challenge");
+    expect((await walled("<title>Access to this page has been denied</title>")).status).toBe("bot_challenge");
+    expect((await walled('<title>Reddit</title><div id="px-captcha"></div>')).status).toBe("bot_challenge");
+    expect((await walled("<p>You've been blocked by network security.</p>")).status).toBe("bot_challenge");
+    // A plain 403 or a 404 is still an error.
+    expect((await walled("<title>Forbidden</title>")).status).toBe("http_error");
+    expect((await walled("<title>Just a moment</title>", 404)).status).toBe("http_error");
+  });
+
+  it("accepts a redirect onto a known privacy-request vendor, but not other hosts", async () => {
+    const via = (finalUrl: string) =>
+      checkLink(target, async () => page({ finalUrl, redirectChain: [target.url, finalUrl] }));
+    const vendor = await via("https://privacyportal.onetrust.com/webform/abc");
+    expect(vendor.status).toBe("ok");
+    expect(vendor.detail).toBe("via privacy vendor privacyportal.onetrust.com");
+    expect((await via("https://onetrust.com.evil.test/form")).status).toBe("off_domain_redirect");
+    expect((await via("https://elsewhere.test/form")).status).toBe("off_domain_redirect");
+  });
 });

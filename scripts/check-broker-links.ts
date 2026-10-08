@@ -44,7 +44,29 @@ export interface LinkResult extends LinkTarget {
 
 type Fetcher = typeof safeFetchPublicPage;
 
-const BOT_TITLE = /just a moment|attention required|security (check|challenge)|captcha|performing security verification/i;
+const BOT_TITLE =
+  /just a moment|attention required|security (check|challenge)|captcha|performing security verification|checking your browser|access to this page has been denied|access denied/i;
+
+/** Bot-protection pages identified by their markup when the title is generic or empty. */
+const BOT_BODY =
+  /cf-chl|challenge-platform|_incapsula_resource|px-captcha|perimeterx|ddos-guard|blocked by network security|verify you are human/i;
+
+/**
+ * Privacy-request vendors brokers legitimately send people to (consent / DSAR portals). A
+ * redirect from the broker's own opt-out URL onto one of these is the broker's real form.
+ */
+export const PRIVACY_VENDOR_DOMAINS = [
+  "onetrust.com",
+  "trustarc.com",
+  "transcend.io",
+  "ketch.com",
+  "osano.com",
+  "securiti.ai",
+  "didomi.io",
+  "truyo.com",
+  "datagrail.io",
+  "privacy-center.org",
+];
 
 function hostIn(url: string, domains: string[]): boolean {
   if (!domains.length) return true;
@@ -56,13 +78,18 @@ export async function checkLink(target: LinkTarget, fetcher: Fetcher = safeFetch
   try {
     const page = await fetcher(target.url);
     const base = { ...target, statusCode: page.statusCode, finalUrl: page.finalUrl };
-    if (!hostIn(page.finalUrl, target.allowedDomains)) {
+    const viaVendor = !hostIn(page.finalUrl, target.allowedDomains) && hostIn(page.finalUrl, PRIVACY_VENDOR_DOMAINS);
+    if (!hostIn(page.finalUrl, target.allowedDomains) && !viaVendor) {
       return { ...base, status: "off_domain_redirect", detail: `redirected via ${page.redirectChain.join(" → ")}` };
     }
-    if (page.statusCode >= 200 && page.statusCode < 300) return { ...base, status: "ok", detail: "" };
+    const vendorNote = viaVendor ? `via privacy vendor ${new URL(page.finalUrl).hostname}` : "";
+    if (page.statusCode >= 200 && page.statusCode < 300) return { ...base, status: "ok", detail: vendorNote };
     const title = page.body.match(/<title[^>]*>([^<]*)/i)?.[1]?.trim() ?? "";
-    if ((page.statusCode === 403 || page.statusCode === 429 || page.statusCode === 503) && BOT_TITLE.test(title)) {
-      return { ...base, status: "bot_challenge", detail: title };
+    if (
+      (page.statusCode === 403 || page.statusCode === 429 || page.statusCode === 503) &&
+      (BOT_TITLE.test(title) || BOT_BODY.test(page.body))
+    ) {
+      return { ...base, status: "bot_challenge", detail: title || "bot protection page" };
     }
     return { ...base, status: "http_error", detail: title };
   } catch (error) {

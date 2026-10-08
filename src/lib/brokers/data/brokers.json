@@ -659,7 +659,7 @@
         "ca"
       ],
       "source": "curated",
-      "sourceNote": "Host still does not resolve from the research network on 2026-10-07 (the local resolver and 1.1.1.1 / 8.8.8.8 queries are all filtered, so it is a local block, not a dead domain) — not read directly. Opt-out at /removal/link (also the 'Remove My Info' footer link on a profile): profile URL + email, then click the emailed confirmation link; removal in about 24 hours (third-party opt-out guides: Incogni / Optery / DeleteMe / IDStrong, 2026-10-07); search URL: pattern from indexed URLs",
+      "sourceNote": "2026-10-08: nuwber.com is registered (Cloudflare nameservers) but publishes no A/AAAA records for the apex or www (Google and Cloudflare public DNS; also unreachable from GitHub's runners), so no site is being served. This replaces the 2026-10-07 'local block' note, which was wrong. Kept active while the weekly link check watches for its return; route below is from removal guides (not read directly): Opt-out at /removal/link (also the 'Remove My Info' footer link on a profile): profile URL + email, then click the emailed confirmation link; removal in about 24 hours (third-party opt-out guides: Incogni / Optery / DeleteMe / IDStrong, 2026-10-07); search URL: pattern from indexed URLs",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -1123,7 +1123,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "Host resolves to 127.0.0.1 from the research network on 2026-10-07 (local block) — not read directly. Opt-out at /bl/opt-out (also 'Remove My Info' at the bottom of a listing): listing URL + name + email + address exactly as listed, then tick the items to remove (third-party opt-out guides: Incogni / DeleteMe / Cloaked / meprism 2026, 2026-10-07)",
+      "sourceNote": "2026-10-08: clustrmaps.com's public A record is 127.0.0.1 (Google and Cloudflare public DNS), so the site is deliberately unreachable; same from GitHub's runners. This replaces the 2026-10-07 'local block' note, which was wrong. Kept active while the weekly link check watches for its return; route below is from removal guides (not read directly): Opt-out at /bl/opt-out (also 'Remove My Info' at the bottom of a listing): listing URL + name + email + address exactly as listed, then tick the items to remove (third-party opt-out guides: Incogni / DeleteMe / Cloaked / meprism 2026, 2026-10-07)",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -1332,7 +1332,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "Host does not resolve from the research network on 2026-10-07 (local block) — not read directly. Opt-out at /optout (footer 'Opt Out & Removal'): search name + city/state, pick 'This is me', email + CAPTCHA, then click the emailed link (third-party opt-out guides: Incogni / Optery / DeleteMe / Comparitech, 2026-10-07)",
+      "sourceNote": "2026-10-08: idtrue.com is registered (GoDaddy) with no A/AAAA records and www.idtrue.com does not exist (NXDOMAIN) in public DNS; unreachable from GitHub's runners too. This replaces the 2026-10-07 'local block' note, which was wrong. Kept active while the weekly link check watches for its return; route below is from removal guides (not read directly): Opt-out at /optout (footer 'Opt Out & Removal'): search name + city/state, pick 'This is me', email + CAPTCHA, then click the emailed link (third-party opt-out guides: Incogni / Optery / DeleteMe / Comparitech, 2026-10-07)",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
@@ -1930,7 +1930,7 @@
       ],
       "registries": [],
       "source": "curated",
-      "sourceNote": "Host does not resolve from the research network on 2026-10-07 (local block) — not read directly. Opt-out at /optout: search name + state, 'that's me', email confirmation link, then identity verification (guides describe a photo of an ID with photo / number redacted; DeleteMe also lists fax / mail); removal within about 7 business days (third-party opt-out guides: Optery / Incogni / DeleteMe / meprism 2026, 2026-10-07)",
+      "sourceNote": "2026-10-08: backgroundalert.com (AWS Route 53) publishes no A/AAAA records; www is a CNAME to the empty apex. Unreachable from GitHub's runners too. This replaces the 2026-10-07 'local block' note, which was wrong. Kept active while the weekly link check watches for its return; route below is from removal guides (not read directly): Opt-out at /optout: search name + state, 'that's me', email confirmation link, then identity verification (guides describe a photo of an ID with photo / number redacted; DeleteMe also lists fax / mail); removal within about 7 business days (third-party opt-out guides: Optery / Incogni / DeleteMe / meprism 2026, 2026-10-07)",
       "lastVerifiedAt": "unknown",
       "jurisdictionNotes": null
     },
