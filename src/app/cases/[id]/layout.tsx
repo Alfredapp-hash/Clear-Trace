@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
+import { redirectToSignIn } from "@/lib/auth/sign-in-redirect";
 import { getSession } from "@/lib/auth/session";
 import { getCaseForUser } from "@/lib/cases/service";
 
@@ -16,9 +17,9 @@ export default async function CaseLayout({
   children: ReactNode;
   params: Promise<{ id: string }>;
 }) {
-  const session = await getSession();
-  if (!session) redirect("/api/auth/session-expired");
   const { id } = await params;
+  const session = await getSession();
+  if (!session) redirectToSignIn(`/cases/${id}`);
   if (!(await getCaseForUser(id, session))) notFound();
   return children;
 }

@@ -71,6 +71,12 @@ test("a revoked session cookie lands on /login instead of a redirect loop", asyn
   await page.getByLabel("Password").fill("testpass1234");
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page).toHaveURL("/");
+  // A case of their own, so the case page's layout and page both see the revoked session.
+  const created = await page.request.post("/api/cases", {
+    headers: { Origin: new URL(page.url()).origin },
+    data: { title: "Stale case", caseType: "personal_exposure", targetRelationship: "self" },
+  });
+  const { caseId } = (await created.json()) as { caseId: string };
 
   const stale = (await context.cookies()).find((c) => c.name === "cleartrace_session");
   expect(stale).toBeTruthy();
@@ -79,9 +85,12 @@ test("a revoked session cookie lands on /login instead of a redirect loop", asyn
   await expect(page).toHaveURL(/\/login/);
   await context.addCookies([stale!]);
 
-  for (const path of ["/cases/new", "/cases", "/settings", "/"]) {
+  for (const path of ["/cases/new", "/cases", "/settings", "/", `/cases/${caseId}`, "/security", "/skills"]) {
     const res = await page.goto(path);
     expect(res?.ok()).toBe(true);
     await expect(page).toHaveURL(/\/login/);
   }
+  // The return path survives the detour through session-expired.
+  await page.goto(`/cases/${caseId}`);
+  expect(new URL(page.url()).searchParams.get("from")).toBe(`/cases/${caseId}`);
 });

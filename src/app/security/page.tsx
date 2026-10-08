@@ -1,7 +1,8 @@
+import { redirectToSignIn } from "@/lib/auth/sign-in-redirect";
 import Link from "next/link";
 import { and, desc, eq } from "drizzle-orm";
 import { refresh } from "next/cache";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 import { AppShell } from "@/components/AppShell";
 import { Badge, Button, Card, PageHeader } from "@/components/ui";
 import {
@@ -19,7 +20,7 @@ async function runReleaseGateAction() {
   "use server";
   ensureDatabase();
   const session = await getSession();
-  if (!session) redirect("/login?from=/security");
+  if (!session) redirectToSignIn("/security");
   // Running the gate needs an instance operator, not just an org owner (same rule as
   // POST /api/security/sentinel, plus DEVELOPER_MODE=1).
   if (!isDeveloperOperator(session)) {
@@ -36,7 +37,7 @@ async function runReleaseGateAction() {
 export default async function SecurityPage() {
   ensureDatabase();
   const session = await getSession();
-  if (!session) redirect("/login?from=/security");
+  if (!session) redirectToSignIn("/security");
   if (!(await canAccessDeveloperTools(session))) notFound();
 
   const canRun = isDeveloperOperator(session);

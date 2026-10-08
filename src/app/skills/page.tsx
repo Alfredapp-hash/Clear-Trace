@@ -1,3 +1,4 @@
+import { redirectToSignIn } from "@/lib/auth/sign-in-redirect";
 import { AppShell } from "@/components/AppShell";
 import { Badge, Card, PageHeader, SectionTitle } from "@/components/ui";
 import { canAccessDeveloperTools, getSession } from "@/lib/auth/session";
@@ -8,7 +9,7 @@ import {
   validateSkillRegistry,
 } from "@/lib/skills/registry";
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
 
 function riskTone(level: string) {
   if (level === "low") return "success" as const;
@@ -83,7 +84,7 @@ function SkillCard({ skill, nameOf }: { skill: Skill; nameOf: (id: string) => st
 
 export default async function SkillsPage() {
   const session = await getSession();
-  if (!session) redirect("/login?from=/skills");
+  if (!session) redirectToSignIn("/skills");
   // Developer page (Settings → Developer): hidden from standard users.
   if (!(await canAccessDeveloperTools(session))) notFound();
 

@@ -1,3 +1,4 @@
+import { redirectToSignIn } from "@/lib/auth/sign-in-redirect";
 import {
   ButtonLink,
   EmptyState,
@@ -9,7 +10,6 @@ import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
 import { listCasesForUser } from "@/lib/cases/service";
 import { caseTypeLabel, formatDate, plainStatus } from "@/lib/ux/plain-status";
-import { redirect } from "next/navigation";
 import { Suspense } from "react";
 import { CaseListSkeleton } from "@/components/Skeletons";
 
@@ -29,7 +29,7 @@ export default function CasesPage() {
 async function CaseList() {
   ensureDatabase();
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirectToSignIn("/cases");
 
   const cases = await listCasesForUser(session);
 

@@ -2,6 +2,14 @@
 
 All notable changes to the ClearTrace application are documented here.
 
+## [1.8.0] — Unreleased
+
+Sprint 8: reliability. See [docs/sprint/SPRINT-8.md](./docs/sprint/SPRINT-8.md).
+
+- **Sign-in redirects** — every server page and layout sends a missing or revoked session through `/api/auth/session-expired` (new `redirectToSignIn`), so a signed-but-revoked cookie can no longer bounce between a page and `/login`. Previously only the shared shell did; the dashboard, cases, case, settings, security and skills pages went straight to `/login`. The return path is kept
+- **Weekly broker link check** — `.github/workflows/broker-links.yml` (Mondays, or on demand) checks curated opt-out pages, deindex tools and the platform report forms, writes the report to the run summary and opens, updates or closes one tracking issue. It never gates a merge. `scripts/check-broker-links.ts` gains platform targets and `--markdown=<file>`
+- **Dev-server e2e warm-up** — `e2e/global-setup.ts` compiles every main route (with a throwaway account and case) before the first test, so a first-time compile can no longer Fast-Refresh a page mid-test. No-op for the production build
+
 ## [1.7.0] — Unreleased
 
 Sprint 7: broker coverage & reach. See [docs/sprint/SPRINT-7.md](./docs/sprint/SPRINT-7.md).

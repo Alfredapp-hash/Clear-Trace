@@ -1,6 +1,6 @@
+import { redirectToSignIn } from "@/lib/auth/sign-in-redirect";
 import Link from "next/link";
 import { Suspense } from "react";
-import { redirect } from "next/navigation";
 import { after } from "next/server";
 import { renderSessionShell } from "@/components/SessionShell";
 import { ContentErrorBoundary } from "@/components/RouteError";
@@ -91,7 +91,7 @@ export default async function DashboardPage() {
 
 async function DashboardContent() {
   const session = await getSession();
-  if (!session) redirect("/login");
+  if (!session) redirectToSignIn("/");
 
   const [data, connectorHealth] = await Promise.all([
     loadDashboard(session.userId, session.organizationId),

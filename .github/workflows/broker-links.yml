@@ -1,0 +1,54 @@
+name: Broker link check
+
+# Weekly check that the catalog's opt-out pages, deindex tools and platform report forms still
+# resolve on the right domains. It hits live sites, so it never gates a merge: it writes the
+# report to the run summary and keeps one open tracking issue up to date.
+on:
+  schedule:
+    - cron: "17 9 * * 1" # Mondays 09:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+concurrency:
+  group: broker-links
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Check catalog links
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      NEXT_TELEMETRY_DISABLED: "1"
+      GH_TOKEN: ${{ github.token }}
+      TITLE: "Broker link check: links need attention"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Check links
+        run: npx tsx scripts/check-broker-links.ts --markdown=report.md
+      - name: Run summary
+        run: cat report.md >> "$GITHUB_STEP_SUMMARY"
+      - name: Open, update or close the tracking issue
+        run: |
+          set -euo pipefail
+          existing=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number --jq '.[0].number // empty')
+          if grep -q "Nothing needs attention." report.md; then
+            if [ -n "$existing" ]; then
+              gh issue close "$existing" --comment "All links resolve as of this run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+            fi
+            exit 0
+          fi
+          { cat report.md; echo; echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"; } > body.md
+          if [ -n "$existing" ]; then
+            gh issue edit "$existing" --body-file body.md
+          else
+            gh issue create --title "$TITLE" --body-file body.md
+          fi

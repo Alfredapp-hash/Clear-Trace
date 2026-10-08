@@ -4,6 +4,7 @@
  *   npx tsx scripts/check-broker-links.ts               # curated opt-out URLs + deindex tools
  *   npx tsx scripts/check-broker-links.ts --registry    # also the CPPA registry entries' URLs
  *   npx tsx scripts/check-broker-links.ts --only=spokeo,intelius
+ *   npx tsx scripts/check-broker-links.ts --markdown=report.md   # also write a Markdown report
  *
  * Every URL is fetched through safeFetchPublicPage (SSRF-safe, redirects re-validated per
  * hop). Reported:
@@ -12,7 +13,9 @@
  *     domains, parent-group domains);
  *   - fetch errors (DNS, TLS, timeouts).
  * It also checks the search-engine removal tools exported by src/lib/deindexing (Sprint 3
- * carry-over: the Bing / Microsoft URLs were never verified by hand).
+ * carry-over: the Bing / Microsoft URLs were never verified by hand) and the social platforms'
+ * privacy-report forms (src/lib/remediation/data/platform-report-routes.json). A weekly
+ * workflow (.github/workflows/broker-links.yml) runs it and files one tracking issue.
  *
  * Exit code is 0 unless --strict is passed and something failed. A bot challenge is not a
  * failure. Update `lastVerifiedAt` in brokers.json only after reading the page yourself.
@@ -20,6 +23,8 @@
 import { DEINDEX_TOOLS } from "../src/lib/deindexing/playbook";
 import { safeFetchPublicPage } from "../src/lib/tools/safe-fetch";
 import { brokerDomains, listCatalog, type CatalogBroker } from "../src/lib/brokers/universe";
+import { PLATFORM_ROUTES, type PlatformRoute } from "../src/lib/remediation/platform-routes";
+import { writeFileSync } from "fs";
 
 export type LinkStatus = "ok" | "bot_challenge" | "http_error" | "off_domain_redirect" | "fetch_error";
 
@@ -88,6 +93,45 @@ export function deindexTargets(): LinkTarget[] {
   }));
 }
 
+/** Registrable domain of a URL's host (last two labels; enough for the hosts checked here). */
+function registrable(url: string): string {
+  return new URL(url).hostname.replace(/^www\./, "").split(".").slice(-2).join(".");
+}
+
+/** Each platform's privacy-report form may live on a help domain (e.g. support.google.com). */
+export function platformTargets(routes: readonly PlatformRoute[] = PLATFORM_ROUTES): LinkTarget[] {
+  return routes.map((r) => ({
+    label: `platform ${r.id}`,
+    url: r.reportUrl,
+    allowedDomains: [...new Set([registrable(r.reportUrl), ...r.domains])],
+  }));
+}
+
+const ATTENTION: readonly LinkStatus[] = ["http_error", "off_domain_redirect", "fetch_error"];
+
+/** Markdown report: links needing attention first, then bot challenges (not failures). */
+export function markdownReport(results: LinkResult[], checkedAt: string): string {
+  const needs = results.filter((r) => ATTENTION.includes(r.status));
+  const walled = results.filter((r) => r.status === "bot_challenge");
+  const ok = results.length - needs.length - walled.length;
+  const row = (r: LinkResult) =>
+    `| ${r.label} | ${r.status} | ${r.statusCode ?? "-"} | ${r.url} | ${(r.finalUrl ?? "").replace(/\|/g, "%7C")} | ${r.detail.replace(/\|/g, "/").slice(0, 120)} |`;
+  const table = (rows: LinkResult[]) => [
+    "| Target | Status | Code | URL | Final URL | Detail |",
+    "|---|---|---|---|---|---|",
+    ...rows.map(row),
+  ];
+  return [
+    `## Broker & platform link check — ${checkedAt}`,
+    "",
+    `${ok} ok, ${walled.length} behind a bot challenge, **${needs.length} need attention**.`,
+    "",
+    ...(needs.length ? ["### Needs attention", "", ...table(needs), ""] : ["Nothing needs attention.", ""]),
+    ...(walled.length ? ["<details><summary>Behind a bot challenge (check by hand)</summary>", "", ...table(walled), "", "</details>", ""] : []),
+    "Update `lastVerifiedAt` / `checkedAt` only after reading a page yourself.",
+  ].join("\n");
+}
+
 async function runPool<T, R>(items: T[], size: number, fn: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let next = 0;
@@ -109,7 +153,7 @@ async function main() {
   const brokers = listCatalog(args.includes("--registry") ? {} : { source: "curated" }).filter(
     (b) => !onlyIds || onlyIds.has(b.id),
   );
-  const targets = [...brokerTargets(brokers), ...(onlyIds ? [] : deindexTargets())];
+  const targets = [...brokerTargets(brokers), ...(onlyIds ? [] : [...deindexTargets(), ...platformTargets()])];
 
   console.log(`Checking ${targets.length} URLs…`);
   const results = await runPool(targets, 6, (t) => checkLink(t));
@@ -127,6 +171,8 @@ async function main() {
   const ok = byStatus.get("ok")?.length ?? 0;
   const failed = results.length - ok - (byStatus.get("bot_challenge")?.length ?? 0);
   console.log(`\n${ok} ok, ${byStatus.get("bot_challenge")?.length ?? 0} behind a bot challenge, ${failed} need attention.`);
+  const markdownPath = args.find((a) => a.startsWith("--markdown="))?.slice("--markdown=".length);
+  if (markdownPath) writeFileSync(markdownPath, markdownReport(results, new Date().toISOString().slice(0, 10)));
   if (args.includes("--strict") && failed > 0) process.exit(1);
 }
 
