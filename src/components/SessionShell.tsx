@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { redirect } from "next/navigation";
+import { redirectToSignIn } from "@/lib/auth/sign-in-redirect";
 import { AppShell } from "@/components/AppShell";
 import { getSession } from "@/lib/auth/session";
 import { ensureDatabase } from "@/lib/db/init";
@@ -21,13 +21,8 @@ export async function renderSessionShell(
   ensureDatabase();
   const session = await getSession();
   if (!session) {
-    // Via session-expired, which clears the stale cookie: going straight to /login would be
-    // bounced back by the proxy (it only checks the JWT signature) — a redirect loop.
-    redirect(
-      returnTo
-        ? `/api/auth/session-expired?from=${encodeURIComponent(returnTo)}`
-        : "/api/auth/session-expired",
-    );
+    // Via session-expired, which clears the stale cookie (see redirectToSignIn).
+    redirectToSignIn(returnTo);
   }
   return (
     <AppShell userName={session.name} orgName={session.organizationName}>

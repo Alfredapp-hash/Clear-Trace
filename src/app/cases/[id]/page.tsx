@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { notFound, redirect } from "next/navigation";
+import { notFound } from "next/navigation";
+import { redirectToSignIn } from "@/lib/auth/sign-in-redirect";
 import { CaseTimeline } from "@/components/CaseTimeline";
 import { CaseWorkflow } from "@/components/CaseWorkflow";
 import { CaseActions } from "@/components/CaseActions";
@@ -51,10 +52,10 @@ export default async function CaseDetailPage({
   params: Promise<{ id: string }>;
 }) {
   ensureDatabase();
-  const session = await getSession();
-  if (!session) redirect("/login");
-
   const { id } = await params;
+  const session = await getSession();
+  if (!session) redirectToSignIn(`/cases/${id}`);
+
   const privacyCase = await getCaseForUser(id, session);
   if (!privacyCase) notFound();
 

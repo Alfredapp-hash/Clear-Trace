@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { brokerTargets, checkLink, deindexTargets } from "./check-broker-links";
+import { brokerTargets, checkLink, deindexTargets, markdownReport, platformTargets } from "./check-broker-links";
+import { PLATFORM_ROUTES } from "../src/lib/remediation/platform-routes";
 import { getBroker } from "../src/lib/brokers/universe";
 
 type Page = Awaited<ReturnType<typeof import("../src/lib/tools/safe-fetch").safeFetchPublicPage>>;
@@ -40,5 +41,29 @@ describe("check-broker-links", () => {
     const urls = deindexTargets().map((t) => t.url);
     expect(urls.some((u) => u.includes("bing.com"))).toBe(true);
     expect(urls.some((u) => u.includes("microsoft.com"))).toBe(true);
+  });
+
+  it("checks every platform report form, allowing its help domain", () => {
+    const targets = platformTargets();
+    expect(targets).toHaveLength(PLATFORM_ROUTES.length);
+    const youtube = targets.find((t) => t.label === "platform youtube");
+    expect(youtube?.allowedDomains).toEqual(expect.arrayContaining(["google.com", "youtube.com"]));
+  });
+
+  it("writes a Markdown report with failures first and bot challenges collapsed", () => {
+    const base = { label: "b", url: "https://b.test/optout", allowedDomains: [], finalUrl: "https://b.test/optout", detail: "" };
+    const md = markdownReport(
+      [
+        { ...base, label: "fine", status: "ok", statusCode: 200 },
+        { ...base, label: "gone", status: "http_error", statusCode: 404, detail: "a|b" },
+        { ...base, label: "walled", status: "bot_challenge", statusCode: 403 },
+      ],
+      "2026-10-08",
+    );
+    expect(md).toContain("1 ok, 1 behind a bot challenge, **1 need attention**");
+    expect(md.indexOf("| gone |")).toBeLessThan(md.indexOf("<details>"));
+    expect(md).toContain("| walled |");
+    expect(md).not.toContain("a|b");
+    expect(markdownReport([{ ...base, status: "ok", statusCode: 200 }], "2026-10-08")).toContain("Nothing needs attention.");
   });
 });

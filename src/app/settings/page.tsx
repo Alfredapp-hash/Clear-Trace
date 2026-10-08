@@ -1,6 +1,6 @@
+import { redirectToSignIn } from "@/lib/auth/sign-in-redirect";
 import Link from "next/link";
 import { eq } from "drizzle-orm";
-import { redirect } from "next/navigation";
 import { AgentBuilderKit } from "@/components/AgentBuilderKit";
 import { AgentSetupGuide } from "@/components/AgentSetupGuide";
 import { ConnectorSettings, type ConnectorSettingsData } from "@/components/ConnectorSettings";
@@ -79,7 +79,7 @@ function SectionHeading({ id, title, subtitle }: { id: string; title: string; su
 export default async function SettingsPage() {
   ensureDatabase();
   const session = await getSession();
-  if (!session) redirect("/login?from=/settings");
+  if (!session) redirectToSignIn("/settings");
 
   const orgId = session.organizationId;
   const [connectors, health, agentDefaults, canManage, showDeveloper, org] = await Promise.all([

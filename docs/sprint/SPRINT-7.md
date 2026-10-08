@@ -28,7 +28,7 @@ with source URL and check date (2026-10-07). Nothing that could not be verified 
 met), `npm audit --omit=dev` (0), both registry `--check`s, `next build` (no zod/catalog in
 client bundles), Playwright 20/20 on the production build and 20/20 on the dev server.
 
-### Dev-server e2e flake (still open)
+### Dev-server e2e flake (addressed in [Sprint 8](./SPRINT-8.md))
 One full dev-server run after a production-build run failed 18/20: Fast Refresh kept
 rebuilding during the first tests, so registration clicks were lost. It also hit
 `broker-checklist.spec.ts` twice while other agents were editing sources. Not reproduced by

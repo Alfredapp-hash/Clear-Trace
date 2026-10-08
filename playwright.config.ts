@@ -28,6 +28,8 @@ if (!usingExternalServer && !process.env.CLEARTRACE_E2E_DB_RESET) {
 
 export default defineConfig({
   testDir: "./e2e",
+  // Compiles every main route on the dev server before the first test (no-op for prod builds).
+  globalSetup: "./e2e/global-setup.ts",
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,
