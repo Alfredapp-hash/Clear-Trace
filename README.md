@@ -4,9 +4,9 @@ Owner-controlled privacy remediation system. Helps an authorized person discover
 
 Includes the portable skill pack at [`agent-builder/skillpack/`](./agent-builder/skillpack/).
 
-**Version:** 1.2.0 (unreleased — Sprint 1) · See [CHANGELOG.md](./CHANGELOG.md)
+**Version:** 1.8.1 · See [CHANGELOG.md](./CHANGELOG.md)
 
-**Supported deployment:** self-hosted (Docker Compose, or the standalone Node server on a host with a persistent disk). ClearTrace stores everything in SQLite, so serverless platforms with read-only or ephemeral filesystems (e.g. Vercel) are **not** supported.
+**Supported deployment:** self-host only — Docker Compose, or the standalone Node server on a host with a persistent disk. ClearTrace stores everything in SQLite, so the host needs a writable, persistent filesystem.
 
 ### Use this template
 

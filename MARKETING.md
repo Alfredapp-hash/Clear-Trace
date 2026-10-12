@@ -1,6 +1,6 @@
 # ClearTrace — Product Overview
 
-**Version 0.5.0** · Owner-controlled privacy remediation
+**Version 1.8.1** · Owner-controlled privacy remediation · Self-hosted (Docker) only
 
 ---
 
@@ -129,11 +129,13 @@ Ten-step automated pipeline with honest status transitions:
 
 ### 7. Deployment & operations
 
+ClearTrace is **self-hosted only**. Docker Compose is the supported production deployment; the other supported path is the standalone Node server on a host with a persistent disk. The app stores everything in SQLite, so it needs a writable, persistent filesystem. Scheduled work is the Compose `worker-cron` service, or any host scheduler, calling `/api/worker/run` and `/api/cron/*` with `WORKER_SECRET`.
+
 | Mode | Notes |
 |------|-------|
-| **Local dev** | SQLite, `npm run dev`, optional `.env.local` |
-| **Docker / Compose** | Standalone Next.js output + worker cron service |
-| **Vercel** | `vercel.json` cron for verification endpoint |
+| **Docker / Compose** | Supported production deployment: standalone Next.js output, persistent SQLite volume, `worker-cron` service |
+| **Bare metal** | Standalone Node server on a persistent disk (`DATABASE_URL`) |
+| **Local dev** | SQLite, `npm run dev`, optional `.env.local` (not a production deploy) |
 | **Self-hosted Pro** | Omit Stripe env vars → all Pro features enabled |
 | **Health probe** | Public `GET /api/health` |
 

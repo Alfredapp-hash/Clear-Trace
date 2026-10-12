@@ -1,6 +1,6 @@
 # ClearTrace Privacy Overview (Operator Draft)
 
-**Version:** 0.2.0 · **Last updated:** 2026-06-19
+**Version:** 1.8.1 · **Last updated:** 2026-10-12
 
 This overview describes how a **self-hosted** ClearTrace deployment handles data. It is not legal advice.
 
@@ -17,7 +17,7 @@ This overview describes how a **self-hosted** ClearTrace deployment handles data
 ## What ClearTrace does not do by default
 
 - Send identity claims to LLM providers unless you configure polish and run draft assist
-- Automatically email controllers or fire webhooks (v1 is test-only for SMTP/Resend/webhook)
+- Email controllers or fire webhooks unless you opt in. Connector send (SMTP, Resend, SendGrid, or Postmark) and connector webhooks run only on Pro when enabled in Agent defaults. Gmail integration pushes drafts for you to send.
 - Share data between organizations (row-level isolation by org + owner)
 
 ## Third-party services (BYOK)
