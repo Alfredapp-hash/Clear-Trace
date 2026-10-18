@@ -4,9 +4,9 @@ Owner-controlled privacy remediation system. Helps an authorized person discover
 
 Includes the portable skill pack at [`agent-builder/skillpack/`](./agent-builder/skillpack/).
 
-**Version:** 1.2.0 (unreleased — Sprint 1) · See [CHANGELOG.md](./CHANGELOG.md)
+**Version:** 1.8.1 · See [CHANGELOG.md](./CHANGELOG.md)
 
-**Supported deployment:** self-hosted (Docker Compose, or the standalone Node server on a host with a persistent disk). ClearTrace stores everything in SQLite, so serverless platforms with read-only or ephemeral filesystems (e.g. Vercel) are **not** supported.
+**Supported deployment:** self-host only — Docker Compose, or the standalone Node server on a host with a persistent disk. ClearTrace stores everything in SQLite, so the host needs a writable, persistent filesystem.
 
 ### Use this template
 
@@ -50,7 +50,7 @@ By default only the **first** account can self-register (`REGISTRATION_MODE=firs
 | `npm run create-cleartrace -- <dir>` | Scaffold agent-only project (skills + Cursor rules) |
 | `npm run materialize-kits` | Pre-build agent kit files to `agent-builder/dist/` |
 
-## Agent builder (P0)
+## Agent builder
 
 Build your own privacy remediation stack in Cursor, Claude Code, or Windsurf:
 
@@ -87,10 +87,10 @@ data/            — Local SQLite database (gitignored)
 |------------|--------|
 | Case workflow UI (intake → verify) | **Live** |
 | Demo discovery | **Live** (no API keys) |
-| Live SERP (SerpAPI / Bing / CSE) | **Pro** when Stripe configured (BYOK) |
+| Live SERP (SerpAPI / Google Custom Search) | **Pro** when Stripe configured (BYOK) |
 | SSRF-safe live URL + verification fetch | **Live** |
 | Rules-based classify + compliance | **Live** |
-| LLM draft polish — local Ollama (default "Local-only AI") | **Live** (no data leaves the host) |
+| LLM draft polish — local Ollama or Apple Intelligence (default "Local-only AI") | **Live** (no data leaves the host) |
 | LLM draft polish — Ollama Cloud / OpenAI / Anthropic / OpenRouter | **Optional** (BYOK; only when Local-only AI is turned off) |
 | Gmail draft push | **Live** (BYOK OAuth) |
 | SMTP / Resend / SendGrid / Postmark send | **Pro + opt-in** (Settings → Search & email connections → Agent defaults) |
@@ -101,7 +101,7 @@ data/            — Local SQLite database (gitignored)
 | Legal escalation skill | **Template + export only** (not automated) |
 | Stripe billing (Free 3 cases / Pro) | **Optional** (self-hosted = all Pro when Stripe unset) |
 | SLA deadlines (response / removal / follow-up) | **Pro** |
-| Broker universe sweep + opt-out URLs | **Pro** |
+| Broker sweep (73 curated brokers) + opt-out playbooks | **Pro** |
 | API keys (`Authorization: Bearer ct_live_…`) | **Pro** |
 | Enterprise signed webhooks | **Pro** (separate from connector webhook) |
 | Ruthless mode (max lawful coverage) | **Pro** |
@@ -124,12 +124,14 @@ Classify and route run automatically during controller resolution — they are n
 
 Configure at **Settings → Search & email connections**; the Local-only AI switch and AI model preference are under **Settings → Privacy & AI**. Credentials are encrypted per organization.
 
-- **Discovery:** SerpAPI, Bing Web Search, Google Custom Search
-- **Intelligence (draft polish only):** Ollama (local or Ollama Cloud), OpenAI, Anthropic, OpenRouter. With **Local-only AI** on (the default), only a local Ollama origin is used and there is no cloud fallback; if Ollama is unavailable, drafts stay rules-based. Discovery search and breach lookups still call external services by design.
+- **Discovery:** SerpAPI, Google Custom Search
+- **Brokers:** 73 curated, active sites are eligible for sweep, plus the California, Oregon, and Texas registries for lookup. Registry entries are never auto-queued.
+- **Intelligence (draft polish only):** Ollama (local or Ollama Cloud), Apple Intelligence on a Mac, OpenAI, Anthropic, OpenRouter. With **Local-only AI** on (the default), only a local Ollama origin or the Apple bridge is used and there is no cloud fallback; if neither is available, drafts stay rules-based. Discovery search and breach lookups still call external services by design.
 - **Email:** Gmail (draft push); SMTP/Resend/SendGrid/Postmark (optional auto-send on Pro)
 - **Webhook:** optional case-event dispatch (Pro + enable in Agent defaults)
+- **Breach intel:** Have I Been Pwned (Pro, BYOK)
 - **Billing:** Stripe checkout at `/billing` (optional — omit env vars for self-hosted Pro)
-- **Enterprise:** API keys and outbound webhooks in Settings; broker sweep and SLA via case API
+- **API & integrations:** API keys and outbound webhooks under **Settings → API & integrations**; broker sweep and SLA via the case API
 
 ## Configuration
 

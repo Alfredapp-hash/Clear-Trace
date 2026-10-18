@@ -1,8 +1,8 @@
 # ClearTrace Terms of Use (Operator Draft)
 
-**Version:** 0.2.0 · **Last updated:** 2026-06-19
+**Version:** 1.8.1 · **Last updated:** 2026-10-18
 
-This document is a **draft** for self-hosted or evaluation deployments. It is not legal advice. Consult qualified counsel before commercial distribution.
+This document is a **draft** for self-hosted deployments, including a copy you run yourself to evaluate the software. It is not legal advice. Consult qualified counsel before commercial distribution.
 
 ## 1. Authorized use
 
@@ -16,9 +16,11 @@ ClearTrace provides workflow tooling, draft templates, and audit logs. It does *
 
 You supply API keys and OAuth credentials (BYOK). You are responsible for provider terms, rate limits, and lawful use of third-party services. Identity claims are encrypted at rest in your deployment; you control backup and retention.
 
+Local-only AI is on by default. Draft polish then stays on this machine (local Ollama, or the Apple Intelligence bridge on a Mac). A cloud model is used only after you turn Local-only AI off under Settings → Privacy & AI and configure that provider.
+
 ## 4. Outbound communication
 
-In v1, ClearTrace does **not** automatically send email or webhook events on your behalf. You send via your own channels, then record outbound actions in the case timeline.
+ClearTrace does not send email or webhook events unless you opt in. Gmail integration pushes drafts for you to send. Optional connector send (SMTP, Resend, SendGrid, or Postmark) and connector webhooks run only on Pro when you enable them in Settings → Search & email connections → Agent defaults. You remain responsible for reviewing correspondence before it goes out.
 
 ## 5. Prohibited use
 
