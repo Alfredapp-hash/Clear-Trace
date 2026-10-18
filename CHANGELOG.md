@@ -4,7 +4,7 @@ All notable changes to the ClearTrace application are documented here.
 
 ## [1.8.1] — Unreleased
 
-- **Docs** — README, MARKETING, TERMS, and PRIVACY state version 1.8.1. Supported deployment is self-host / Docker only
+- **Docs** — README, MARKETING, TERMS, PRIVACY, the Apple bridge README, and the MCP server README match 1.8.1. Supported deployment is self-host / Docker. Operator docs and in-app guide hints drop the retired Bing Web Search connector and the old Settings → Connectors / Enterprise labels, and state the curated broker count (73) plus the CA, OR, and TX registries
 - **Link check** — bot walls are recognised by markup as well as title (PerimeterX, Incapsula, Cloudflare challenge, "Checking your browser", "Access … denied"); redirects onto known privacy-request vendors (OneTrust, TrustArc, Transcend, Ketch, Osano, Securiti, …) count as ok with a note
 - **Catalog** — nuwber, idtrue, backgroundalert and clustrmaps are offline (no public address records / 127.0.0.1), not locally blocked as recorded in v1.7.0; notes corrected, kept active so the weekly check sees them return
 

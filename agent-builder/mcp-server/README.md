@@ -4,7 +4,7 @@ Connect Cursor, Claude Desktop, or any MCP client to your ClearTrace deployment.
 
 ## Setup
 
-1. Create an API key in **ClearTrace → Settings → Enterprise** (`ct_live_…`).
+1. Create an API key in **ClearTrace → Settings → API & integrations** (`ct_live_…`).
 2. Install dependencies:
 
 ```bash

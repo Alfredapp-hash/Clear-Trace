@@ -73,10 +73,12 @@ flowchart LR
 | Capability | Detail |
 |------------|--------|
 | **Demo discovery** | Works immediately — no API keys required |
-| **Live SERP** | SerpAPI, Bing Web Search, Google Custom Search (BYOK, Pro when billing enabled) |
-| **Broker universe** | 50+ data brokers & people-search sites with opt-out URLs |
-| **Broker sweep** | Scan case scopes + known URLs against the broker universe; returns ranked matches and opt-out links (Pro) |
+| **Live SERP** | SerpAPI and Google Custom Search (BYOK, Pro when billing is enabled) |
+| **Broker playbooks** | 73 curated, active data brokers, plus the California, Oregon, and Texas registries for lookup. Registry entries are never auto-queued |
+| **Broker sweep** | Scan case scopes and known URLs against the curated universe; returns ranked matches and removal paths (Pro) |
+| **Platform reports** | Facebook, Instagram/Threads, X, LinkedIn, TikTok, YouTube, Reddit, and Pinterest resolve to each platform's official privacy-report form |
 | **Live URL check** | SSRF-protected fetch for verification and evidence capture |
+| **Breach intel** | Have I Been Pwned, BYOK (Pro) |
 | **Content matching** | Confidence scoring for candidate ↔ claim alignment |
 
 ### 3. Remediation & drafting
@@ -84,11 +86,13 @@ flowchart LR
 - **Rules-based classification** — Exposure class, sensitivity, remedy family  
 - **Broker playbooks** — Automatic controller/contact resolution for known brokers  
 - **Removal templates** — Factual, jurisdiction-aware draft variants  
-- **LLM polish (optional)** — OpenAI, Anthropic, or OpenRouter — draft assistance only, BYOK  
-- **Compliance gate** — No automated send without explicit user approval  
-- **Gmail draft push** — OAuth BYOK; drafts land in the user's Gmail for final send  
-- **Email auto-send (opt-in)** — SMTP, Resend, SendGrid, or Postmark on Pro when enabled in Agent defaults  
-- **Follow-up rules** — Configurable cadence after initial outbound  
+- **LLM polish (optional)** — Local-only AI is the default: local Ollama, or Apple Intelligence on a Mac, and drafts stay rules-based if neither is available. Ollama Cloud, OpenAI, Anthropic, and OpenRouter are used only when Local-only AI is turned off (BYOK, draft assistance only)
+- **Opt-out queue** — Approve, then submit, then mark complete after removal is verified (Pro). A listing still live 30+ days after completion can be flagged and re-queued
+- **Search deindex** — Drafts and official tool links for Google, Bing, DuckDuckGo, and Yahoo (Pro). You submit the drafts yourself
+- **Compliance gate** — Connector send stays off until you opt in. Gmail pushes a draft for you to send
+- **Gmail draft push** — OAuth BYOK; drafts land in the user's Gmail for the final send
+- **Email auto-send (opt-in)** — SMTP, Resend, SendGrid, or Postmark on Pro when enabled in Settings → Search & email connections → Agent defaults
+- **Follow-up rules** — Configurable cadence after the initial outbound
 
 ### 4. Hermes workflow engine
 
@@ -107,25 +111,30 @@ Ten-step automated pipeline with honest status transitions:
 
 **20-skill registry** — Markdown skill pack synced at build; operational, onboarding, and template skills with clear `implementedInApp` honesty flags.
 
-### 5. Enterprise & automation (Pro)
+### 5. Automation
 
 | Feature | What you get |
 |---------|----------------|
-| **SLA deadlines** | Tiered response, removal, follow-up, and broker opt-out clocks — auto-created when messages are recorded sent |
-| **API keys** | `ct_live_…` bearer tokens for cases, broker sweep, and SLA reads |
-| **Signed webhooks** | HMAC-delivered outbound events with delivery log (separate from connector webhook) |
-| **Connector webhooks** | Opt-in dispatch to `generic_webhook` on key audit events (no PII in payload) |
+| **SLA deadlines** | Tiered response, removal, follow-up, and broker opt-out clocks — created when messages are recorded sent |
+| **Ongoing protection** | Scheduled re-checks and relist detection after the first removal (Settings → Ongoing protection) |
+| **Broader search** | Ruthless mode: wider lawful query coverage, full broker sweep, breach scan (Pro, opt-in) |
+| **Household** | Up to 5 people you are authorized to protect, on Pro |
+| **API keys** | `ct_live_…` bearer tokens for cases, broker sweep, and SLA reads (Settings → API & integrations) |
+| **Signed webhooks** | HMAC-delivered outbound events with a delivery log (separate from the connector webhook) |
+| **Connector webhooks** | Opt-in dispatch to `generic_webhook` on key audit events (no personal data in the payload) |
+| **Weekly digest** | Progress email (Free; requires an email connector) |
 | **Rate limits** | Per-user caps on discovery, email send, connectors, batch, and export |
 
 ### 6. Security & trust
 
 - **BYOK everywhere** — Your search, LLM, and email credentials; encrypted per organization  
-- **Encrypted identity claims** — AES-256 at rest; redacted previews in UI and audit log  
-- **Hash-chained audit events** — Tamper-evident timeline per case  
-- **SSRF protection** — Safe fetch on connector and webhook URLs  
-- **Production guards** — Startup fails if default secrets are used in production  
-- **Sentinel console** — Security scan surface for deployment hygiene  
-- **No covert scanning** — Limited public research only; see Safety Boundaries in skill pack  
+- **Encrypted identity claims** — AES-256 at rest; redacted previews in the UI and audit log
+- **Hash-linked audit log** — Each case event stores the previous event's hash
+- **Encrypted backups** — `scripts/backup.mjs` (AES-256-GCM) when `BACKUP_PASSPHRASE` is set; versioned schema migrations snapshot the database before upgrading
+- **SSRF protection** — Safe fetch on connector, webhook, and live-URL requests
+- **Production guards** — Startup fails if default secrets are used in production. The first account closes self-registration (`REGISTRATION_MODE=first_user`)
+- **Sentinel** — Settings → Developer → release gate for organization owners and admins (request-safety protections, dependencies, secret configuration)
+- **Limited public research** — See Safety Boundaries in the skill pack
 
 ### 7. Deployment & operations
 
@@ -137,18 +146,20 @@ ClearTrace is **self-hosted only**. Docker Compose is the supported production d
 | **Bare metal** | Standalone Node server on a persistent disk (`DATABASE_URL`) |
 | **Local dev** | SQLite, `npm run dev`, optional `.env.local` (not a production deploy) |
 | **Self-hosted Pro** | Omit Stripe env vars → all Pro features enabled |
-| **Health probe** | Public `GET /api/health` |
+| **Backups** | `BACKUP_PASSPHRASE` plus `scripts/backup.mjs`, or the Compose `backup` profile. See [docs/self-hosting/backup-restore.md](./docs/self-hosting/backup-restore.md) |
+| **Health probe** | Public `GET /api/health` (reports app version and schema version) |
 
 ---
 
 ## Connectors (bring your own keys)
 
-Configure at **Settings → Connectors**. Test on save where supported.
+Configure connectors at **Settings → Search & email connections**. Local-only AI and the model preference are under **Settings → Privacy & AI**. Test on save where supported.
 
 | Category | Providers |
 |----------|-----------|
-| Discovery | SerpAPI, Bing Web Search, Google Custom Search |
-| Intelligence | OpenAI, Anthropic, OpenRouter |
+| Discovery | SerpAPI, Google Custom Search |
+| Breach intel | Have I Been Pwned (Pro) |
+| Intelligence | Ollama (local or cloud), Apple Intelligence (on-device Mac bridge), OpenAI, Anthropic, OpenRouter |
 | Email | Gmail (draft), SMTP, Resend, SendGrid, Postmark |
 | Webhook | Generic webhook (opt-in event dispatch) |
 
@@ -159,14 +170,18 @@ Configure at **Settings → Connectors**. Test on save where supported.
 | | **Free** | **Pro** | **Self-hosted (no Stripe)** |
 |--|----------|---------|------------------------------|
 | Cases | 3 | Unlimited | Unlimited |
-| Demo discovery | ✓ | ✓ | ✓ |
-| Full workflow UI | ✓ | ✓ | ✓ |
+| Demo discovery, workflow UI, Autopilot, batch, export | ✓ | ✓ | ✓ |
+| Local-only AI (Ollama / Apple Intelligence) | ✓ | ✓ | ✓ |
 | Live SERP | — | ✓ (BYOK) | ✓ (BYOK) |
+| Ollama Cloud | — | ✓ (BYOK) | ✓ (BYOK) |
 | Email auto-send | — | ✓ (opt-in) | ✓ (opt-in) |
+| Weekly digest | ✓ (needs an email connector) | ✓ | ✓ |
+| Exposure and progress reports | ✓ | ✓ | ✓ |
 | SLA tracking | — | ✓ | ✓ |
-| Broker sweep | — | ✓ | ✓ |
-| API keys | — | ✓ | ✓ |
-| Enterprise webhooks | — | ✓ | ✓ |
+| Broker sweep, opt-out queue, deindex | — | ✓ | ✓ |
+| Broader search and HIBP | — | ✓ | ✓ |
+| Household seats | — | Up to 5 | Up to 5 |
+| API keys and signed webhooks | — | ✓ | ✓ |
 | Stripe billing | Optional | Checkout at `/billing` | N/A |
 
 ---
@@ -174,7 +189,7 @@ Configure at **Settings → Connectors**. Test on save where supported.
 ## Integrations at a glance
 
 ```bash
-# API key (create in Settings → Enterprise)
+# API key (create in Settings → API & integrations)
 curl -H "Authorization: Bearer ct_live_…" \
   https://your-deployment/api/cases
 
@@ -196,16 +211,15 @@ Honest boundaries matter for trust:
 - **Not a dark-web scanner** — Public-source discovery and approved opt-out paths only  
 - **Not a law firm** — Legal escalation skill provides templates and export; no automated legal filing  
 - **Not a fully unmanaged bot** — User attestation, compliance review, and send approval are required  
-- **Not a hosted data broker** — We don't store or sell identity graphs; you control the deployment and keys  
+- **Not a hosted service** — You run ClearTrace. It does not store or sell an identity graph for you
 
 ---
 
 ## Proof points (engineering)
 
-- **125+ automated tests** — API integration, Hermes state machine, SSRF, SLA, broker sweep, webhooks  
-- **Playwright E2E** — Register → intake → case creation smoke path  
-- **Standalone build** — Production-ready Next.js 16 output  
-- **Open packaging** — MIT license; TERMS and PRIVACY docs for operators  
+- **CI** — lint, typecheck, Vitest with a coverage gate, a production build, Playwright against that build, and a Docker job that smoke-tests the image, backs up, wipes the volume, restores, and runs Playwright again
+- **Standalone build** — Next.js 16 on Node.js 24, the same runtime as the Docker image
+- **Open packaging** — MIT license; TERMS and PRIVACY docs for operators
 
 ---
 
@@ -217,12 +231,23 @@ Honest boundaries matter for trust:
 
 ## Get started
 
+Supported production deploy:
+
+```bash
+cp .env.example .env
+# set SESSION_SECRET, ENCRYPTION_KEY, and WORKER_SECRET (openssl rand -base64 48)
+docker compose up -d --build
+```
+
+Local development:
+
 ```bash
 cd cleartrace
+cp .env.example .env.local
 npm install
 npm run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) · Register · **New case**
 
-For operators: see [README.md](./README.md), [docker-compose.yml](./docker-compose.yml), and [CHANGELOG.md](./CHANGELOG.md).
+With the default `REGISTRATION_MODE=first_user`, the first account becomes the owner and later self-registration closes. For operators: see [README.md](./README.md), [docker-compose.yml](./docker-compose.yml), [docs/self-hosting/upgrade.md](./docs/self-hosting/upgrade.md), and [CHANGELOG.md](./CHANGELOG.md).

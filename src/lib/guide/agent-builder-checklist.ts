@@ -59,7 +59,7 @@ export const BUILDER_CHECKLIST: BuilderChecklistItem[] = [
     phase: "Integrations",
     label: "Configure ClearTrace MCP server (optional)",
     description:
-      "Connect Cursor to your deployment via agent-builder/mcp-server. Create ct_live API key in Settings → Enterprise.",
+      "Connect Cursor to your deployment via agent-builder/mcp-server. Create a ct_live API key in Settings → API & integrations.",
     docPath: "agent-builder/mcp-server/README.md",
   },
   {

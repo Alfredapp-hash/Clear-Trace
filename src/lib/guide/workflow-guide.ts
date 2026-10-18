@@ -86,7 +86,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         label: "Configure discovery connector (optional)",
         description: "SerpAPI or Google CSE for live search. Demo discovery works without keys.",
         done: ctx.connectorHealth.discoveryReady || ctx.candidateCount > 0,
-        inAppHint: "Settings → Connectors → Discovery",
+        inAppHint: "Settings → Search & email connections",
       },
       {
         id: "run",
@@ -601,7 +601,7 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
   "escalate-legal-review": {
     headline: "Escalate to legal review",
     summary:
-      "When official channels fail, use the legal-escalation template and export a packet for counsel. Not automated in v1.",
+      "When official channels fail, use the legal-escalation template and export a packet for counsel. This step is a template and an export.",
     buildChecklist: (ctx) => [
       {
         id: "followup",
@@ -653,18 +653,18 @@ const STEP_GUIDES: Record<string, StepGuideTemplate> = {
         label: "Discovery connector (optional)",
         description: "SerpAPI or Google CSE for live search.",
         done: ctx.connectorHealth.discoveryReady,
-        inAppHint: "Settings → Connectors",
+        inAppHint: "Settings → Search & email connections",
       },
       {
         id: "intelligence",
         label: "LLM connector (optional)",
-        description: "OpenAI, Anthropic, or OpenRouter for draft polish.",
+        description: "Local Ollama or Apple Intelligence by default. Cloud models only when Local-only AI is off.",
         done: ctx.connectorHealth.intelligenceReady,
       },
       {
         id: "email",
         label: "Email connector (optional)",
-        description: "Gmail for draft push; others are test-only in v1.",
+        description: "Gmail pushes drafts. SMTP, Resend, SendGrid, and Postmark send only after you opt in (Pro).",
         done: ctx.connectorHealth.emailReady,
       },
     ],

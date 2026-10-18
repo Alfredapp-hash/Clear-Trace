@@ -38,7 +38,7 @@ launchctl load ~/Library/LaunchAgents/com.arkhe.cleartrace.apple-bridge.plist
 
 ## Connect ClearTrace
 
-Settings → Connectors → **Apple Intelligence (on-device)**. Keep the default URL `http://127.0.0.1:11435`, then click Save & test. It counts as **local** for Local-only AI.
+Settings → Search & email connections → **Apple Intelligence (on-device)**. Keep the default URL `http://127.0.0.1:11435`, then click Save & test. It counts as **local** for Local-only AI (Settings → Privacy & AI).
 
 ## Safety
 

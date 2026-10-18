@@ -162,7 +162,7 @@ function platformMeta(platform: BuilderPlatform): {
   const commonTail = [
     "Copy each section below into the matching file in your new repo.",
     "Run `npm install && npm run dev` — demo discovery works without API keys.",
-    "Open Settings → Connectors to add SerpAPI, OpenAI, Gmail, or HIBP.",
+    "Open Settings → Search & email connections to add SerpAPI, Ollama, Gmail, or HIBP.",
     "Create a case → Guide & agent handoff → paste step packs while building.",
   ];
 
@@ -436,7 +436,7 @@ function buildSections(platform: BuilderPlatform): BuilderKitSection[] {
       content: `# ClearTrace MCP Server
 
 1. \`cd agent-builder/mcp-server && npm install\`
-2. Create \`ct_live_…\` API key in Settings → Enterprise
+2. Create \`ct_live_…\` API key in Settings → API & integrations
 3. Export env:
    \`\`\`bash
    export CLEARTRACE_URL=http://localhost:3000
