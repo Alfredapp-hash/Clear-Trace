@@ -32,7 +32,7 @@
     "bcryptjs": "^3.0.3",
     "better-sqlite3": "^13.0.3",
     "drizzle-orm": "^0.45.3",
-    "jose": "^6.2.12",
+    "jose": "^6.2.13",
     "jszip": "^3.10.2",
     "next": "16.4.0",
     "nodemailer": "^10.0.15",
